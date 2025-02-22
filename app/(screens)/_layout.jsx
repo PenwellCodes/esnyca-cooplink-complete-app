@@ -20,6 +20,12 @@ const Layout = () => {
           }}
         />
         <Stack.Screen
+          name="news"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
           name="cooperatives"
           options={{
             headerShown: false,

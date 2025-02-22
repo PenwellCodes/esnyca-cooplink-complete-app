@@ -2,7 +2,7 @@ import { MD3LightTheme } from "react-native-paper";
 
 const theme = {
   ...MD3LightTheme,
-  roundness: 6,
+  roundness: 4,
 
   colors: {
     ...MD3LightTheme.colors,
@@ -11,9 +11,9 @@ const theme = {
     tertiary: "#424651",
     background: "#ffffff",
     surface: "#ffffff",
-    error: "#FF0000",
+    error: "#C1B8C8",
     links: "#3590F3",
-    secondaryContainer: "#09814a",
+    secondaryContainer: "#00AAFF",
     surfaceVariant: "#000000",
   },
   elevation: {

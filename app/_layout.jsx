@@ -47,7 +47,7 @@ const RootLayout = () => {
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(screens)" options={{ headerShown: false }} />
         </Stack>
-        <Toast /> {/* Add Toast component */}
+        <Toast />
       </GlobalContextProvider>
     </PaperProvider>
   );

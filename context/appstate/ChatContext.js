@@ -3,6 +3,7 @@ import { collection, query, where, orderBy, onSnapshot } from "firebase/firestor
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "./AuthContext";
 import Toast from "react-native-toast-message";
+import { Text } from "react-native";
 
 const ChatContext = createContext();
 
@@ -83,20 +84,22 @@ export const ChatProvider = ({ children }) => {
                                 if (sender) {
                                     Toast.show({
                                         type: "info",
-                                        text1: `New message from ${sender.displayName}`,
+                                        text1: (
+                                            <Text style={{ fontSize: 10,color: "#424651" }}>
+                                                New message from {sender.displayName}
+                                            </Text>
+                                        ),
                                         position: "top",
                                         visibilityTime: 4000,
-                                        text1Style: { fontSize: 10 },
                                         style: {
                                             backgroundColor: "#00AAFF",
-                                            width: 20,           // Set equal width
+                                            width: 20,           // Set equal width if needed
                                             height: 50,          // and height
-                                            borderRadius: 100,    // half of width/height for a circle
+                                            borderRadius: 100,   // for circle edges if that's desired
                                             justifyContent: 'center',
-                                            alignItems: 'center'
+                                            alignItems: 'center',
                                         },
                                     });
-
 
 
                                 }

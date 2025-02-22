@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  Animated, // Added for animations
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { typography } from "../../constants";
@@ -23,51 +24,86 @@ const Home = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const [headlineIndex, setHeadlineIndex] = useState(0);
+  const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
 
+  // Fade out animation: fades to 0, updates text, then triggers fade in
+  const fadeOut = () => {
+    Animated.timing(textOpacity, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true, // Improves performance
+    }).start(() => {
+      setHeadlineIndex((prevIndex) => (prevIndex + 1) % newsHeadlines.length);
+      fadeIn();
+    });
+  };
+
+  // Fade in animation: fades back to 1
+  const fadeIn = () => {
+    Animated.timing(textOpacity, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Set up interval to trigger fadeOut every 5 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      setHeadlineIndex((prevIndex) => (prevIndex + 1) % newsHeadlines.length);
-    }, 3000);
-    return () => clearInterval(interval);
+      fadeOut();
+    }, 5000); // Increased from 3000ms to 5000ms
+    return () => clearInterval(interval); // Cleanup on unmount
   }, []);
-
   const menuItems = [
     { name: "Services", icon: "shopping-cart", route: "/services" },
-    { name: "About us", icon: "groups", route: "/about" },
-    { name: "Registration", icon: "assignment", route: "/register" },
+    { name: "About Us", icon: "groups", route: "/about-us" },
+    { name: "Sign Up", icon: "assignment", route: "/(auth)/sign-up" },
     { name: "Cooperatives", icon: "business", route: "/cooperatives" },
     { name: "News", icon: "newspaper", route: "/news" },
-    { name: "Partnerships", icon: "handshake", route: "/partnerships" },
+    { name: "Partnerships", icon: "handshake", route: "/(screens)/partnerships" },
   ];
+  
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* App Name */}
       <Text
         style={[
           styles.appName,
           typography.robotoBold,
-          typography.body,
-          { color: colors.tertiary },
+          { color: colors.tertiary ,marginTop: 40}, // Added marginTop to prevent cutting off
         ]}
       >
         esnyca
       </Text>
 
+      {/* Banner */}
       <View style={styles.bannerContainer}>
         <Image
           source={{
-            uri: "https://img.freepik.com/free-vector/gradient-breaking-news-background_23-2151151622.jpg?t=st=1740037443~exp=1740041043~hmac=ce634f9b92abeb9fa1f849ea35cce14dafc7d7a152f1b5d4648b59603affdfa2&w=1060",
+            uri: "https://img.freepik.com/free-photo/abstract-sale-busioness-background-banner-design-multipurpose_1340-16799.jpg?t=st=1740240735~exp=1740244335~hmac=3162a76b4e61a3236163de05ce8f13396ae0ded3fbd398e29b166dfa8f489e23&w=1480",
           }}
           style={styles.bannerImage}
         />
-        <Text style={styles.bannerText}>{newsHeadlines[headlineIndex]}</Text>
+        <Text
+          style={[
+            styles.bannerText,
+            styles.menuText,
+            typography.robotoBold,
+            typography.subtitle,
+            { color: colors.background },
+          ]}
+        >
+          {newsHeadlines[headlineIndex]}
+        </Text>
       </View>
-
+      {/* Search Box */}
       <View style={styles.searchContainer}>
         <TextInput placeholder="Search" style={styles.searchInput} />
-        <Ionicons name="search" size={24} color={colors.secondary} />
+        <Ionicons name="search" size={28} color={colors.primary} />
       </View>
 
+      {/* Menu Items */}
       <FlatList
         data={menuItems}
         numColumns={3}
@@ -75,10 +111,16 @@ const Home = () => {
         contentContainerStyle={styles.flatListContainer}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[styles.menuItem, { borderColor: colors.tertiary }]}
+            style={styles.menuItemContainer}
             onPress={() => router.push(item.route)}
           >
-            <MaterialIcons name={item.icon} size={40} color={colors.primary} />
+            <View style={[styles.menuItem, { borderColor: colors.error }]}>
+              <MaterialIcons
+                name={item.icon}
+                size={40}
+                color={colors.primary}
+              />
+            </View>
             <Text
               style={[
                 styles.menuText,
@@ -105,10 +147,11 @@ const styles = StyleSheet.create({
   },
   appName: {
     alignSelf: "flex-start",
-    fontSize: 20,
+    fontSize: 28,
+    marginTop: 20, // Added to prevent cutting off
   },
   bannerContainer: {
-    marginTop: 20,
+    marginTop: 10,
     borderRadius: 10,
     overflow: "hidden",
   },
@@ -118,12 +161,14 @@ const styles = StyleSheet.create({
   },
   bannerText: {
     position: "absolute",
-    bottom: 10,
-    left: "50%",
-    transform: [{ translateX: -75 }],
+    left: 10,
+    right: 10,
+    top: "50%",
+    transform: [{ translateY: -10 }],
     color: "white",
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: "bold",
+    textAlign: "left",
   },
   searchContainer: {
     flexDirection: "row",
@@ -134,23 +179,26 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#ccc",
-    height: 50,
+    borderColor: "#C1B8C8",
+    height: 60,
   },
   searchInput: {
     flex: 1,
-    height: 40,
+    height: 50,
   },
   flatListContainer: {
     flexGrow: 1,
-    justifyContent: "center",
   },
-  menuItem: {
+  menuItemContainer: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
     margin: 10,
-    padding: 10,
+  },
+  menuItem: {
+    width: 100,
+    height: 100,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderRadius: 10,
   },
