@@ -42,7 +42,7 @@ const ChatScreen = () => {
   const params = useLocalSearchParams();
   const user = params.user ? JSON.parse(params.user) : null;
   const { currentUser } = useAuth();
-  const { conversations, markMessagesAsRead } = useChat();
+  const { conversations, markMessagesAsRead, setActiveChatId } = useChat(); // Add setActiveChatId
   const chatId =
     currentUser.uid > user.uid
       ? `${currentUser.uid}_${user.uid}`
@@ -58,10 +58,15 @@ const ChatScreen = () => {
   const contextMessages = conversations[chatId] || [];
   const messages = [...contextMessages, ...localMessages];
 
+  // Set activeChatId when entering/leaving the chat
+  useEffect(() => {
+    setActiveChatId(chatId); // Set current chat as active
+    return () => setActiveChatId(null); // Clear when leaving
+  }, [chatId, setActiveChatId]);
+
   useEffect(() => {
     (async () => {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Permission Required",
@@ -276,23 +281,46 @@ const ChatScreen = () => {
               <Image
                 source={{ uri: item.fileUrl }}
                 style={styles.imageMessage}
+                resizeMode="contain"
               />
             </TouchableOpacity>
-            {item.status === "uploading" && (
-              <ActivityIndicator
-                size="small"
-                color="#fff"
-                style={{ marginTop: 5 }}
-              />
-            )}
-            <Text style={styles.timestamp}>
-              {item.timestamp &&
-                typeof item.timestamp.toDate === "function"
-                ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
-                  addSuffix: true,
-                })
-                : "Sending..."}
-            </Text>
+            <View style={styles.imageActions}>
+              {item.status === "uploading" ? (
+                <ActivityIndicator
+                  size="small"
+                  color={item.sender === currentUser.uid ? "#fff" : "#666"}
+                  style={{ marginRight: 5 }}
+                />
+              ) : (
+                <TouchableOpacity
+                  onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
+                  style={styles.downloadButton}
+                >
+                  <Ionicons
+                    name="download-outline"
+                    size={16}
+                    color={item.sender === currentUser.uid ? "#cce6ff" : "#007AFF"}
+                  />
+                  <Text
+                    style={{
+                      color: item.sender === currentUser.uid ? "#cce6ff" : "#007AFF",
+                      marginLeft: 5,
+                      fontSize: 12,
+                    }}
+                  >
+                    Download
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <Text style={styles.timestamp}>
+                {item.timestamp &&
+                  typeof item.timestamp.toDate === "function"
+                  ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
+                    addSuffix: true,
+                  })
+                  : "Sending..."}
+              </Text>
+            </View>
           </LinearGradient>
         </View>
       );
@@ -488,6 +516,15 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 10,
     marginBottom: 5,
+  },
+  imageActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  downloadButton: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   inputContainer: {
     flexDirection: "row",

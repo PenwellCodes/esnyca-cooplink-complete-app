@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "./AuthContext";
+import Toast from "react-native-toast-message";
 
 const ChatContext = createContext();
 
@@ -14,11 +15,15 @@ export const ChatProvider = ({ children }) => {
     const [chatList, setChatList] = useState([]);
     const [conversations, setConversations] = useState({});
     const [loadingChats, setLoadingChats] = useState(true);
+    const [activeChatId, setActiveChatId] = useState(null); // New state for active chat
+    const [userMap, setUserMap] = useState({}); // New state for UID-to-user mapping
 
     useEffect(() => {
         if (!currentUser) return;
 
         const userUid = currentUser.uid;
+
+        // Fetch users for chat list and create userMap
         let usersQuery;
         if (currentUser.role === "cooperative") {
             usersQuery = query(collection(db, "users"), where("uid", "!=", userUid));
@@ -30,15 +35,20 @@ export const ChatProvider = ({ children }) => {
             );
         }
 
-        const unsubscribeUsers = onSnapshot(usersQuery, async (snapshot) => {
+        const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
             const users = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data(),
             }));
+            const newUserMap = {};
+            users.forEach((user) => {
+                newUserMap[user.uid] = user; // Map UID to user object
+            });
             setChatList(users);
+            setUserMap(newUserMap);
         });
 
-        // Listen to all chats for which currentUser is a participant
+        // Listen to chats where currentUser is a participant
         const chatsQuery = query(
             collection(db, "chats"),
             where("participants", "array-contains", userUid)
@@ -59,6 +69,40 @@ export const ChatProvider = ({ children }) => {
                     }));
                     chatsData[chatId] = messages;
                     setConversations({ ...chatsData });
+
+                    // Check for new incoming messages
+                    messagesSnapshot.docChanges().forEach((change) => {
+                        if (change.type === "added") {
+                            const newMessage = change.doc.data();
+                            // Show toast if message is from another user and chat isn’t active
+                            if (
+                                newMessage.sender !== currentUser.uid &&
+                                chatId !== activeChatId
+                            ) {
+                                const sender = userMap[newMessage.sender];
+                                if (sender) {
+                                    Toast.show({
+                                        type: "info",
+                                        text1: `New message from ${sender.displayName}`,
+                                        position: "top",
+                                        visibilityTime: 4000,
+                                        text1Style: { fontSize: 10 },
+                                        style: {
+                                            backgroundColor: "#00AAFF",
+                                            width: 20,           // Set equal width
+                                            height: 50,          // and height
+                                            borderRadius: 100,    // half of width/height for a circle
+                                            justifyContent: 'center',
+                                            alignItems: 'center'
+                                        },
+                                    });
+
+
+
+                                }
+                            }
+                        }
+                    });
                 });
             });
             setLoadingChats(false);
@@ -68,16 +112,22 @@ export const ChatProvider = ({ children }) => {
             unsubscribeUsers();
             unsubscribeChats();
         };
-    }, [currentUser]);
+    }, [currentUser, activeChatId]); // Re-run when activeChatId changes
 
-    // Mark messages as read if they are sent to currentUser and not yet read.
     const markMessagesAsRead = async (chatId, messages) => {
-        // Implementation omitted for brevity; you can update each message's status.
+        // Implementation remains unchanged
     };
 
     return (
         <ChatContext.Provider
-            value={{ chatList, conversations, loadingChats, markMessagesAsRead }}
+            value={{
+                chatList,
+                conversations,
+                loadingChats,
+                markMessagesAsRead,
+                activeChatId,
+                setActiveChatId, // Expose setActiveChatId for ChatScreen
+            }}
         >
             {children}
         </ChatContext.Provider>
