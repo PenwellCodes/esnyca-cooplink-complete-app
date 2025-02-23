@@ -6,8 +6,8 @@ import { SplashScreen, Stack } from "expo-router";
 import GlobalContextProvider from "../context/appstate/GlobalContextProvider";
 import { PaperProvider } from "react-native-paper";
 import theme from "../theme/theme";
+import Toast from "react-native-toast-message"; // Import Toast
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 const RootLayout = () => {
@@ -25,7 +25,6 @@ const RootLayout = () => {
 
   useEffect(() => {
     if (error) throw error;
-
     if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
@@ -48,6 +47,7 @@ const RootLayout = () => {
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(screens)" options={{ headerShown: false }} />
         </Stack>
+        <Toast />
       </GlobalContextProvider>
     </PaperProvider>
   );

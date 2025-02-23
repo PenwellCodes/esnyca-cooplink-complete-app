@@ -5,6 +5,7 @@ import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { View, Text } from "react-native";
 import { useTheme } from "react-native-paper";
 import EvilIcons from "@expo/vector-icons/EvilIcons";
+import Feather from "@expo/vector-icons/Feather";
 
 const TabIcon = ({ icon, color, label, isActive }) => (
   <View style={{ alignItems: "center", width: 70 }}>
@@ -96,9 +97,7 @@ const TabLayout = () => {
             headerShown: false,
             tabBarIcon: ({ color }) => (
               <TabIcon
-                icon={() => (
-                  <EvilIcons name="location" size={24} color={color} />
-                )}
+                icon={() => <Feather name="map-pin" size={24} color={color} />}
                 color={color}
                 label="Locations"
                 isActive={pathname === "/location"}

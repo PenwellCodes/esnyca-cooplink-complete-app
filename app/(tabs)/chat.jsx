@@ -206,7 +206,7 @@ const ChatList = () => {
             
           >
             <Image
-              source={{ uri: item.profilePicture || placeholderAvatar }}
+              source={{ uri: item.profilePic || placeholderAvatar }}
               style={styles.avatar}
             />
             <View style={styles.chatInfo}>
