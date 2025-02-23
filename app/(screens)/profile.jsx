@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,482 +6,673 @@ import {
   Image,
   ScrollView,
   Pressable,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { userProfile } from '../../data/profile'
-import { Ionicons } from '@expo/vector-icons'
-import { useTheme } from 'react-native-paper'
+  Modal,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  useTheme,
+  Snackbar,
+  TextInput,
+  Button,
+  Appbar,
+  Divider,
+} from "react-native-paper";
+import * as ImagePicker from "expo-image-picker";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+} from "firebase/firestore";
+import {
+  signOut,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+} from "firebase/auth";
+import { useAuth } from "../../context/appstate/AuthContext";
+import { db, auth } from "../../firebase/firebaseConfig";
+import { images, typography } from "../../constants";
+// Import Firebase Storage functions
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-export default function ProfileScreen() {
-  const { colors } = useTheme()
+export default function ProfileScreen({ navigation }) {
+  const { colors } = useTheme();
+  const { currentUser } = useAuth();
 
-  // Dummy transactions data
-  const transactions = [
-    { id: '1', date: '2023-02-18', amount: 25.0, description: 'Order #1234' },
-    { id: '2', date: '2023-02-19', amount: 40.0, description: 'Order #1235' },
-    { id: '3', date: '2023-02-20', amount: 15.5, description: 'Order #1236' },
-  ]
+  const [userData, setUserData] = useState(null);
+  const [updateDrawerVisible, setUpdateDrawerVisible] = useState(false);
+  const [deleteDrawerVisible, setDeleteDrawerVisible] = useState(false);
+  const [formData, setFormData] = useState({});
+  const [newPhoneNumber, setNewPhoneNumber] = useState("");
+  const [password, setPassword] = useState("");
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarColor, setSnackbarColor] = useState("green");
+  const [loading, setLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  // Dummy most bought products data
-  const mostBoughtProducts = [
-    {
-      id: '1',
-      name: 'Pepperoni Pizza',
-      image:
-        'https://img.freepik.com/free-psd/delicious-pepperoni-pizza-culinary-delight_632498-24206.jpg?t=st=1739921799~exp=1739925399~hmac=0d0936cf36822b4eb4de80cf882dbb34b69fb01505babd9dc08c38dee180adef&w=740',
-    },
-    {
-      id: '2',
-      name: 'Cheese Burger',
-      image:
-        'https://img.freepik.com/free-photo/still-life-delicious-american-hamburger_23-2149637312.jpg?t=st=1739921744~exp=1739925344~hmac=e5d8f284a41318523a2ff04bfaf1965e51aa9c06eca4da9fe3413042ba3824b7&w=740',
-    },
-    {
-      id: '3',
-      name: 'Fried Rice',
-      image:
-        'https://img.freepik.com/free-psd/delicious-pepperoni-pizza-culinary-delight_632498-24206.jpg?t=st=1739921799~exp=1739925399~hmac=0d0936cf36822b4eb4de80cf882dbb34b69fb01505babd9dc08c38dee180adef&w=740',
-    },
-  ]
+  // Function to upload the selected image to Firebase Storage
+  // and return the remote download URL.
+  const uploadImageToFirebase = async (uri) => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      // Use a unique filename using the user's uid and current timestamp.
+      const filename = `${userData.uid}_${Date.now()}.jpg`;
+      const storageRef = ref(getStorage(), `profilePictures/${filename}`);
+      await uploadBytes(storageRef, blob);
+      const downloadUrl = await getDownloadURL(storageRef);
+      return downloadUrl;
+    } catch (error) {
+      console.log("Error uploading image: ", error);
+      throw error;
+    }
+  };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+  // Function to pick an image from the gallery and update the profile picture.
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    console.log(result);
+
+    if (!result.canceled) {
+      const newUri = result.assets[0].uri;
+      // For immediate feedback, update local state with the local URI.
+      setFormData({ ...formData, profilePic: newUri });
+
+      try {
+        // Upload the image to Firebase Storage and get its download URL.
+        const downloadUrl = await uploadImageToFirebase(newUri);
+        // Reference the user document in Firestore.
+        const userRef = doc(db, "users", userData.uid);
+        const docSnap = await getDoc(userRef);
+        if (docSnap.exists()) {
+          // Update the profilePic field with the remote download URL.
+          await updateDoc(userRef, { profilePic: downloadUrl });
+          showSnackbar("Profile picture updated successfully", "green");
+          console.log("Profile picture updated with URL: ", downloadUrl);
+        } else {
+          showSnackbar("User document does not exist", "red");
+        }
+      } catch (error) {
+        console.log("Error updating profile picture:", error);
+        showSnackbar("Error uploading image: " + error.message, "red");
+      }
+    }
+  };
+
+  // Subscribe to user data and update loading state.
+  useEffect(() => {
+    if (currentUser) {
+      const q = query(
+        collection(db, "users"),
+        where("uid", "==", currentUser.uid),
+      );
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        if (!querySnapshot.empty) {
+          const userDoc = querySnapshot.docs[0];
+          const data = userDoc.data();
+          setUserData({
+            uid: userDoc.id,
+            ...data,
+            phoneNumbers: Array.isArray(data.phoneNumbers)
+              ? data.phoneNumbers
+              : [],
+            addresses: Array.isArray(data.addresses) ? data.addresses : [],
+          });
+        }
+        setLoading(false);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (userData) {
+      setFormData({
+        displayName: userData.displayName || "",
+        email: userData.email || "",
+        profilePic: userData.profilePic || "",
+        physicalAddress:
+          userData.role === "cooperative" ? userData.physicalAddress || "" : "",
+        phoneNumbers: userData.phoneNumbers || [],
+      });
+    }
+  }, [userData]);
+
+  if (loading) {
+    return (
       <View
         style={[
-          styles.header,
-          {
-            backgroundColor: colors.surface,
-            borderBottomColor: colors.divider,
-          },
+          styles.loadingContainer,
+          { backgroundColor: colors.background },
         ]}
       >
-        <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
+        <Image source={images.loader} style={styles.loader} />
       </View>
+    );
+  }
 
-      <ScrollView style={styles.content}>
-        {/* Profile Header */}
-        <View
-          style={[styles.profileHeader, { backgroundColor: colors.surface }]}
-        >
-          <Image source={{ uri: userProfile.avatar }} style={styles.avatar} />
-          <Text style={[styles.name, { color: colors.text }]}>
-            {userProfile.name}
-          </Text>
-          <Text style={[styles.email, { color: colors.text }]}>
-            {userProfile.email}
-          </Text>
-        </View>
+  if (!userData) {
+    return (
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <Text style={[styles.title, { color: colors.text }]}>
+          No user data available.
+        </Text>
+      </SafeAreaView>
+    );
+  }
 
-        {/* Stats */}
-        <View
-          style={[styles.statsContainer, { backgroundColor: colors.surface }]}
-        >
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>
-              {userProfile.stats.totalOrders}
-            </Text>
-            <Text style={[styles.statLabel, { color: colors.text }]}>
-              Orders
-            </Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>
-              {new Date(userProfile.stats.memberSince).getFullYear()}
-            </Text>
-            <Text style={[styles.statLabel, { color: colors.text }]}>
-              Member Since
-            </Text>
-          </View>
-        </View>
+  const handleAddPhoneNumber = () => {
+    if (newPhoneNumber.trim()) {
+      setFormData({
+        ...formData,
+        phoneNumbers: [...formData.phoneNumbers, newPhoneNumber.trim()],
+      });
+      setNewPhoneNumber("");
+    }
+  };
 
-        {/* Addresses Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Addresses
-          </Text>
-          {userProfile.addresses.map((address) => (
-            <View
-              key={address.id}
-              style={[styles.addressCard, { backgroundColor: colors.surface }]}
+  const handleRemovePhoneNumber = (index) => {
+    const updatedPhoneNumbers = formData.phoneNumbers.filter(
+      (_, i) => i !== index,
+    );
+    setFormData({ ...formData, phoneNumbers: updatedPhoneNumbers });
+  };
+
+  const handleUpdateProfile = async () => {
+    try {
+      setIsUpdating(true);
+      const userRef = doc(db, "users", userData.uid);
+      const updateData = {
+        displayName: formData.displayName,
+        email: formData.email,
+        // profilePic is updated separately through the image picker.
+        phoneNumbers: formData.phoneNumbers,
+      };
+      if (userData.role === "cooperative") {
+        updateData.physicalAddress = formData.physicalAddress;
+      }
+      await updateDoc(userRef, updateData);
+      setIsUpdating(false);
+      setUpdateDrawerVisible(false);
+      showSnackbar("Profile updated successfully", "green");
+    } catch (error) {
+      setIsUpdating(false);
+      setUpdateDrawerVisible(false);
+      showSnackbar("Error updating profile: " + error.message, "red");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      const credential = EmailAuthProvider.credential(
+        currentUser.email,
+        password,
+      );
+      await reauthenticateWithCredential(currentUser, credential);
+      await deleteDoc(doc(db, "users", userData.uid));
+      await currentUser.delete();
+      showSnackbar("Account deleted successfully", "green");
+      setDeleteDrawerVisible(false);
+      await signOut(auth);
+      navigation.replace("Home");
+    } catch (error) {
+      setDeleteDrawerVisible(false);
+      showSnackbar("Error deleting account: " + error.message, "red");
+    }
+  };
+
+  const showSnackbar = (message, color) => {
+    setSnackbarMessage(message);
+    setSnackbarColor(color);
+    setSnackbarVisible(true);
+  };
+
+  return (
+    <>
+      <Appbar.Header>
+        <Appbar.BackAction onPress={() => navigation.goBack()} />
+        <Appbar.Content title="Profile" />
+      </Appbar.Header>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <ScrollView style={styles.content}>
+          <View
+            style={[styles.profileHeader, { backgroundColor: colors.surface }]}
+          >
+            {/* Tap the profile image to change it */}
+            <Pressable onPress={pickImage}>
+              <Image
+                source={{
+                  uri:
+                    formData.profilePic ||
+                    "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541",
+                }}
+                style={styles.avatar}
+              />
+            </Pressable>
+            <Text
+              style={[styles.editProfileText, { color: colors.primary }]}
+              onPress={() => setUpdateDrawerVisible(true)}
             >
-              <View style={styles.addressHeader}>
-                <View style={styles.addressType}>
-                  <Ionicons
-                    name={
-                      address.type === 'home'
-                        ? 'home-outline'
-                        : address.type === 'work'
-                        ? 'business-outline'
-                        : 'location-outline'
-                    }
-                    size={20}
-                    color={colors.text}
-                  />
-                  <Text
-                    style={[styles.addressTypeText, { color: colors.text }]}
-                  >
-                    {address.type}
+              Edit Profile
+            </Text>
+            <View style={styles.profileContent}>
+              <Text style={[styles.name, { color: colors.text }]}>
+                {formData.displayName}
+              </Text>
+              <Divider style={styles.divider} />
+              <Text style={[styles.email, { color: colors.text }]}>
+                {formData.email}
+              </Text>
+              <Divider style={styles.divider} />
+              {userData.role === "cooperative" && (
+                <>
+                  <Text style={[styles.info, { color: colors.text }]}>
+                    Registration Number: {userData.registrationNumber}
+                  </Text>
+                  <Divider style={styles.divider} />
+                  <Text style={[styles.info, { color: colors.text }]}>
+                    Region: {userData.region}
+                  </Text>
+                  <Divider style={styles.divider} />
+                  <Text style={[styles.info, { color: colors.text }]}>
+                    Physical Address: {userData.physicalAddress}
+                  </Text>
+                  <Divider style={styles.divider} />
+                </>
+              )}
+              {userData.phoneNumbers.length > 0 && (
+                <View>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    Phone Numbers
+                  </Text>
+                  <Divider style={styles.divider} />
+                  {userData.phoneNumbers.map((phone, index) => (
+                    <View key={index}>
+                      <Text style={[styles.info, { color: colors.text }]}>
+                        {phone}
+                      </Text>
+                      <Divider style={styles.divider} />
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+
+          {userData.addresses.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Addresses
+              </Text>
+              {userData.addresses.map((address) => (
+                <View
+                  key={address.id}
+                  style={[
+                    styles.addressCard,
+                    { backgroundColor: colors.surface },
+                  ]}
+                >
+                  <View style={styles.addressHeader}>
+                    <View style={styles.addressType}>
+                      <Text
+                        style={[styles.addressTypeText, { color: colors.text }]}
+                      >
+                        {address.type}
+                      </Text>
+                    </View>
+                    {address.isDefault && (
+                      <View style={styles.defaultBadge}>
+                        <Text style={styles.defaultText}>Default</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.addressText, { color: colors.text }]}>
+                    {address.street}, {address.city}, {address.state}{" "}
+                    {address.zipCode}
                   </Text>
                 </View>
-                {address.isDefault && (
-                  <View style={styles.defaultBadge}>
-                    <Text style={styles.defaultText}>Default</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.addressText, { color: colors.text }]}>
-                {address.street}, {address.city}, {address.state}{' '}
-                {address.zipCode}
-              </Text>
+              ))}
             </View>
-          ))}
-        </View>
+          )}
 
-        {/* Preferences Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Preferences
-          </Text>
-          <View
-            style={[
-              styles.preferencesCard,
-              { backgroundColor: colors.surface },
-            ]}
+          <Pressable
+            style={[styles.logoutButton, { backgroundColor: colors.primary }]}
+            onPress={() => signOut(auth)}
           >
-            <View style={styles.preferenceItem}>
-              <Text style={[styles.preferenceLabel, { color: colors.text }]}>
-                Push Notifications
-              </Text>
-              <View
-                style={[
-                  styles.toggleButton,
-                  userProfile.preferences.notifications &&
-                    styles.toggleButtonActive,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.toggleKnob,
-                    userProfile.preferences.notifications &&
-                      styles.toggleKnobActive,
-                  ]}
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.deleteButton, { backgroundColor: "#D32F2F" }]}
+            onPress={() => setDeleteDrawerVisible(true)}
+          >
+            <Text style={styles.deleteButtonText}>Delete Account</Text>
+          </Pressable>
+        </ScrollView>
+
+        {/* Update Profile Drawer */}
+        <Modal
+          visible={updateDrawerVisible}
+          onRequestClose={() => setUpdateDrawerVisible(false)}
+          animationType="slide"
+          transparent={true}
+        >
+          <View style={styles.drawerContainer}>
+            <View style={styles.drawerContent}>
+              <TextInput
+                label="Display Name"
+                value={formData.displayName}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, displayName: text })
+                }
+                mode="outlined"
+                style={styles.input}
+              />
+              <TextInput
+                label="Email"
+                value={formData.email}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, email: text })
+                }
+                mode="outlined"
+                style={styles.input}
+              />
+              {userData.role === "cooperative" && (
+                <TextInput
+                  label="Physical Address"
+                  value={formData.physicalAddress}
+                  onChangeText={(text) =>
+                    setFormData({ ...formData, physicalAddress: text })
+                  }
+                  mode="outlined"
+                  style={styles.input}
                 />
-              </View>
-            </View>
-            <View style={styles.preferenceItem}>
-              <Text style={[styles.preferenceLabel, { color: colors.text }]}>
-                Email Updates
+              )}
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Phone Numbers
               </Text>
-              <View
-                style={[
-                  styles.toggleButton,
-                  userProfile.preferences.emailUpdates &&
-                    styles.toggleButtonActive,
-                ]}
+              {formData.phoneNumbers &&
+                formData.phoneNumbers.map((phone, index) => (
+                  <View
+                    key={index}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginVertical: 5,
+                    }}
+                  >
+                    <Text style={{ flex: 1, color: colors.text }}>{phone}</Text>
+                    <Button
+                      mode="text"
+                      onPress={() => handleRemovePhoneNumber(index)}
+                      color={colors.error}
+                    >
+                      Remove
+                    </Button>
+                  </View>
+                ))}
+              <TextInput
+                label="Add Phone Number"
+                value={newPhoneNumber}
+                onChangeText={setNewPhoneNumber}
+                mode="outlined"
+                style={styles.input}
+              />
+              <Button
+                mode="contained"
+                onPress={handleAddPhoneNumber}
+                style={styles.button}
               >
-                <View
-                  style={[
-                    styles.toggleKnob,
-                    userProfile.preferences.emailUpdates &&
-                      styles.toggleKnobActive,
-                  ]}
-                />
+                Add Phone Number
+              </Button>
+              <View style={styles.drawerActions}>
+                <Button
+                  mode="outlined"
+                  onPress={() => setUpdateDrawerVisible(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleUpdateProfile}
+                  disabled={isUpdating}
+                  loading={isUpdating}
+                >
+                  {isUpdating ? "Processing..." : "Save"}
+                </Button>
               </View>
             </View>
           </View>
-        </View>
+        </Modal>
 
-        {/* Transactions History */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Transactions History
-          </Text>
-          {transactions.map((tx) => (
-            <View
-              key={tx.id}
-              style={[
-                styles.transactionCard,
-                { backgroundColor: colors.surface },
-              ]}
-            >
-              <View style={styles.transactionRow}>
-                <Text
-                  style={[
-                    styles.transactionDescription,
-                    { color: colors.text },
-                  ]}
-                >
-                  {tx.description}
-                </Text>
-                <Text
-                  style={[styles.transactionAmount, { color: colors.primary }]}
-                >
-                  E{tx.amount.toFixed(2)}
-                </Text>
-              </View>
-              <Text style={[styles.transactionDate, { color: colors.text }]}>
-                {new Date(tx.date).toLocaleDateString()}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Most Bought Product */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Most Bought Product
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {mostBoughtProducts.map((product) => (
-              <View
-                key={product.id}
-                style={[
-                  styles.productCard,
-                  { backgroundColor: colors.surface },
-                ]}
-              >
-                <Image
-                  source={{ uri: product.image }}
-                  style={styles.productImage}
-                />
-                <Text
-                  style={[styles.productName, { color: colors.text }]}
-                  numberOfLines={1}
-                >
-                  {product.name}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Log Out Button */}
-        <Pressable
-          style={[styles.logoutButton, { backgroundColor: colors.secondary }]}
+        {/* Delete Account Drawer */}
+        <Modal
+          visible={deleteDrawerVisible}
+          onRequestClose={() => setDeleteDrawerVisible(false)}
+          animationType="slide"
+          transparent={true}
         >
-          <Text style={styles.logoutButtonText}>Log Out</Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
-  )
+          <View style={styles.drawerContainer}>
+            <View style={styles.drawerContent}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Delete Account
+              </Text>
+              <Text style={{ color: colors.text, marginBottom: 20 }}>
+                Please enter your password to confirm account deletion.
+              </Text>
+              <TextInput
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                mode="outlined"
+                style={styles.input}
+              />
+              <View style={styles.drawerActions}>
+                <Button
+                  mode="outlined"
+                  onPress={() => setDeleteDrawerVisible(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleDeleteAccount}
+                  color="#D32F2F"
+                >
+                  Delete
+                </Button>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Snackbar */}
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={3000}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: snackbarColor,
+          }}
+        >
+          {snackbarMessage}
+        </Snackbar>
+      </SafeAreaView>
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  header: {
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
-  },
-  title: {
-    fontSize: 32,
-    fontFamily: 'Poppins-Bold',
   },
   content: {
     flex: 1,
   },
+  loader: {
+    width: 50,
+    height: 50,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   profileHeader: {
-    alignItems: 'center',
     padding: 24,
-    backgroundColor: '#FFF',
+    backgroundColor: "#FFF",
+    alignItems: "flex-start",
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 50,
+    marginBottom: 8,
+  },
+  editProfileText: {
+    textDecorationLine: "underline",
     marginBottom: 16,
+  },
+  profileContent: {
+    width: "100%",
   },
   name: {
     fontSize: 24,
-    fontFamily: 'Poppins-Bold',
+    fontFamily: "Poppins-Bold",
     marginBottom: 4,
+    textAlign: "left",
   },
   email: {
     fontSize: 16,
-    fontFamily: 'Poppins-Regular',
+    fontFamily: "Poppins-Regular",
+    textAlign: "left",
   },
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    padding: 16,
-    marginTop: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#E5E5E5',
-    marginHorizontal: 24,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontFamily: 'Poppins-Bold',
-  },
-  statLabel: {
+  info: {
     fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-    marginTop: 4,
+    fontFamily: "Poppins-Regular",
+    marginVertical: 2,
+    textAlign: "left",
+  },
+  divider: {
+    marginVertical: 10,
+    backgroundColor: "#C1B8C8",
+    height: 1,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: "Poppins-SemiBold",
+    marginBottom: 16,
+    textAlign: "left",
   },
   section: {
     marginTop: 24,
     padding: 16,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Poppins-SemiBold',
-    marginBottom: 16,
-  },
   addressCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: "#FFF",
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
   addressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
   addressType: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   addressTypeText: {
     fontSize: 16,
-    fontFamily: 'Poppins-SemiBold',
+    fontFamily: "Poppins-SemiBold",
     marginLeft: 8,
-    textTransform: 'capitalize',
+    textTransform: "capitalize",
   },
   defaultBadge: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: "#E8F5E9",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
   defaultText: {
-    color: '#4CAF50',
+    color: "#4CAF50",
     fontSize: 12,
-    fontFamily: 'Poppins-SemiBold',
+    fontFamily: "Poppins-SemiBold",
   },
   addressText: {
     fontSize: 14,
-    fontFamily: 'Poppins-Regular',
+    fontFamily: "Poppins-Regular",
     lineHeight: 20,
-  },
-  preferencesCard: {
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  preferenceItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  preferenceLabel: {
-    fontSize: 16,
-    fontFamily: 'Poppins-Regular',
-  },
-  toggleButton: {
-    width: 50,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#E5E5E5',
-    padding: 2,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#FF4B3E',
-  },
-  toggleKnob: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#FFF',
-  },
-  toggleKnobActive: {
-    transform: [{ translateX: 20 }],
-  },
-  transactionCard: {
-    backgroundColor: '#FFF',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  transactionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  transactionDescription: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-  },
-  transactionDate: {
-    fontSize: 12,
-    fontFamily: 'Poppins-Regular',
-    marginTop: 4,
-  },
-  transactionAmount: {
-    fontSize: 16,
-    fontFamily: 'Poppins-Bold',
-    marginTop: 4,
-  },
-  productCard: {
-    width: 110,
-    borderRadius: 10,
-    overflow: 'hidden',
-    marginRight: 12,
-  },
-  productImage: {
-    width: '100%',
-    height: 100,
-    resizeMode: 'cover',
-  },
-  productName: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-    textAlign: 'center',
-    padding: 4,
   },
   logoutButton: {
     margin: 16,
     marginTop: 32,
-    backgroundColor: '#F44336',
+    backgroundColor: "#F44336",
     padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   logoutButtonText: {
-    color: '#00000',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontFamily: 'Poppins-SemiBold',
+    fontFamily: "Poppins-SemiBold",
   },
-})
+  deleteButton: {
+    margin: 16,
+    marginTop: 0,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  deleteButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: "Poppins-SemiBold",
+  },
+  drawerContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  drawerContent: {
+    backgroundColor: "#FFF",
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "80%",
+  },
+  drawerActions: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 20,
+  },
+  input: {
+    marginBottom: 15,
+  },
+  button: {
+    marginVertical: 10,
+  },
+});

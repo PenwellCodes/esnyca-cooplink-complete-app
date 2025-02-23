@@ -57,7 +57,7 @@ const Home = () => {
   const menuItems = [
     { name: "Services", icon: "shopping-cart", route: "/services" },
     { name: "About Us", icon: "groups", route: "/about-us" },
-    { name: "Sign Up", icon: "assignment", route: "/(auth)/sign-up" },
+    { name: "Sign Up", icon: "assignment", route: "/profile" },
     { name: "Cooperatives", icon: "business", route: "/cooperatives" },
     { name: "News", icon: "newspaper", route: "/news" },
     { name: "Partnerships", icon: "handshake", route: "/(screens)/partnerships" },
