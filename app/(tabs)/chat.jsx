@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,42 +23,16 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
+import { useStories } from "../../context/appstate/StoriesContext";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
-
-const stories = [
-  {
-    id: "0",
-    name: "Add Story",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-    addStory: true,
-  },
-  {
-    id: "1",
-    name: "Lihawu Co",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-  },
-  {
-    id: "2",
-    name: "Ligonadvodza Co",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-  },
-  {
-    id: "3",
-    name: "Sizwe",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-  },
-];
 
 const ChatList = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { stories: activeStories } = useStories(); // Live active stories from Firestore
   const [chatList, setChatList] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -131,6 +104,25 @@ const ChatList = () => {
     return <ActivityIndicator size="large" color={colors.primary} />;
   }
 
+  // Build stories array: add "Add Story" first (if applicable) then active stories
+  const storiesForDisplay = [];
+  if (currentUser?.role === "cooperative") {
+    storiesForDisplay.push({
+      id: "add-story",
+      name: "Add Story",
+      addStory: true,
+      avatar: currentUser.profilePic || placeholderAvatar,
+    });
+  }
+  activeStories.forEach((story) => {
+    storiesForDisplay.push({
+      id: story.id,
+      name: story.caption || "", // Or replace with the story owner's name if available
+      avatar: story.imageURL, // Optionally, use the story creator’s avatar instead
+      userId: story.userId,
+    });
+  });
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -147,15 +139,20 @@ const ChatList = () => {
         </Text>
       </View>
 
-      {/* Stories Section (No changes) */}
+      {/* Stories Section */}
       <View style={styles.statusListContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {stories.map((story) => (
+          {storiesForDisplay.map((story) => (
             <TouchableOpacity
               key={story.id}
               style={styles.statusItem}
               onPress={() =>
-                story.addStory ? router.push("/add-story") : null
+                story.addStory
+                  ? router.push("/add-story")
+                  : router.push({
+                      pathname: "/view-story",
+                      params: { storyId: story.id, userId: story.userId },
+                    })
               }
             >
               <LinearGradient
@@ -200,10 +197,9 @@ const ChatList = () => {
             onPress={() =>
               router.push({
                 pathname: `/(screens)/chatConversations/${item.uid}`,
-                params: { user: JSON.stringify(item) }, // Pass full user object
+                params: { user: JSON.stringify(item) },
               })
             }
-            
           >
             <Image
               source={{ uri: item.profilePic || placeholderAvatar }}
@@ -215,8 +211,6 @@ const ChatList = () => {
               </Text>
               <Text style={styles.lastMessage}>{item.lastMessage}</Text>
             </View>
-
-            {/* Unread messages count */}
             {item.unreadCount > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadText}>{item.unreadCount}</Text>
@@ -240,6 +234,9 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  appName: {
+    fontSize: 20,
   },
   statusListContainer: {
     marginVertical: 8,
@@ -269,6 +266,11 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+  },
+  menuText: {
+    marginTop: 4,
+    fontSize: 12,
+    textAlign: "center",
   },
   chatList: {
     paddingHorizontal: 16,
