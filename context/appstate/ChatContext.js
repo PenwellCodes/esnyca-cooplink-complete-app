@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "./AuthContext";
-import Toast from "react-native-toast-message";
+import Toast from 'react-native-toast-message';
 import { Text } from "react-native";
 
 const ChatContext = createContext();
@@ -84,24 +84,19 @@ export const ChatProvider = ({ children }) => {
                                 if (sender) {
                                     Toast.show({
                                         type: "info",
-                                        text1: (
-                                            <Text style={{ fontSize: 10,color: "#424651" }}>
-                                                New message from {sender.displayName}
-                                            </Text>
-                                        ),
+                                        text1: `New message from ${sender.displayName}`,
                                         position: "top",
                                         visibilityTime: 4000,
+                                        text1Style: { fontSize: 10 },
                                         style: {
                                             backgroundColor: "#00AAFF",
-                                            width: 20,           // Set equal width if needed
+                                            width: 20,           // Set equal width
                                             height: 50,          // and height
-                                            borderRadius: 100,   // for circle edges if that's desired
+                                            borderRadius: 100,    // half of width/height for a circle
                                             justifyContent: 'center',
-                                            alignItems: 'center',
+                                            alignItems: 'center'
                                         },
                                     });
-
-
                                 }
                             }
                         }
