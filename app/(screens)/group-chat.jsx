@@ -502,9 +502,7 @@ const ChatScreen = () => {
         <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
           <Ionicons name="image-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={sendFile} style={styles.attachmentButton}>
-          <Ionicons name="attach-outline" size={24} color="#007AFF" />
-        </TouchableOpacity>
+
         <TextInput
           placeholder="Type a message..."
           value={messageText}

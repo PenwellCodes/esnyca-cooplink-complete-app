@@ -282,30 +282,7 @@ const SignUp = () => {
               </>
             )}
 
-            {/* Profile Picture Upload Section */}
-            <View style={styles.uploadContainer}>
-              <TouchableOpacity
-                onPress={pickImage}
-                style={[styles.uploadButton, { borderColor: colors.primary }]}
-              >
-                <Ionicons
-                  name="attach-outline"
-                  size={24}
-                  color={colors.primary}
-                  style={{ marginRight: 8 }}
-                />
-                <Text
-                  style={[styles.uploadButtonText, { color: colors.primary }]}
-                >
-                  Upload Profile
-                </Text>
-              </TouchableOpacity>
-              {profilePic && (
-                <Text style={[styles.fileName, { color: colors.text }]}>
-                  {getFileName(profilePic)}
-                </Text>
-              )}
-            </View>
+         
 
             {/* Submit Button */}
             <CustomButton

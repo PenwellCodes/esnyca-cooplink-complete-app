@@ -21,7 +21,7 @@ const TabIcon = ({ icon, color, label, isActive }) => (
 );
 
 const TabLayout = () => {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const pathname = usePathname(); // Get current active route
   const { currentUser } = useAuth(); // Get user state from AuthContext
   const router = useRouter();
@@ -30,12 +30,13 @@ const TabLayout = () => {
     <>
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: colors.secondaryContainer,
-          tabBarInactiveTintColor: colors.surfaceVariant,
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.tertiary,
           tabBarShowLabel: false,
           tabBarStyle: {
             height: 60,
             borderTopWidth: 0,
+            backgroundColor: colors.background,
           },
         }}
       >
@@ -116,7 +117,10 @@ const TabLayout = () => {
           }}
         />
       </Tabs>
-      <StatusBar backgroundColor={colors.primary} style="light" />
+      <StatusBar
+        backgroundColor={colors.primary}
+        style={dark ? "light" : "dark"}
+      />
     </>
   );
 };
