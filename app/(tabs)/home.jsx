@@ -14,6 +14,8 @@ import { useTheme } from "react-native-paper";
 import { typography } from "../../constants";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
+import { searchScreens } from '../../utils/searchScreen';
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -25,7 +27,8 @@ const Home = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const [headlineIndex, setHeadlineIndex] = useState(0);
-  const textOpacity = useRef(new Animated.Value(1)).current;
+  const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fadeOut = () => {
     Animated.timing(textOpacity, {
@@ -61,6 +64,19 @@ const Home = () => {
     { name: "News", icon: "newspaper", route: "/news" },
     { name: "Partnerships", icon: "handshake", route: "/partnerships" },
   ];
+
+  const handleSearch = () => {
+    if (!searchQuery.trim()) return;
+    
+    const results = searchScreens(searchQuery);
+    router.push({
+      pathname: '/(screens)/search-results',
+      params: { 
+        searchQuery: searchQuery,
+        results: JSON.stringify(results)
+      }
+    });
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -102,20 +118,19 @@ const Home = () => {
           {newsHeadlines[headlineIndex]}
         </Animated.Text>
       </View>
-
-      {/* Search Box */}
-      <View
-        style={[
-          styles.searchContainer,
-          { backgroundColor: colors.surface, borderColor: colors.onSurface },
-        ]}
-      >
-        <TextInput
-          placeholder="Search"
-          placeholderTextColor={colors.onSurfaceVariant}
-          style={[styles.searchInput, { color: colors.onSurface }]}
+      {/* Updated Search Box */}
+      <View style={styles.searchContainer}>
+        <TextInput 
+          placeholder="Search" 
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
         />
-        <Ionicons name="search" size={28} color={colors.primary} />
+        <TouchableOpacity onPress={handleSearch}>
+          <Ionicons name="search" size={28} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {/* Menu Items */}

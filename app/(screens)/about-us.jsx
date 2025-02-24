@@ -1,263 +1,209 @@
 import React, { useState, useEffect } from "react";
 import {
-  View,
-  Text,
   StyleSheet,
+  Text,
+  View,
   Image,
   TouchableOpacity,
-  SectionList,
+  FlatList,
   Linking,
 } from "react-native";
-import { Appbar, useTheme } from "react-native-paper";
+import { Appbar, useTheme, Portal, Modal } from "react-native-paper";
+import { typography } from "../../constants";
+import { useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { db } from "../../firebase/firebaseConfig";
 import { collection, getDocs } from "firebase/firestore";
-import { useRouter } from "expo-router";
-import { typography } from "../../constants";
 
-// Hardcoded About Us description (can be fetched from Firebase if needed)
-const aboutUsText =
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
-
-export default function AboutUsScreen() {
+const aboutus = () => {
   const { colors } = useTheme();
   const router = useRouter();
-  const [teamSections, setTeamSections] = useState([]);
-  const [showFullAbout, setShowFullAbout] = useState(false);
+  const { currentUser } = useAuth();
 
-  // Fetch team members from Firebase
+  // Redirect if not authenticated
+  if (!loadingAuth && !currentUser) {
+    router.replace("/(auth)/sign-in");
+  }
+
+  const [aboutus, setaboutus] = useState([]);
+  const [selectedPartner, setSelectedPartner] = useState(null);
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+
+  // Fetch aboutus data from Firestore
   useEffect(() => {
-    const fetchTeamMembers = async () => {
+    const fetchaboutus = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "meetourteam"));
-        const members = querySnapshot.docs.map((doc) => ({
+        const querySnapshot = await getDocs(collection(db, "aboutus"));
+        const aboutusData = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
-        // Group members by title (team name)
-        const groups = members.reduce((acc, member) => {
-          const title = member.title;
-          if (!acc[title]) {
-            acc[title] = [];
-          }
-          acc[title].push(member);
-          return acc;
-        }, {});
-        const sections = Object.entries(groups).map(([title, data]) => ({
-          title,
-          data,
-        }));
-        setTeamSections(sections);
+        setaboutus(aboutusData);
       } catch (error) {
-        console.error("Error fetching team members:", error);
+        console.error("Error fetching aboutus: ", error);
       }
     };
-    fetchTeamMembers();
+
+    fetchaboutus();
   }, []);
 
-  // Function to get social media icon based on platform
-  const getIconName = (platform) => {
-    switch (platform.toLowerCase()) {
-      case "linked in":
-      case "linkedin":
-        return "linkedin";
-      case "facebook":
-        return "facebook";
-      case "twitter":
-        return "twitter";
-      default:
-        return "link";
+  const openDrawer = (partner) => {
+    setSelectedPartner(partner);
+    setIsDrawerVisible(true);
+  };
+
+  const closeDrawer = () => {
+    setIsDrawerVisible(false);
+  };
+
+  const openFacebook = (url) => {
+    if (url) {
+      Linking.openURL(url);
     }
   };
 
-  // Render team member card
-  const renderTeamMember = ({ item }) => (
-    <View style={[styles.card, { backgroundColor: colors.surface }]}>
-      <Image source={{ uri: item.image }} style={styles.image} />
-      <View style={styles.info}>
-        <Text
-          style={[
-            styles.title,
-            typography.robotoBold,
-            typography.body,
-            { color: colors.tertiary },
-          ]}
-        >
-          {item.name}
-        </Text>
-        <Text
-           style={[
-            styles.title,
-            typography.robotoLight,
-            typography.small,
-            { color: colors.tertiary },
-          ]}
-          numberOfLines={2}
-        >
-          {item.bio}
-        </Text>
-        <View style={styles.socialRow}>
-          {item.socialmedia.map((sm, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.socialIcon}
-              onPress={() => {
-                const url = sm.url.startsWith("http")
-                  ? sm.url
-                  : `https://${sm.url}`;
-                Linking.openURL(url).catch((err) =>
-                  console.error("Failed to open URL:", err),
-                );
-              }}
-            >
-              <FontAwesome
-                name={getIconName(sm.platform)}
-                size={20  }
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-
   return (
-    <>
-      <Appbar.Header>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Appbar Header */}
+      <Appbar.Header style={{ backgroundColor: "#2196F3" }}>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="About Us" />
+        <Appbar.Content title="Meet The Team" color="white" />
       </Appbar.Header>
-      <SafeAreaView style={styles.safeArea} edges={["top"]}>
-        <SectionList
-          sections={teamSections}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderTeamMember}
-          renderSectionHeader={({ section: { title } }) => (
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {title}
-            </Text>
-          )}
-          ListHeaderComponent={
-            <View style={styles.aboutSection}>
-              <Text
-                style={[
-                  styles.title,
-                  typography.robotoBold,
-                  typography.title,
-                  { color: colors.tertiary },
-                ]}
-              >
-                About Us
-              </Text>
-              <Text
+
+      {/* Partner Cards */}
+      <FlatList
+        data={aboutus}
+        numColumns={3}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.flatListContainer}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.menuItemContainer}
+            onPress={() => openDrawer(item)}
+          >
+            <View style={[styles.menuItem, { borderColor: colors.error }]}>
+              <Image
+                source={{ uri: item.imageUrl }}
+                style={styles.partnerImage}
+                resizeMode="contain"
+              />
+            </View>
+            <Text
               style={[
-                styles.title,
-                typography.robotoLight,
+                styles.menuText,
+                typography.robotoMedium,
                 typography.small,
                 { color: colors.tertiary },
               ]}
-                numberOfLines={showFullAbout ? 0 : 4}
-              >
-                {aboutUsText}
+            >
+              {item.title}
+            </Text>
+          </TouchableOpacity>
+        )}
+      />
+
+      {/* Bottom Drawer for More Information */}
+      <Portal>
+        <Modal
+          visible={isDrawerVisible}
+          onDismiss={closeDrawer}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Text style={styles.drawerHeading}>More Information</Text>
+          {selectedPartner && (
+            <>
+              <Text style={styles.drawerTitle}>{selectedPartner.title}</Text>
+              <Text style={styles.drawerDescription}>
+                {selectedPartner.description}
               </Text>
-              {aboutUsText.length > 200 && (
-                <Text
-                  style={[styles.readMore, { color: colors.primary }]}
-                  onPress={() => setShowFullAbout(!showFullAbout)}
+              {selectedPartner.facebookUrl && (
+                <TouchableOpacity
+                  style={styles.facebookButton}
+                  onPress={() => openFacebook(selectedPartner.facebookUrl)}
                 >
-                  {showFullAbout ? "Read Less" : "Read More"}
-                </Text>
+                  <FontAwesome
+                    name="facebook"
+                    size={24}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.facebookText}>Facebook</Text>
+                </TouchableOpacity>
               )}
-              <Text
-                style={[
-                  styles.title,
-                  typography.robotoBold,
-                  typography.title,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Meet the Team
-              </Text>
-            </View>
-          }
-          contentContainerStyle={styles.listContent}
-          stickySectionHeadersEnabled={false}
-        />
-      </SafeAreaView>
-    </>
+            </>
+          )}
+        </Modal>
+      </Portal>
+    </View>
   );
-}
+};
+
+export default aboutus;
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: "#FFF",
   },
-  aboutSection: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
+  flatListContainer: {
+    flexGrow: 1,
+    padding: 16,
   },
-  heading: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  aboutDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  readMore: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  card: {
-    flexDirection: "row",
+  menuItemContainer: {
+    flex: 1,
     alignItems: "center",
-    borderRadius: 12,
-    padding: 12,
-    marginVertical: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    margin: 10,
   },
-  image: {
+  menuItem: {
+    width: 100,
+    height: 100,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  menuText: {
+    marginTop: 5,
+    textAlign: "center",
+  },
+  partnerImage: {
     width: 80,
     height: 80,
-    borderRadius: 8,
-    marginRight: 12,
+    borderRadius: 40,
   },
-  info: {
-    flex: 1,
+  modalContainer: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
-  name: {
+  drawerHeading: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  drawerTitle: {
     fontSize: 16,
     fontWeight: "600",
+    marginBottom: 10,
   },
-  description: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginTop: 4,
-    lineHeight: 18,
+  drawerDescription: {
+    fontSize: 14,
+    color: "#444",
+    marginBottom: 10,
   },
-  socialRow: {
+  facebookButton: {
     flexDirection: "row",
-    marginTop: 12,
+    alignItems: "center",
+    paddingVertical: 10,
   },
-  socialIcon: {
-    marginRight: 12,
+  facebookText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: "#1877F2",
   },
 });

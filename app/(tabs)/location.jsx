@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  Alert,
   Image,
 } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -16,14 +17,12 @@ import * as Location from 'expo-location';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import haversine from 'haversine';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from 'react-native-paper';
-import { typography } from '../../constants';
 
 const { width, height } = Dimensions.get('window');
 
 const LocationsScreen = () => {
-  const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
@@ -60,31 +59,40 @@ const LocationsScreen = () => {
     })();
   }, []);
 
-  // Sample static user locations
+  // Fetch user locations
   useEffect(() => {
-    const staticLocations = [
-      {
-        id: '1',
-        latitude: -26.5225,
-        longitude: 31.4659,
-        title: 'Sample Location 1',
-        description: 'Description for Sample Location 1',
-        photoUrl: 'https://via.placeholder.com/150',
-        companyAddress: '123 Sample Street',
-      },
-      {
-        id: '2',
-        latitude: -26.5325,
-        longitude: 31.4759,
-        title: 'Sample Location 2',
-        description: 'Description for Sample Location 2',
-        photoUrl: 'https://via.placeholder.com/150',
-        companyAddress: '456 Example Avenue',
-      },
-    ];
+    const fetchUserLocations = async () => {
+      setLoading(true);
+      try {
+        const db = getFirestore();
+        const usersRef = collection(db, 'users');
+        const querySnapshot = await getDocs(usersRef);
+        
+        const locations = querySnapshot.docs
+          .map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data.location,
+              title: data.displayName || 'Unknown Company',
+              description: data.content || 'No description available',
+              photoUrl: data.photoUrl,
+              companyAddress: data.companyAddress,
+            };
+          })
+          .filter(location => location.latitude && location.longitude);
 
-    setUserLocations(staticLocations);
-    setSearchResults(staticLocations);
+        setUserLocations(locations);
+        setSearchResults(locations);
+      } catch (error) {
+        console.error('Error fetching user locations:', error);
+        setErrorMessage('Error loading user locations');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserLocations();
   }, []);
 
   const handleSearch = () => {
@@ -121,48 +129,47 @@ const LocationsScreen = () => {
   const renderMarker = (location) => (
     <Marker
       key={location.id}
-      coordinate={{
-        latitude: location.latitude,
-        longitude: location.longitude,
+      coordinate={{ 
+        latitude: location.latitude, 
+        longitude: location.longitude 
       }}
       title={location.title}
       description={location.description}
     >
       {location.photoUrl ? (
         <View style={styles.customMarker}>
-          <Image
-            source={{ uri: location.photoUrl }}
+          <Image 
+            source={{ uri: location.photoUrl }} 
             style={styles.markerImage}
           />
-          <Ionicons
-            name="location-sharp"
-            size={40}
-            color={colors.primary}
+          <Ionicons 
+            name="location-sharp" 
+            size={40} 
+            color="#191970" 
             style={styles.markerIcon}
           />
         </View>
       ) : (
-        <Ionicons name="location-sharp" size={40} color={colors.primary} />
+        <Ionicons name="location-sharp" size={40} color="#191970" />
       )}
     </Marker>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <TextInput
-        style={[styles.searchInput, { backgroundColor: colors.surface, borderColor: colors.onSurface }]}
+        style={styles.searchInput}
         placeholder="Search for a location"
-        placeholderTextColor={colors.onSurface}
         value={searchQuery}
         onChangeText={(text) => setSearchQuery(text)}
         onSubmitEditing={handleSearch}
       />
-      {errorMessage ? <Text style={[styles.errorText, typography.body, { color: colors.error }]}>{errorMessage}</Text> : null}
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-      {loading && <ActivityIndicator size="large" color={colors.primary} style={styles.loadingIndicator} />}
+      {loading && <ActivityIndicator size="large" color="#007AFF" style={styles.loadingIndicator} />}
 
-      <View style={[styles.controlContainer, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.controlLabel, typography.body, { color: colors.onSurface }]}>Radius: {radius / 1000} km</Text>
+      <View style={styles.controlContainer}>
+        <Text style={styles.controlLabel}>Radius: {radius / 1000} km</Text>
         <Slider
           style={styles.slider}
           minimumValue={1000}
@@ -170,103 +177,229 @@ const LocationsScreen = () => {
           step={500}
           value={radius}
           onValueChange={(value) => setRadius(value)}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.onSurface}
-          thumbTintColor={colors.primary}
         />
       </View>
 
       <View style={styles.buttonContainer}>
-    <TouchableOpacity
-      style={[styles.button, { backgroundColor: colors.primary }]}
-      onPress={() => setSearchResults(userLocations)}
-    >
-      <Icon name="times-circle" size={20} color={colors.onPrimary} />
-      <Text style={[styles.buttonText, typography.button]}>Reset</Text>
-    </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => setSearchResults(userLocations)}
+        >
+          <Icon name="times-circle" size={20} color="#FFF" />
+          <Text style={styles.buttonText}>Clear</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
+        >
+          <Icon name="map" size={20} color="#FFF" />
+          <Text style={styles.buttonText}>Switch View</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={recenterMap}>
+          <Icon name="location-arrow" size={20} color="#FFF" />
+          <Text style={styles.buttonText}>Re-center</Text>
+        </TouchableOpacity>
+      </View>
 
-    <TouchableOpacity
-      style={[styles.button, { backgroundColor: colors.primary }]}
-      onPress={recenterMap}
-    >
-      <Icon name="crosshairs" size={20} color={colors.onPrimary} />
-      <Text style={[styles.buttonText, typography.button]}>Recenter</Text>
-    </TouchableOpacity>
-  </View>
-
-  {currentLocation && (
-    <MapView
-      ref={mapRef}
-      provider={PROVIDER_GOOGLE}
-      style={styles.map}
-      initialRegion={{
-        latitude: currentLocation.latitude,
-        longitude: currentLocation.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      }}
-      mapType={mapType}
-      zoomEnabled={false}
-      scrollEnabled={false}
-    >
-      <Marker coordinate={currentLocation} title="Your Location">
-        <Ionicons name="person-circle" size={40} color={colors.primary} />
-      </Marker>
-
-      {searchResults.map(renderMarker)}
-
-      <Circle
-        center={currentLocation}
-        radius={radius}
-        strokeColor={colors.primary}
-        fillColor="rgba(0, 122, 255, 0.2)"
-      />
-    </MapView>
-  )}
-
-  <FlatList
-    data={searchResults}
-    keyExtractor={(item) => item.id}
-    renderItem={({ item }) => (
-      <TouchableOpacity style={[styles.locationCard, { backgroundColor: colors.surface }]} onPress={() => setSelectedLocation(item)}>
-        <Text style={[styles.locationTitle, typography.subtitle]}>{item.title}</Text>
-        <Text style={[styles.locationDescription, typography.body]}>
-          {item.companyAddress}
-        </Text>
-        <Text style={[styles.locationDistance, typography.body]}>
-          {calculateDistance(item.latitude, item.longitude)} km away
-        </Text>
-      </TouchableOpacity>
-    )}
-  />
-
-  <Modal visible={!!selectedLocation} animationType="slide" transparent>
-    <View style={styles.modalContainer}>
-      {selectedLocation && (
-        <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-          <Image source={{ uri: selectedLocation.photoUrl }} style={styles.modalImage} />
-          <Text style={[styles.modalTitle, typography.title]}>{selectedLocation.title}</Text>
-          <Text style={[styles.modalText, typography.body]}>{selectedLocation.description}</Text>
+      <FlatList
+        data={searchResults}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
           <TouchableOpacity
-            style={[styles.closeButton, { backgroundColor: colors.primary }]}
-            onPress={() => setSelectedLocation(null)}
+            style={styles.resultItem}
+            onPress={() => setSelectedLocation(item)}
           >
-            <Text style={[styles.closeButtonText, typography.button]}>Close</Text>
+            <Text style={styles.resultText}>
+              {item.title} - {calculateDistance(item.latitude, item.longitude)} km
+            </Text>
           </TouchableOpacity>
-        </View>
+        )}
+      />
+
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        mapType={mapType}
+        showsUserLocation
+        initialRegion={{
+          latitude: currentLocation ? currentLocation.latitude : -26.5225,
+          longitude: currentLocation ? currentLocation.longitude : 31.4659,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }}
+      >
+        {searchResults.map(renderMarker)}
+        {userLocations.map(renderMarker)}
+        {currentLocation && (
+          <Circle
+            center={currentLocation}
+            radius={radius}
+            strokeColor="rgba(0, 122, 255, 0.5)"
+            fillColor="rgba(0, 122, 255, 0.2)"
+          />
+        )}
+      </MapView>
+
+      {selectedLocation && (
+        <Modal
+          animationType="slide"
+          transparent
+          visible
+          onRequestClose={() => setSelectedLocation(null)}
+        >
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>{selectedLocation.title}</Text>
+            <Text style={styles.modalDescription}>
+              {selectedLocation.description}
+            </Text>
+            {selectedLocation.companyAddress && (
+              <Text style={styles.modalAddress}>
+                Address: {selectedLocation.companyAddress}
+              </Text>
+            )}
+            <Text style={styles.modalDistance}>
+              Distance: {calculateDistance(selectedLocation.latitude, selectedLocation.longitude)} km
+            </Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSelectedLocation(null)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
       )}
     </View>
-  </Modal>
-</View>
-);
+  );
 };
-const styles = StyleSheet.create({ container: 
-  { flex: 1, padding: 10 },
-   searchInput: { padding: 10,
-     borderWidth: 1, borderRadius: 5,
-      marginBottom: 10 },
 
-    errorText: { textAlign: 'center', marginBottom: 10 },
-     loadingIndicator: { marginTop: 20 }, controlContainer: { padding: 10, borderRadius: 5, marginBottom: 10 }, controlLabel: { textAlign: 'center', marginBottom: 5 }, slider: { width: '100%' }, buttonContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 }, button: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 5 }, buttonText: { marginLeft: 5 }, map: { width: width - 20, height: height / 3, borderRadius: 10 }, locationCard: { padding: 10, borderRadius: 5, marginVertical: 5 }, locationTitle: { fontWeight: 'bold' }, locationDescription: { marginTop: 2 }, locationDistance: { marginTop: 5, fontStyle: 'italic' }, modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' }, modalContent: { padding: 20, borderRadius: 10, alignItems: 'center' }, modalImage: { width: 200, height: 200, borderRadius: 10, marginBottom: 10 }, modalTitle: { fontWeight: 'bold', marginBottom: 5 }, modalText: { textAlign: 'center', marginBottom: 10 }, closeButton: { padding: 10, borderRadius: 5 }, closeButtonText: { textAlign: 'center' }, customMarker: { alignItems: 'center', justifyContent: 'center' }, markerImage: { width: 30, height: 30, borderRadius: 15 }, markerIcon: { position: 'absolute', top: 10 }, });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+    paddingTop: 20,
+  },
+  searchInput: {
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    margin: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDDDDD',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    elevation: 2,
+  },
+  errorText: {
+    color: '#FF3B30',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  controlContainer: {
+    padding: 15,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 10,
+    borderRadius: 10,
+    elevation: 3,
+  },
+  controlLabel: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  slider: {
+    width: '100%',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    marginVertical: 15,
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+  },
+  buttonText: {
+    color: '#FFF',
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  map: {
+    width: '100%',
+    height: height * 0.5,
+    borderRadius: 10,
+    marginVertical: 10,
+  },
+  resultItem: {
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginBottom: 5,
+  },
+  resultText: {
+    fontSize: 16,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#FFF',
+  },
+  closeButton: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+  },
+  closeButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+  },
+  loadingIndicator: {
+    marginTop: 10,
+  },
+  customMarker: {
+    alignItems: 'center',
+  },
+  markerImage: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+    borderWidth: 2,
+    borderColor: '#191970',
+  },
+  markerIcon: {
+    position: 'absolute',
+    bottom: -20,
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: '#FFF',
+    marginBottom: 10,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  modalAddress: {
+    fontSize: 14,
+    color: '#FFF',
+    marginBottom: 10,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+});
 
 export default LocationsScreen;

@@ -1,192 +1,113 @@
-import React, { useContext, useState } from "react";
-import { View, ScrollView, StyleSheet, Modal } from "react-native";
-import { Text, List, Divider, Switch, Button } from "react-native-paper";
+import React, { useState } from "react";
+import { View, ScrollView, StyleSheet, Modal, TouchableOpacity, Linking, Share } from "react-native";
+import { Text, List, Divider, Switch, Button, useTheme } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import { typography } from "../../constants";
-import { useTheme } from "react-native-paper";
-import { useCustomTheme } from "../../context/appstate/CustomThemeProvider";
+import { useRouter } from "expo-router"; // Change this import
 
 const SettingsScreen = () => {
-  const { colors } = useTheme();
+  const { colors, dark, toggleTheme } = useTheme();
   const [faqVisible, setFaqVisible] = useState(false);
-  const { toggleTheme, isDarkTheme } = useCustomTheme();
+  const router = useRouter(); // Use router instead of navigation
+
+  const handleUpdateProfile = () => {
+    router.push("/(screens)/profile"); // Use Expo Router syntax
+  };
+
+  const handlePrivacyPolicy = async () => {
+    try {
+      await Linking.openURL('https://esnyca.pages.dev');
+    } catch (error) {
+      console.error('Error opening privacy policy:', error);
+    }
+  };
+
+  const handleInviteFriends = async () => {
+    try {
+      const message = "Check out this amazing app: ESNICA - Connect with cooperatives!";
+      const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      await Linking.openURL(whatsappUrl);
+    } catch (error) {
+      // Fallback to regular share if WhatsApp isn't installed
+      try {
+        await Share.share({
+          message: message,
+        });
+      } catch (shareError) {
+        console.error('Error sharing:', shareError);
+      }
+    }
+  };
 
   const faqData = [
     {
       question: "How do I reset my password?",
-      answer: "Go to settings, select security, and click reset password.",
+      answer: "Click on the forget password link and follow the promps that follow.",
     },
     {
       question: "How can I contact support?",
-      answer: "You can reach us via email at support@example.com.",
-    },
-    {
-      question: "Can I change my username?",
-      answer: "Currently, username changes are not supported.",
-    },
-    {
-      question: "How do I enable notifications?",
-      answer:
-        "Go to settings, select notifications, and enable push notifications.",
+      answer: "You can reach us via email at synca17@gmail.com.",
     },
     {
       question: "Is my data secure?",
-      answer: "Yes, we use end-to-end encryption to protect your data.",
+      answer: "Yes,you can check this by going to the privacy policy,To see how we handle your data.",
     },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar backgroundColor={colors.primary} style="light" />
+      <StatusBar backgroundColor={colors.primary} style={dark ? "light" : "dark"} />
       <ScrollView>
-        <Text
-          style={[
-            styles.appName,
-            typography.robotoBold,
-            typography.subtitle,
-            { color: colors.tertiary },
-          ]}
-        >
+        <Text style={[styles.appName, { color: colors.tertiary }]}>
           Settings
         </Text>
 
         <List.Section>
           <List.Item
-            title={
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Profile
-              </Text>
-            }
+            title="Profile"
             left={(props) => <List.Icon {...props} icon="account" />}
-            right={(props) => (
-              <Text style={styles.disabledText}>Update Profile</Text>
-            )}
+            onPress={handleUpdateProfile}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
           />
           <Divider />
 
           <List.Item
-            title={
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Change Language (English)
-              </Text>
-            }
-            left={(props) => <List.Icon {...props} icon="translate" />}
-          />
-          <Divider />
-
-          <List.Item
-            title={
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Privacy
-              </Text>
-            }
+            title="Privacy"
             left={(props) => <List.Icon {...props} icon="lock" />}
+            onPress={handlePrivacyPolicy}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
           />
           <Divider />
 
           <List.Item
-            title={
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Toggle Dark Mode
-              </Text>
-            }
+            title="Dark Mode"
             left={(props) => <List.Icon {...props} icon="brightness-6" />}
             right={() => (
-              <Switch value={isDarkTheme} onValueChange={toggleTheme} />
+              <Switch
+                value={dark}
+                onValueChange={toggleTheme}
+              />
             )}
           />
           <Divider />
 
           <List.Item
-            title={
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Help
-              </Text>
-            }
+            title="Frequently Asked Questions"
             left={(props) => <List.Icon {...props} icon="help-circle" />}
-          />
-          <Divider />
-
-          <List.Item
-            title={
-              <Text style={styles.disabledText}>
-                Frequently Asked Questions
-              </Text>
-            }
             onPress={() => setFaqVisible(true)}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
           />
           <Divider />
 
           <List.Item
-            title={
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.link },
-                ]}
-              >
-                View on YouTube
-              </Text>
-            }
-          />
-          <Divider />
-
-          <List.Item
-            title={
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Invite Friends
-              </Text>
-            }
+            title="Invite Friends"
             left={(props) => <List.Icon {...props} icon="account-group" />}
+            onPress={handleInviteFriends}
+            right={(props) => <List.Icon {...props} icon="share" />}
           />
         </List.Section>
       </ScrollView>
 
-      {/* FAQ Modal */}
       <Modal
         visible={faqVisible}
         animationType="slide"
