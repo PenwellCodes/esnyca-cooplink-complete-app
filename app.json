@@ -13,18 +13,34 @@
       "backgroundColor": "#ffffff"
     },
     "scheme": "esnycarecovery",
-    "assetBundlePatterns": ["/*"],
+    "assetBundlePatterns": [
+      "/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "package": "com.innocent.mkhonta.esnycarecovery",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        }
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9edbf01b-0ff8-4c58-8a70-ca60084f7be5"
+      }
     }
   }
 }
