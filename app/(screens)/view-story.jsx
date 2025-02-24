@@ -9,6 +9,7 @@ import {
   Animated,
   Dimensions,
   Alert,
+  Keyboard,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useStories } from "../../context/appstate/StoriesContext";
@@ -25,6 +26,7 @@ import { db } from "../../firebase/firebaseConfig";
 import { useChat } from "../../context/appstate/ChatContext";
 
 const { width } = Dimensions.get("window");
+const TOTAL_DURATION = 10000; // total duration in ms (10 seconds)
 
 const ViewStoryScreen = () => {
   const { storyId, userId } = useLocalSearchParams();
@@ -33,11 +35,33 @@ const ViewStoryScreen = () => {
   const { currentUser } = useAuth();
   const { setActiveChatId } = useChat();
 
-  // Find the story from our context
+  // Find the story
   const story = stories.find((s) => s.id === storyId);
   const [replyText, setReplyText] = useState("");
-
+  const [isPaused, setIsPaused] = useState(false);
+  const [remainingDuration, setRemainingDuration] = useState(TOTAL_DURATION);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const animationStartRef = useRef(Date.now());
+
+  // Listener for keyboard focus on reply field to auto-pause
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      "keyboardDidShow",
+      () => {
+        pauseAnimation();
+      },
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      "keyboardDidHide",
+      () => {
+        resumeAnimation();
+      },
+    );
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, [isPaused, remainingDuration]);
 
   useEffect(() => {
     if (!story) {
@@ -45,28 +69,57 @@ const ViewStoryScreen = () => {
       router.back();
       return;
     }
-    // Record that the current user has viewed the story (ensure uniqueness in your recordView implementation)
+    // Record view (ensure recordView handles uniqueness)
     if (recordView && currentUser) {
       recordView(storyId, currentUser.uid);
     }
-    // Set this story as active in ChatContext if needed
     setActiveChatId(null);
 
-    // Animate progress bar over 5 seconds
+    // Start progress animation
+    startAnimation(remainingDuration);
+  }, [story]);
+
+  const startAnimation = (duration) => {
+    animationStartRef.current = Date.now();
     Animated.timing(progressAnim, {
       toValue: width,
-      duration: 5000,
+      duration,
       useNativeDriver: false,
-    }).start(() => {
-      // After story duration, navigate back (or proceed to next story if implemented)
-      router.back();
+    }).start(({ finished }) => {
+      if (finished && !isPaused) {
+        router.back();
+      }
     });
-  }, [story]);
+  };
+
+  const pauseAnimation = () => {
+    if (isPaused) return;
+    setIsPaused(true);
+    progressAnim.stopAnimation((currentValue) => {
+      const elapsed = Date.now() - animationStartRef.current;
+      const newRemaining = Math.max(remainingDuration - elapsed, 0);
+      setRemainingDuration(newRemaining);
+    });
+  };
+
+  const resumeAnimation = () => {
+    if (!isPaused) return;
+    setIsPaused(false);
+    startAnimation(remainingDuration);
+  };
+
+  // Toggle pause/resume on image tap
+  const togglePause = () => {
+    if (isPaused) {
+      resumeAnimation();
+    } else {
+      pauseAnimation();
+    }
+  };
 
   const handleReply = async () => {
     if (!replyText.trim()) return;
     try {
-      // Create or update a chat between the viewer and the story owner
       const chatId =
         currentUser.uid > userId
           ? `${currentUser.uid}_${userId}`
@@ -101,25 +154,50 @@ const ViewStoryScreen = () => {
       <View style={styles.progressBarContainer}>
         <Animated.View style={[styles.progressBar, { width: progressAnim }]} />
       </View>
+
       {/* Story Image */}
-      <Image
-        source={{ uri: story?.imageURL }}
-        style={styles.storyImage}
-        resizeMode="cover"
-      />
-      {/* Reply Input */}
-      <View style={styles.replyContainer}>
-        <TextInput
-          style={styles.replyInput}
-          placeholder="Reply..."
-          placeholderTextColor="#ccc"
-          value={replyText}
-          onChangeText={setReplyText}
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={togglePause}
+        style={styles.imageContainer}
+      >
+        <Image
+          source={{ uri: story?.imageURL }}
+          style={styles.storyImage}
+          resizeMode="cover"
         />
-        <TouchableOpacity style={styles.sendButton} onPress={handleReply}>
-          <Text style={styles.sendButtonText}>Send</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Caption overlay */}
+        {story.caption ? (
+          <View style={styles.captionContainer}>
+            <Text style={styles.captionText}>{story.caption}</Text>
+          </View>
+        ) : null}
+      </TouchableOpacity>
+
+      {/* For story owner: show view count in center at bottom */}
+      {currentUser.uid === story.userId ? (
+        <View style={styles.viewCountContainer}>
+          <Text style={styles.viewCountText}>
+            {story.views ? story.views.length : 0} Views
+          </Text>
+        </View>
+      ) : (
+        // For viewers: show reply input at bottom
+        <View style={styles.replyContainer}>
+          <TextInput
+            style={styles.replyInput}
+            placeholder="Reply..."
+            placeholderTextColor="#ccc"
+            value={replyText}
+            onChangeText={setReplyText}
+            onFocus={pauseAnimation}
+            onBlur={resumeAnimation}
+          />
+          <TouchableOpacity style={styles.sendButton} onPress={handleReply}>
+            <Text style={styles.sendButtonText}>Send</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -143,9 +221,27 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: "#fff",
   },
+  imageContainer: {
+    flex: 1,
+  },
   storyImage: {
     flex: 1,
     width: "100%",
+  },
+  captionContainer: {
+    position: "absolute",
+    top: "50%",
+    left: "10%",
+    right: "10%",
+    backgroundColor: "rgba(37, 34, 34, 0.466)",
+    padding: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  captionText: {
+    color: "#fff",
+    fontSize: 18,
+    textAlign: "center",
   },
   replyContainer: {
     position: "absolute",
@@ -169,5 +265,21 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: "#007AFF",
     fontWeight: "bold",
+  },
+  viewCountContainer: {
+    position: "absolute",
+    bottom: 30,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  viewCountText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+    backgroundColor: "rgba(0,170,255,0.8)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
 });

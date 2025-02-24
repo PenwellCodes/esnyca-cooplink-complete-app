@@ -2,8 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "./AuthContext";
-import Toast from 'react-native-toast-message';
-import { Text } from "react-native";
+import Toast from "react-native-toast-message";
 
 const ChatContext = createContext();
 
@@ -16,9 +15,13 @@ export const ChatProvider = ({ children }) => {
     const [chatList, setChatList] = useState([]);
     const [conversations, setConversations] = useState({});
     const [loadingChats, setLoadingChats] = useState(true);
-    const [activeChatId, setActiveChatId] = useState(null); // New state for active chat
-    const [userMap, setUserMap] = useState({}); // New state for UID-to-user mapping
+    const [activeChatId, setActiveChatId] = useState(null);
+    // New state: mapping uid to user object
+    const [userMap, setUserMap] = useState({});
 
+
+
+    
     useEffect(() => {
         if (!currentUser) return;
 
@@ -43,7 +46,7 @@ export const ChatProvider = ({ children }) => {
             }));
             const newUserMap = {};
             users.forEach((user) => {
-                newUserMap[user.uid] = user; // Map UID to user object
+                newUserMap[user.uid] = user;
             });
             setChatList(users);
             setUserMap(newUserMap);
@@ -71,11 +74,10 @@ export const ChatProvider = ({ children }) => {
                     chatsData[chatId] = messages;
                     setConversations({ ...chatsData });
 
-                    // Check for new incoming messages
+                    // Check for new incoming messages (toast notification)
                     messagesSnapshot.docChanges().forEach((change) => {
                         if (change.type === "added") {
                             const newMessage = change.doc.data();
-                            // Show toast if message is from another user and chat isn’t active
                             if (
                                 newMessage.sender !== currentUser.uid &&
                                 chatId !== activeChatId
@@ -84,23 +86,15 @@ export const ChatProvider = ({ children }) => {
                                 if (sender) {
                                     Toast.show({
                                         type: "info",
-                                        text1: `New message from ${sender.displayName}`,
+                                        text1: `🆕 New message from ${sender.displayName}`,
                                         position: "top",
                                         visibilityTime: 4000,
-                                        text1Style: { fontSize: 10 },
-                                        style: {
-                                            backgroundColor: "#00AAFF",
-                                            width: 20,           // Set equal width
-                                            height: 50,          // and height
-                                            borderRadius: 100,    // half of width/height for a circle
-                                            justifyContent: 'center',
-                                            alignItems: 'center'
-                                        },
                                     });
                                 }
                             }
                         }
                     });
+
                 });
             });
             setLoadingChats(false);
@@ -110,10 +104,10 @@ export const ChatProvider = ({ children }) => {
             unsubscribeUsers();
             unsubscribeChats();
         };
-    }, [currentUser, activeChatId]); // Re-run when activeChatId changes
+    }, [currentUser, activeChatId]);
 
     const markMessagesAsRead = async (chatId, messages) => {
-        // Implementation remains unchanged
+        // Your existing implementation
     };
 
     return (
@@ -124,7 +118,8 @@ export const ChatProvider = ({ children }) => {
                 loadingChats,
                 markMessagesAsRead,
                 activeChatId,
-                setActiveChatId, // Expose setActiveChatId for ChatScreen
+                setActiveChatId,
+                userMap, // Exposing userMap for group chat sender details
             }}
         >
             {children}
