@@ -7,13 +7,12 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  ActivityIndicator,
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { typography } from "../../constants"; // Adjust path as per your project
+import { typography, images } from "../../constants";
 import {
   collection,
   query,
@@ -21,9 +20,9 @@ import {
   orderBy,
   onSnapshot,
 } from "firebase/firestore";
-import { db } from "../../firebase/firebaseConfig"; // Adjust path as per your project
-import { useAuth } from "../../context/appstate/AuthContext"; // Adjust path as per your project
-import { useStories } from "../../context/appstate/StoriesContext"; // Adjust path as per your project
+import { db } from "../../firebase/firebaseConfig";
+import { useAuth } from "../../context/appstate/AuthContext";
+import { useStories } from "../../context/appstate/StoriesContext";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -113,7 +112,16 @@ const ChatList = () => {
   }, [currentUser]);
 
   if (loading) {
-    return <ActivityIndicator size="large" color={colors.primary} />;
+    return (
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <Image source={images.loader} style={styles.loader} />
+      </View>
+    );
   }
 
   // Build stories array
@@ -214,9 +222,8 @@ const ChatList = () => {
         style={[styles.chatItem, { backgroundColor: "#8ee4f59c" }]}
         onPress={() =>
           router.push({
-            pathname: "/(screens)/group-chat", // Corrected path
-            params: { id: groupChat.uid, group: JSON.stringify(groupChat) }
-,
+            pathname: "/(screens)/group-chat",
+            params: { id: groupChat.uid, group: JSON.stringify(groupChat) },
           })
         }
       >
@@ -359,5 +366,15 @@ const styles = StyleSheet.create({
   unreadText: {
     color: "white",
     fontSize: 12,
+  },
+  // Loader styles added
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loader: {
+    width: 50,
+    height: 50,
   },
 });
