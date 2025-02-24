@@ -1,20 +1,15 @@
-import React, { useState } from "react";
-import {
-  View,
-  ScrollView,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-} from "react-native";
+import React, { useContext, useState } from "react";
+import { View, ScrollView, StyleSheet, Modal } from "react-native";
 import { Text, List, Divider, Switch, Button } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import { typography } from "../../constants";
 import { useTheme } from "react-native-paper";
+import { useCustomTheme } from "../../context/appstate/CustomThemeProvider";
 
 const SettingsScreen = () => {
   const { colors } = useTheme();
-  const [darkMode, setDarkMode] = useState(false);
   const [faqVisible, setFaqVisible] = useState(false);
+  const { toggleTheme, isDarkTheme } = useCustomTheme();
 
   const faqData = [
     {
@@ -125,10 +120,7 @@ const SettingsScreen = () => {
             }
             left={(props) => <List.Icon {...props} icon="brightness-6" />}
             right={() => (
-              <Switch
-                value={darkMode}
-                onValueChange={() => setDarkMode(!darkMode)}
-              />
+              <Switch value={isDarkTheme} onValueChange={toggleTheme} />
             )}
           />
           <Divider />

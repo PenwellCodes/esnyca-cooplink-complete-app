@@ -7,13 +7,13 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  Animated, // Added for animations
+  Animated,
+  StatusBar, // Import StatusBar
 } from "react-native";
-import { useTheme, Snackbar } from "react-native-paper";
+import { useTheme } from "react-native-paper";
 import { typography } from "../../constants";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -24,29 +24,20 @@ const newsHeadlines = [
 const Home = () => {
   const { colors } = useTheme();
   const router = useRouter();
-  const { currentUser } = useAuth();
   const [headlineIndex, setHeadlineIndex] = useState(0);
-  const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
+  const textOpacity = useRef(new Animated.Value(1)).current;
 
-  // Fade out animation: fades to 0, updates text, then triggers fade in
   const fadeOut = () => {
     Animated.timing(textOpacity, {
       toValue: 0,
       duration: 500,
-      useNativeDriver: true, // Improves performance
+      useNativeDriver: true,
     }).start(() => {
       setHeadlineIndex((prevIndex) => (prevIndex + 1) % newsHeadlines.length);
       fadeIn();
     });
   };
 
-  useEffect(() => {
-    if (!loadingAuth && !currentUser) {
-      router.replace("/(auth)/sign-in");
-    }
-  }, [currentUser, loadingAuth]);
-
-  // Fade in animation: fades back to 1
   const fadeIn = () => {
     Animated.timing(textOpacity, {
       toValue: 1,
@@ -55,34 +46,38 @@ const Home = () => {
     }).start();
   };
 
-  // Set up interval to trigger fadeOut every 5 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       fadeOut();
-    }, 5000); // Increased from 3000ms to 5000ms
-    return () => clearInterval(interval); // Cleanup on unmount
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
+
   const menuItems = [
     { name: "Services", icon: "shopping-cart", route: "/support" },
     { name: "About Us", icon: "groups", route: "/about-us" },
     { name: "Profile Updates", icon: "assignment", route: "/profile" },
     { name: "Cooperatives", icon: "business", route: "/cooperatives" },
     { name: "News", icon: "newspaper", route: "/news" },
-    {
-      name: "Partnerships",
-      icon: "handshake",
-      route: "/(screens)/partnerships",
-    },
+    { name: "Partnerships", icon: "handshake", route: "/partnerships" },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Status Bar */}
+      <StatusBar
+        barStyle={
+          colors.background === "#ffffff" ? "dark-content" : "light-content"
+        }
+        backgroundColor={colors.background}
+      />
+
       {/* App Name */}
       <Text
         style={[
           styles.appName,
           typography.robotoBold,
-          { color: colors.tertiary, marginTop: 40 }, // Added marginTop to prevent cutting off
+          { color: colors.tertiary, marginTop: 40 },
         ]}
       >
         esnyca
@@ -92,25 +87,34 @@ const Home = () => {
       <View style={styles.bannerContainer}>
         <Image
           source={{
-            uri: "https://img.freepik.com/free-photo/abstract-sale-busioness-background-banner-design-multipurpose_1340-16799.jpg?t=st=1740240735~exp=1740244335~hmac=3162a76b4e61a3236163de05ce8f13396ae0ded3fbd398e29b166dfa8f489e23&w=1480",
+            uri: "https://img.freepik.com/free-photo/abstract-sale-busioness-background-banner-design-multipurpose_1340-16799.jpg",
           }}
           style={styles.bannerImage}
         />
-        <Text
+        <Animated.Text
           style={[
             styles.bannerText,
-            styles.menuText,
             typography.robotoBold,
             typography.subtitle,
-            { color: colors.background },
+            { color: colors.primary, opacity: textOpacity },
           ]}
         >
           {newsHeadlines[headlineIndex]}
-        </Text>
+        </Animated.Text>
       </View>
+
       {/* Search Box */}
-      <View style={styles.searchContainer}>
-        <TextInput placeholder="Search" style={styles.searchInput} />
+      <View
+        style={[
+          styles.searchContainer,
+          { backgroundColor: colors.surface, borderColor: colors.onSurface },
+        ]}
+      >
+        <TextInput
+          placeholder="Search"
+          placeholderTextColor={colors.onSurfaceVariant}
+          style={[styles.searchInput, { color: colors.onSurface }]}
+        />
         <Ionicons name="search" size={28} color={colors.primary} />
       </View>
 
@@ -176,7 +180,6 @@ const styles = StyleSheet.create({
     right: 10,
     top: "50%",
     transform: [{ translateY: -10 }],
-    color: "white",
     fontSize: 20,
     fontWeight: "bold",
     textAlign: "left",
@@ -184,13 +187,11 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
     borderRadius: 8,
     paddingHorizontal: 10,
     marginTop: 20,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#C1B8C8",
     height: 60,
   },
   searchInput: {

@@ -1,29 +1,38 @@
-import { MD3LightTheme } from "react-native-paper";
+// themes.js
+import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 
-const theme = {
+export const lightTheme = {
   ...MD3LightTheme,
   roundness: 4,
-
   colors: {
     ...MD3LightTheme.colors,
-    primary: "#00AAFF",
-    secondary: "#ffffff",
-    tertiary: "#424651",
-    background: "#ffffff",
-    surface: "#ffffff",
-    error: "#C1B8C8",
-    links: "#3590F3",
-    secondaryContainer: "#00AAFF",
-    surfaceVariant: "#000000",
+    primary: '#00AAFF',
+    secondary: '#ffffff',
+    tertiary: '#424651',
+    background: '#ffffff',
+    surface: '#ffffff',
+    error: '#C1B8C8',
+    links: '#3590F3',
+    secondaryContainer: '#00AAFF',
+    surfaceVariant: '#000000',
   },
-  elevation: {
-    level0: "transparent",
-    level1: "rgb(248, 242, 251)",
-    level2: "#3ae02160",
-    level3: "#3ae02121",
-    level4: "rgb(239, 229, 245)",
-    level5: "rgb(236, 226, 243)",
-  },
+  // Add other theme properties if needed
 };
 
-export default theme;
+export const darkTheme = {
+  ...MD3DarkTheme,
+  roundness: 4,
+  colors: {
+    ...MD3DarkTheme.colors,
+    primary: '#CDD3CE',
+    secondary: '#CDD3CE',
+    tertiary: '#CDD3CE',
+    background: '#000501',
+    surface: '#000501',
+    error: '#C1B8C8',
+    links: '#8ab4f8',
+    secondaryContainer: '#00AAFF',
+    surfaceVariant: '#1f1f1f',
+  },
+  // Add other theme properties if needed
+};
