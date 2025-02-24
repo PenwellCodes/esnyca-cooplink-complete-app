@@ -7,10 +7,12 @@ import { useNavigation } from '@react-navigation/native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { getAuth } from 'firebase/auth';
-import { useAuth } from '../../context/appstate/AuthContext'; // Add this import
+import { useAuth } from '../../context/appstate/AuthContext';
+import { useTheme, Snackbar } from "react-native-paper";  // Add this import
 
 const Profile = () => {
-  const { currentUser } = useAuth(); // Add this hook
+  const { colors } = useTheme();  // Add theme hook
+  const { currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState(null);
   const [newPhotoUri, setNewPhotoUri] = useState(null);
@@ -23,7 +25,6 @@ const Profile = () => {
   const storage = getStorage();
   const auth = getAuth();
 
-  // Add this useEffect to get initial location
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -42,7 +43,6 @@ const Profile = () => {
     })();
   }, []);
 
-  // Add this function to handle long press on map
   const handleMapLongPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     try {
@@ -60,7 +60,6 @@ const Profile = () => {
       setSelectedLocation(locationDetails);
       setLocationName(locationDetails.name);
       
-      // Update userData with location
       setUserData(prev => ({
         ...prev,
         location: locationDetails
@@ -71,7 +70,6 @@ const Profile = () => {
     }
   };
 
-  // Add this useEffect to fetch user data on component mount
   useEffect(() => {
     const fetchUserData = async () => {
       if (!auth.currentUser) return;
@@ -98,7 +96,6 @@ const Profile = () => {
     fetchUserData();
   }, []);
 
-  // Choose a new profile photo with additional logging
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -110,7 +107,7 @@ const Profile = () => {
 
       if (!result.canceled && result.assets && result.assets[0].uri) {
         const uri = result.assets[0].uri;
-        console.log("Image URI:", uri); // Log the URI for debugging
+        console.log("Image URI:", uri);
         setNewPhotoUri(uri);
       } else {
         console.log("Image picking canceled or failed");
@@ -121,7 +118,6 @@ const Profile = () => {
     }
   };
 
-  // Modified uploadProfilePhoto function
   const uploadProfilePhoto = async () => {
     if (!newPhotoUri || !userData?.displayName) return null;
 
@@ -129,7 +125,6 @@ const Profile = () => {
       const response = await fetch(newPhotoUri);
       const blob = await response.blob();
       
-      // Use displayName and timestamp for unique filename
       const fileName = `${userData.displayName}_${Date.now()}.jpg`;
       const photoRef = ref(storage, `profilePhotos/${fileName}`);
 
@@ -147,16 +142,13 @@ const Profile = () => {
 
     setIsLoading(true);
     try {
-      // Create updatedFields object only with defined values
       const updatedFields = {};
 
-      // Only add fields if they exist and are not undefined
       if (userData.displayName) updatedFields.displayName = userData.displayName;
       if (userData.phoneNumber) updatedFields.phoneNumber = userData.phoneNumber;
      
       if (userData.location) updatedFields.location = userData.location;
       
-      // Handle photo upload
       if (newPhotoUri) {
         const photoUrl = await uploadProfilePhoto();
         if (photoUrl) {
@@ -164,12 +156,10 @@ const Profile = () => {
         }
       }
 
-      // Update in users collection
       const userDocRef = doc(db, 'users', userData.id);
       await updateDoc(userDocRef, updatedFields);
 
-      // If this is a cooperative user, update registration collection
-      if (currentUser?.role === 'cooperative') {  // Use currentUser.role here
+      if (currentUser?.role === 'cooperative') {
         try {
           const registrationQuery = query(
             collection(db, 'registration'),
@@ -181,10 +171,9 @@ const Profile = () => {
             const registrationDoc = registrationDocs.docs[0];
             const registrationFields = {
               ...updatedFields,
-              status: 'approved' // Maintain approved status
+              status: 'approved'
             };
             
-            // Only add region if it exists
             if (userData.region) {
               registrationFields.region = userData.region;
             }
@@ -194,7 +183,6 @@ const Profile = () => {
           }
         } catch (regError) {
           console.error('Error updating registration:', regError);
-          // Continue execution even if registration update fails
         }
       }
 
@@ -208,7 +196,6 @@ const Profile = () => {
     }
   };
 
-  // Add initial data check in the return statement
   if (!userData) {
     return (
       <View style={styles.container}>
@@ -219,11 +206,10 @@ const Profile = () => {
   }
 
   return (
-    <ScrollView style={styles.scrollContainer}>
-      <View style={styles.container}>
-        <Text style={styles.header}>Update Profile</Text>
+    <ScrollView style={[styles.scrollContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text style={[styles.header, { color: colors.primary }]}>Update Profile</Text>
 
-        {/* Profile Picture section with null check */}
         <TouchableOpacity onPress={pickImage}>
           <Image 
             source={
@@ -236,15 +222,14 @@ const Profile = () => {
             style={styles.profileImage} 
           />
         </TouchableOpacity>
-        <Text style={styles.photoText}>Tap to change profile photo</Text>
+        <Text style={[styles.photoText, { color: colors.primary }]}>Tap to change profile photo</Text>
 
-        {currentUser?.role === 'individual' ? (  // Use currentUser.role here
-          // Individual user fields with null checks
+        {currentUser?.role === 'individual' ? (
           <>
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.primary }]}
                 placeholder="Enter your name"
                 value={userData?.name || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, name: text }))}
@@ -252,22 +237,21 @@ const Profile = () => {
             </View>
           </>
         ) : (
-          // Business/Cooperative user fields with null checks
           <>
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Company Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>Company Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.primary }]}
                 placeholder="Enter cooperative name"
-                value={userData?.displayName || ''} // Changed from cooperativeName
-                onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))} // Changed from cooperativeName
+                value={userData?.displayName || ''}
+                onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Phone Number</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>Phone Number</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.primary }]}
                 placeholder="Enter phone number"
                 value={userData?.phoneNumber || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, phoneNumber: text }))}
@@ -275,16 +259,16 @@ const Profile = () => {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Description</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>Description</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.primary }]}
                 placeholder="Enter business description"
                 value={userData?.content || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
               />
             </View>
 
-            <Text style={styles.sectionTitle}>Location</Text>
+            <Text style={[styles.sectionTitle, { color: colors.primary }]}>Location</Text>
             {location && (
               <View style={styles.mapContainer}>
                 <TouchableOpacity 
@@ -323,7 +307,7 @@ const Profile = () => {
         )}
 
         <TouchableOpacity 
-          style={[styles.updateButton, { marginTop: 20 }]} 
+          style={[styles.updateButton, { backgroundColor: colors.primary, marginTop: 20 }]} 
           onPress={updateProfile} 
           disabled={isLoading}
         >
@@ -341,14 +325,12 @@ const Profile = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
     alignItems: 'center',
     padding: 20,
     paddingBottom: 40,
   },
   header: {
     fontSize: 28,
-    color: '#191970',
     fontWeight: 'bold',
     marginBottom: 30,
   },
@@ -356,7 +338,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 50,
     backgroundColor: '#fff',
-    borderColor: '#191970',
     borderWidth: 1,
     borderRadius: 8,
     paddingLeft: 15,
@@ -371,7 +352,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   photoText: {
-    color: '#191970',
     marginBottom: 20,
   },
   verifyButton: {
@@ -388,7 +368,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   updateButton: {
-    backgroundColor: '#191970',
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 8,
@@ -414,18 +393,15 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#191970',
     marginBottom: 10,
     alignSelf: 'flex-start',
   },
   locationText: {
     marginTop: 5,
     fontSize: 14,
-    color: '#666',
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
   },
   mapTypeButton: {
     position: 'absolute',
@@ -442,7 +418,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
   },
   mapTypeButtonText: {
-    color: '#191970',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -453,20 +428,8 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#191970',
     marginBottom: 8,
     paddingLeft: 2,
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#fff',
-    borderColor: '#191970',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingLeft: 15,
-    fontSize: 16,
-    color: '#333',
   },
   loadingText: {
     marginTop: 10,

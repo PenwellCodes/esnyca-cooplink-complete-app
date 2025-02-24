@@ -1,66 +1,51 @@
-import React, { useContext } from 'react';
-import {
-  View, Image, TouchableOpacity, Text, StyleSheet, ScrollView,
-} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React from 'react';
+import { View, Image, TouchableOpacity, Text, StyleSheet, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';  // Use expo-router instead of react-navigation
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 
-
-
-const CooperativesScreen = ({ route }) => {
-  const navigation = useNavigation();
+const CooperativesScreen = () => {
+  const router = useRouter();
   
-
- 
-
   return (
     <LinearGradient colors={['#f5f5f5', '#f5f5f5']} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {searchQuery && (
-          <Text style={styles.searchHint}>
-            
-          </Text>
-        )}
-        <Text style={styles.heading}>{t('cooperativesByRegion')}</Text>
+        <Text style={styles.heading}>Cooperatives By Region</Text>
         
         {/* Hhohho Section */}
         <TouchableOpacity
           style={styles.buttonContainer}
-          onPress={() => navigation.navigate('Hhohho')}
+          onPress={() => router.push('/(screens)/cooperatives/Hhohho')}
         >
           <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>{t('hhohho')}</Text>
+          <Text style={styles.buttonText}>Hhohho</Text>
         </TouchableOpacity>
 
         {/* Manzini Section */}
         <TouchableOpacity
           style={styles.buttonContainer}
-          onPress={() => navigation.navigate('Manzini')}
+          onPress={() => router.push('/(screens)/cooperatives/Manzini')}
         >
           <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>{t('manzini')}</Text>
+          <Text style={styles.buttonText}>Manzini</Text>
         </TouchableOpacity>
 
         {/* Lubombo Section */}
         <TouchableOpacity
           style={styles.buttonContainer}
-          onPress={() => navigation.navigate('Lubombo')}
+          onPress={() => router.push('/(screens)/cooperatives/Lubombo')}
         >
           <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>{t('lubombo')}</Text>
+          <Text style={styles.buttonText}>Lubombo</Text>
         </TouchableOpacity>
 
         {/* Shiselweni Section */}
         <TouchableOpacity
           style={styles.buttonContainer}
-          onPress={() => navigation.navigate('Shiselweni')}
+          onPress={() => router.push('/(screens)/cooperatives/Shiselweni')}
         >
           <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>{t('shiselweni')}</Text>
+          <Text style={styles.buttonText}>Shiselweni</Text>
         </TouchableOpacity>
-
-      
       </ScrollView>
     </LinearGradient>
   );
