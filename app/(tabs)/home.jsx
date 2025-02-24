@@ -14,6 +14,7 @@ import { typography } from "../../constants";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
+import { searchScreens } from '../../utils/searchScreen';
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -27,6 +28,7 @@ const Home = () => {
   const { currentUser } = useAuth();
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fade out animation: fades to 0, updates text, then triggers fade in
   const fadeOut = () => {
@@ -75,6 +77,19 @@ const Home = () => {
     },
   ];
 
+  const handleSearch = () => {
+    if (!searchQuery.trim()) return;
+    
+    const results = searchScreens(searchQuery);
+    router.push({
+      pathname: '/(screens)/search-results',
+      params: { 
+        searchQuery: searchQuery,
+        results: JSON.stringify(results)
+      }
+    });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* App Name */}
@@ -108,10 +123,19 @@ const Home = () => {
           {newsHeadlines[headlineIndex]}
         </Text>
       </View>
-      {/* Search Box */}
+      {/* Updated Search Box */}
       <View style={styles.searchContainer}>
-        <TextInput placeholder="Search" style={styles.searchInput} />
-        <Ionicons name="search" size={28} color={colors.primary} />
+        <TextInput 
+          placeholder="Search" 
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
+        />
+        <TouchableOpacity onPress={handleSearch}>
+          <Ionicons name="search" size={28} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {/* Menu Items */}
