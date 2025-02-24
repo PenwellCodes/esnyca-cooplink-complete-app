@@ -9,10 +9,11 @@ import {
   FlatList,
   Animated, // Added for animations
 } from "react-native";
-import { useTheme } from "react-native-paper";
+import { useTheme, Snackbar } from "react-native-paper";
 import { typography } from "../../constants";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -23,6 +24,7 @@ const newsHeadlines = [
 const Home = () => {
   const { colors } = useTheme();
   const router = useRouter();
+  const { currentUser } = useAuth();
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
 
@@ -37,6 +39,12 @@ const Home = () => {
       fadeIn();
     });
   };
+
+  useEffect(() => {
+    if (!loadingAuth && !currentUser) {
+      router.replace("/(auth)/sign-in");
+    }
+  }, [currentUser, loadingAuth]);
 
   // Fade in animation: fades back to 1
   const fadeIn = () => {
@@ -57,12 +65,15 @@ const Home = () => {
   const menuItems = [
     { name: "Services", icon: "shopping-cart", route: "/services" },
     { name: "About Us", icon: "groups", route: "/about-us" },
-    { name: "Sign Up", icon: "assignment", route: "/profile" },
+    { name: "Profile Updates", icon: "assignment", route: "/profile" },
     { name: "Cooperatives", icon: "business", route: "/cooperatives" },
     { name: "News", icon: "newspaper", route: "/news" },
-    { name: "Partnerships", icon: "handshake", route: "/(screens)/partnerships" },
+    {
+      name: "Partnerships",
+      icon: "handshake",
+      route: "/(screens)/partnerships",
+    },
   ];
-  
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -71,7 +82,7 @@ const Home = () => {
         style={[
           styles.appName,
           typography.robotoBold,
-          { color: colors.tertiary ,marginTop: 40}, // Added marginTop to prevent cutting off
+          { color: colors.tertiary, marginTop: 40 }, // Added marginTop to prevent cutting off
         ]}
       >
         esnyca
@@ -148,7 +159,7 @@ const styles = StyleSheet.create({
   appName: {
     alignSelf: "flex-start",
     fontSize: 28,
-    marginTop: 20, // Added to prevent cutting off
+    marginTop: 20,
   },
   bannerContainer: {
     marginTop: 10,

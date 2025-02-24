@@ -10,11 +10,10 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { typography } from "../../constants";
+import { typography } from "../../constants"; // Adjust path as per your project
 import {
   collection,
   query,
@@ -22,47 +21,32 @@ import {
   orderBy,
   onSnapshot,
 } from "firebase/firestore";
-import { db } from "../../firebase/firebaseConfig";
-import { useAuth } from "../../context/appstate/AuthContext";
+import { db } from "../../firebase/firebaseConfig"; // Adjust path as per your project
+import { useAuth } from "../../context/appstate/AuthContext"; // Adjust path as per your project
+import { useStories } from "../../context/appstate/StoriesContext"; // Adjust path as per your project
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
-
-const stories = [
-  {
-    id: "0",
-    name: "Add Story",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-    addStory: true,
-  },
-  {
-    id: "1",
-    name: "Lihawu Co",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-  },
-  {
-    id: "2",
-    name: "Ligonadvodza Co",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-  },
-  {
-    id: "3",
-    name: "Sizwe",
-    avatar:
-      "https://img.freepik.com/premium-photo/cheerful-black-manager-with-digital-tablet-walking-by-office-building_922936-59078.jpg?w=1060",
-  },
-];
 
 const ChatList = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { stories: activeStories } = useStories();
   const [chatList, setChatList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [groupMemberCount, setGroupMemberCount] = useState(0);
 
+  // Listener for total group members (all users)
+  useEffect(() => {
+    const groupQuery = query(collection(db, "users"));
+    const unsubscribe = onSnapshot(groupQuery, (snapshot) => {
+      setGroupMemberCount(snapshot.docs.length);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch individual chats
   useEffect(() => {
     if (!currentUser) return;
 
@@ -102,7 +86,8 @@ const ChatList = () => {
                   ? chatSnapshot.docs[0].data()
                   : null;
               const unreadMessages = chatSnapshot.docs.filter(
-                (msg) => !msg.data().read,
+                (msg) =>
+                  !msg.data().read && msg.data().sender !== currentUser.uid,
               ).length;
 
               resolve({
@@ -110,7 +95,7 @@ const ChatList = () => {
                 lastMessage:
                   lastMessage?.text ||
                   (lastMessage?.fileUrl
-                    ? "📎 File sent"
+                    ? "📂 File sent"
                     : "Start a conversation"),
                 lastSender: lastMessage?.sender || null,
                 unreadCount: unreadMessages,
@@ -131,6 +116,35 @@ const ChatList = () => {
     return <ActivityIndicator size="large" color={colors.primary} />;
   }
 
+  // Build stories array
+  const storiesForDisplay = [];
+  if (currentUser?.role === "cooperative") {
+    storiesForDisplay.push({
+      id: "add-story",
+      name: "Add Story",
+      addStory: true,
+      avatar: currentUser.profilePic || placeholderAvatar,
+    });
+  }
+  activeStories.forEach((story) => {
+    storiesForDisplay.push({
+      id: story.id,
+      name: story.caption || "",
+      avatar: story.imageURL,
+      userId: story.userId,
+    });
+  });
+
+  // Define the group chat object
+  const groupChat = {
+    uid: "group_swazi_cooperators",
+    displayName: "Swazi Cooparators",
+    profilePicture:
+      "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
+    memberCount: groupMemberCount,
+    isGroup: true,
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -147,15 +161,20 @@ const ChatList = () => {
         </Text>
       </View>
 
-      {/* Stories Section (No changes) */}
+      {/* Stories Section */}
       <View style={styles.statusListContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {stories.map((story) => (
+          {storiesForDisplay.map((story) => (
             <TouchableOpacity
               key={story.id}
               style={styles.statusItem}
               onPress={() =>
-                story.addStory ? router.push("/add-story") : null
+                story.addStory
+                  ? router.push("/add-story")
+                  : router.push({
+                      pathname: "/view-story",
+                      params: { storyId: story.id, userId: story.userId },
+                    })
               }
             >
               <LinearGradient
@@ -190,7 +209,32 @@ const ChatList = () => {
         </ScrollView>
       </View>
 
-      {/* Chat List */}
+      {/* Group Chat Item */}
+      <TouchableOpacity
+        style={[styles.chatItem, { backgroundColor: "#8ee4f59c" }]}
+        onPress={() =>
+          router.push({
+            pathname: "/(screens)/group-chat", // Corrected path
+            params: { id: groupChat.uid, group: JSON.stringify(groupChat) }
+,
+          })
+        }
+      >
+        <Image
+          source={{ uri: groupChat.profilePicture }}
+          style={styles.avatar}
+        />
+        <View style={styles.chatInfo}>
+          <Text style={[styles.username, { color: colors.tertiary }]}>
+            {groupChat.displayName}
+          </Text>
+          <Text style={styles.lastMessage}>
+            {groupChat.memberCount} members
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* Individual Chat List */}
       <FlatList
         data={chatList}
         keyExtractor={(item) => item.uid}
@@ -200,10 +244,9 @@ const ChatList = () => {
             onPress={() =>
               router.push({
                 pathname: `/(screens)/chatConversations/${item.uid}`,
-                params: { user: JSON.stringify(item) }, // Pass full user object
+                params: { user: JSON.stringify(item) },
               })
             }
-            
           >
             <Image
               source={{ uri: item.profilePic || placeholderAvatar }}
@@ -215,8 +258,6 @@ const ChatList = () => {
               </Text>
               <Text style={styles.lastMessage}>{item.lastMessage}</Text>
             </View>
-
-            {/* Unread messages count */}
             {item.unreadCount > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadText}>{item.unreadCount}</Text>
@@ -240,6 +281,9 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  appName: {
+    fontSize: 20,
   },
   statusListContainer: {
     marginVertical: 8,
@@ -269,6 +313,11 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+  },
+  menuText: {
+    marginTop: 4,
+    fontSize: 12,
+    textAlign: "center",
   },
   chatList: {
     paddingHorizontal: 16,

@@ -20,6 +20,24 @@ const Layout = () => {
           }}
         />
         <Stack.Screen
+          name="add-story"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="group-chat"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="view-story"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
           name="news"
           options={{
             headerShown: false,

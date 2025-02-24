@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }) => {
         await AsyncStorage.setItem("user", JSON.stringify(completeUser));
       } else {
         setCurrentUser(null);
-        console.log("No user is signed in.");
+        console.log("No user is signed in.");masiko
         await AsyncStorage.removeItem("user");
       }
       setLoadingAuth(false);

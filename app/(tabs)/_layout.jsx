@@ -1,11 +1,11 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { Tabs, usePathname } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { View, Text } from "react-native";
 import { useTheme } from "react-native-paper";
-import EvilIcons from "@expo/vector-icons/EvilIcons";
 import Feather from "@expo/vector-icons/Feather";
+import { useAuth } from "../../context/appstate/AuthContext"; // Import AuthContext
 
 const TabIcon = ({ icon, color, label, isActive }) => (
   <View style={{ alignItems: "center", width: 70 }}>
@@ -23,6 +23,8 @@ const TabIcon = ({ icon, color, label, isActive }) => (
 const TabLayout = () => {
   const { colors } = useTheme();
   const pathname = usePathname(); // Get current active route
+  const { currentUser } = useAuth(); // Get user state from AuthContext
+  const router = useRouter();
 
   return (
     <>
@@ -33,7 +35,7 @@ const TabLayout = () => {
           tabBarShowLabel: false,
           tabBarStyle: {
             height: 60,
-            borderTopWidth: 0, // Removes the top line
+            borderTopWidth: 0,
           },
         }}
       >
@@ -71,6 +73,14 @@ const TabLayout = () => {
                 isActive={pathname === "/chat"}
               />
             ),
+          }}
+          listeners={{
+            tabPress: (e) => {
+              if (!currentUser) {
+                e.preventDefault(); // Prevent navigation to Chat
+                router.replace("/sign-in"); // Redirect to sign-in
+              }
+            },
           }}
         />
         <Tabs.Screen
