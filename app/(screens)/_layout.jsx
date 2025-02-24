@@ -26,6 +26,12 @@ const Layout = () => {
           }}
         />
         <Stack.Screen
+          name="group-chat"
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
           name="view-story"
           options={{
             headerShown: false,
