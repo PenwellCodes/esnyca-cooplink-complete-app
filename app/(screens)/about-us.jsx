@@ -1,263 +1,147 @@
-import React, { useState, useEffect } from "react";
+import React, { useContext, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  SectionList,
-  Linking,
-} from "react-native";
-import { Appbar, useTheme } from "react-native-paper";
-import { FontAwesome } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { db } from "../../firebase/firebaseConfig";
-import { collection, getDocs } from "firebase/firestore";
-import { useRouter } from "expo-router";
-import { typography } from "../../constants";
+  View, TextInput, ScrollView, TouchableOpacity, Text, StyleSheet,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { ThemeContext } from '../ThemeContext';
 
-// Hardcoded About Us description (can be fetched from Firebase if needed)
-const aboutUsText =
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
-
-export default function AboutUsScreen() {
-  const { colors } = useTheme();
-  const router = useRouter();
-  const [teamSections, setTeamSections] = useState([]);
-  const [showFullAbout, setShowFullAbout] = useState(false);
-
-  // Fetch team members from Firebase
-  useEffect(() => {
-    const fetchTeamMembers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "meetourteam"));
-        const members = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        // Group members by title (team name)
-        const groups = members.reduce((acc, member) => {
-          const title = member.title;
-          if (!acc[title]) {
-            acc[title] = [];
-          }
-          acc[title].push(member);
-          return acc;
-        }, {});
-        const sections = Object.entries(groups).map(([title, data]) => ({
-          title,
-          data,
-        }));
-        setTeamSections(sections);
-      } catch (error) {
-        console.error("Error fetching team members:", error);
-      }
-    };
-    fetchTeamMembers();
-  }, []);
-
-  // Function to get social media icon based on platform
-  const getIconName = (platform) => {
-    switch (platform.toLowerCase()) {
-      case "linked in":
-      case "linkedin":
-        return "linkedin";
-      case "facebook":
-        return "facebook";
-      case "twitter":
-        return "twitter";
-      default:
-        return "link";
-    }
-  };
-
-  // Render team member card
-  const renderTeamMember = ({ item }) => (
-    <View style={[styles.card, { backgroundColor: colors.surface }]}>
-      <Image source={{ uri: item.image }} style={styles.image} />
-      <View style={styles.info}>
-        <Text
-          style={[
-            styles.title,
-            typography.robotoBold,
-            typography.body,
-            { color: colors.tertiary },
-          ]}
+const AboutScreen = () => {
+  const navigation = useNavigation();
+  const { darkMode } = useContext(ThemeContext);
+  
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      headerStyle: {
+        backgroundColor: darkMode ? '#1C1C1C' : '#00AAFF',
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      headerTitleStyle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+      },
+      headerTintColor: '#fff',
+      headerTitle: 'About',
+      headerLeft: () => (
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={{ marginLeft: 16 }}
         >
-          {item.name}
-        </Text>
-        <Text
-           style={[
-            styles.title,
-            typography.robotoLight,
-            typography.small,
-            { color: colors.tertiary },
-          ]}
-          numberOfLines={2}
-        >
-          {item.bio}
-        </Text>
-        <View style={styles.socialRow}>
-          {item.socialmedia.map((sm, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.socialIcon}
-              onPress={() => {
-                const url = sm.url.startsWith("http")
-                  ? sm.url
-                  : `https://${sm.url}`;
-                Linking.openURL(url).catch((err) =>
-                  console.error("Failed to open URL:", err),
-                );
-              }}
-            >
-              <FontAwesome
-                name={getIconName(sm.platform)}
-                size={20  }
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, darkMode]);
+
+  const styles = getStyles(darkMode);
 
   return (
-    <>
-      <Appbar.Header>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="About Us" />
-      </Appbar.Header>
-      <SafeAreaView style={styles.safeArea} edges={["top"]}>
-        <SectionList
-          sections={teamSections}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderTeamMember}
-          renderSectionHeader={({ section: { title } }) => (
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {title}
-            </Text>
-          )}
-          ListHeaderComponent={
-            <View style={styles.aboutSection}>
-              <Text
-                style={[
-                  styles.title,
-                  typography.robotoBold,
-                  typography.title,
-                  { color: colors.tertiary },
-                ]}
-              >
-                About Us
-              </Text>
-              <Text
-              style={[
-                styles.title,
-                typography.robotoLight,
-                typography.small,
-                { color: colors.tertiary },
-              ]}
-                numberOfLines={showFullAbout ? 0 : 4}
-              >
-                {aboutUsText}
-              </Text>
-              {aboutUsText.length > 200 && (
-                <Text
-                  style={[styles.readMore, { color: colors.primary }]}
-                  onPress={() => setShowFullAbout(!showFullAbout)}
-                >
-                  {showFullAbout ? "Read Less" : "Read More"}
-                </Text>
-              )}
-              <Text
-                style={[
-                  styles.title,
-                  typography.robotoBold,
-                  typography.title,
-                  { color: colors.tertiary },
-                ]}
-              >
-                Meet the Team
-              </Text>
-            </View>
-          }
-          contentContainerStyle={styles.listContent}
-          stickySectionHeadersEnabled={false}
-        />
-      </SafeAreaView>
-    </>
-  );
-}
+    <LinearGradient
+      colors={darkMode ? ['#1C1C1C', '#333'] : ['#F5F5F5', '#F5F5F5']}
+      style={styles.container}
+    >
+  
 
-const styles = StyleSheet.create({
-  safeArea: {
+      <ScrollView style={styles.scrollView}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('OurStory')}
+        >
+          <LinearGradient
+            colors={darkMode ? ['#555', '#444'] : ['#00AAFF', '#00AAFF']}
+            style={styles.gradient}
+          >
+            <Text style={styles.buttonText}>Our Story</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('MissionsAndVisions')}
+        >
+          <LinearGradient
+            colors={darkMode ? ['#555', '#444'] : ['#00AAFF', '#00AAFF']}
+            style={styles.gradient}
+          >
+            <Text style={styles.buttonText}>Missions and Visions</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('MeetTheTeam')}
+        >
+          <LinearGradient
+            colors={darkMode ? ['#555', '#444'] : ['#00AAFF', '#00AAFF']}
+            style={styles.gradient}
+          >
+            <Text style={styles.buttonText}>Meet the Team</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </ScrollView>
+    </LinearGradient>
+  );
+};
+
+const getStyles = (darkMode) => StyleSheet.create({
+  container: {
     flex: 1,
-    backgroundColor: "#FFF",
+    padding: 16,
   },
-  aboutSection: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: darkMode ? '#333' : '#F5F5F5',
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: darkMode ? '#FFF' : '#000',
+    height: 50,
+    paddingHorizontal: 15,
+    marginBottom: 20,
   },
-  heading: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 8,
+  searchIcon: {
+    marginRight: 10,
   },
-  aboutDescription: {
-    fontSize: 14,
-    lineHeight: 20,
+  searchBar: {
+    flex: 1,
+    color: darkMode ? '#FFF' : '#191970',
   },
-  readMore: {
-    fontSize: 14,
-    marginTop: 4,
+  scrollView: {
+    marginTop: 100,
+    flex: 1,
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    padding: 12,
-    marginVertical: 8,
+  button: {
+    height: 65,
+    width: '90%',
+    borderRadius: 20,
+    marginVertical: 10,
+    overflow: 'hidden',
+    borderWidth: 2,
+    alignSelf: 'center',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 6,
+    width: "95%",
+    alignSelf: "center",
   },
-  image: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  info: {
+  gradient: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+    padding: 18,
   },
-  name: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  description: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  socialRow: {
-    flexDirection: "row",
-    marginTop: 12,
-  },
-  socialIcon: {
-    marginRight: 12,
+  buttonText: {
+    color: darkMode ? '#FFF' : '#191970',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
+
+export default AboutScreen;
