@@ -16,7 +16,8 @@ export const ChatProvider = ({ children }) => {
     const [conversations, setConversations] = useState({});
     const [loadingChats, setLoadingChats] = useState(true);
     const [activeChatId, setActiveChatId] = useState(null);
-    // New state: mapping uid to user object
+
+
     const [userMap, setUserMap] = useState({});
 
 
