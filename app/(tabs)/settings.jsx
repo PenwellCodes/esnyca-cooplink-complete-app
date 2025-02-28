@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { useLanguage } from '../../context/appstate/LanguageContext';
 import { languages } from '../../utils/translate';
 
+
 const SettingsScreen = () => {
   const { colors, dark, toggleTheme } = useTheme();
   const { currentLanguage, changeLanguage, t } = useLanguage();
@@ -94,7 +95,7 @@ const SettingsScreen = () => {
           <List.Item 
             title={translations.darkMode}
             left={(props) => <List.Icon {...props} icon="brightness-6" />} 
-            right={() => <Switch value={dark} onValueChange={toggleTheme} />} 
+            right={() => <Switch  />} 
           />
           <Divider />
 
