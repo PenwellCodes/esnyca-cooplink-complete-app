@@ -4,4 +4,4 @@ const Page = () => {
   return <Redirect href="/(auth)/sign-in" />;
 };
 
-export default Page;
+export default Page
