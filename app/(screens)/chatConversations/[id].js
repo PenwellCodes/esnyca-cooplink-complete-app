@@ -10,6 +10,7 @@ import {
   Linking,
   ActivityIndicator,
   Alert,
+  Platform
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../../context/appstate/ChatContext";
@@ -62,6 +63,8 @@ const ChatScreen = () => {
   // New states for audio recording
   const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [selectedDocuments, setSelectedDocuments] = useState([]);
+
 
   const contextMessages = conversations[chatId] || [];
   const messages = [...contextMessages, ...localMessages];
@@ -165,12 +168,24 @@ const ChatScreen = () => {
     return null;
   };
 
-  const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({});
-    if (result.type === "success") return result;
-    return null;
-  };
+  const pickDocuments = async () => {
+    try {
+      // Only enable multiple selection on web
+      const options = Platform.OS === 'web' ? { multiple: true } : {};
+      const result = await DocumentPicker.getDocumentAsync(options);
 
+      if (result.type === 'success') {
+        setSelectedDocuments((prevDocuments) => [
+          ...prevDocuments,
+          result,
+        ]);
+      } else {
+        console.log('Document selection canceled.');
+      }
+    } catch (error) {
+      console.log('Error picking documents:', error);
+    }
+  };
   const sendImage = async () => {
     const uri = await pickImage();
     if (!uri) return;
@@ -596,7 +611,7 @@ const ChatScreen = () => {
           <Ionicons name="image-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={sendFile} style={styles.attachmentButton}>
+        <TouchableOpacity onPress={pickDocuments} style={styles.attachmentButton}>
           <Ionicons name="attach-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
 
