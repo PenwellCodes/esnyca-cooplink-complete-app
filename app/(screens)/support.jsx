@@ -1,55 +1,87 @@
-import React, { useState } from "react";
-import {
-  View,
-  FlatList,
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  ScrollView,
-} from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, FlatList, TouchableOpacity, Text, StyleSheet, ScrollView } from "react-native";
 import { Appbar, Portal, Modal, Card, useTheme } from "react-native-paper";
-import { useNavigation } from "@react-navigation/native";
+import { useRouter } from 'expo-router';
 import { MaterialIcons, FontAwesome, Ionicons } from "@expo/vector-icons";
+import { useLanguage } from '../../context/appstate/LanguageContext';
 
 const services = [
   {
     id: "1",
     title: "LEGAL COMPLIANCE",
+    titleKey: 'legalCompliance',
     icon: { library: "MaterialIcons", name: "gavel" },
-    info: "Detailed information about Legal Compliance. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    info: "Legal compliance services for cooperatives",
+    infoKey: 'legalComplianceInfo'
   },
   {
     id: "2",
     title: "FINANCIAL SERVICES",
+    titleKey: 'financialServices',
     icon: { library: "FontAwesome", name: "money" },
-    info: "Detailed information about Financial Services. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    info: "Financial support and advisory services",
+    infoKey: 'financialServicesInfo'
   },
   {
     id: "3",
     title: "TRAINING AND DEVELOPMENT",
+    titleKey: 'trainingAndDevelopment',
     icon: { library: "MaterialIcons", name: "school" },
     info: "Detailed information about Training and Development. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    infoKey: 'trainingAndDevelopmentInfo'
   },
   {
     id: "4",
     title: "MARKETING AND PROMOTION",
+    titleKey: 'marketingAndPromotion',
     icon: { library: "Ionicons", name: "megaphone" },
     info: "Detailed information about Marketing and Promotion. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    infoKey: 'marketingAndPromotionInfo'
   },
   {
     id: "5",
     title: "RESEARCH AND INSIGHTS",
+    titleKey: 'researchAndInsights',
     icon: { library: "MaterialIcons", name: "search" },
     info: "Detailed information about Research and Insights. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    infoKey: 'researchAndInsightsInfo'
   },
 ];
 
 const ServiceScreen = () => {
-  const navigation = useNavigation();
+  const router = useRouter();
   const { colors } = useTheme();
-
+  const { t } = useLanguage();
+  const [translations, setTranslations] = useState({
+    screenTitle: 'Services',
+    moreInfo: 'More Information',
+    services: {}
+  });
   const [selectedService, setSelectedService] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+
+  // Load translations
+  useEffect(() => {
+    const loadTranslations = async () => {
+      const translated = {
+        screenTitle: await t('Services'),
+        moreInfo: await t('More Information'),
+        services: {}
+      };
+
+      // Translate service titles and info
+      for (const service of services) {
+        translated.services[service.id] = {
+          title: await t(service.title),
+          info: await t(service.info)
+        };
+      }
+      
+      setTranslations(translated);
+    };
+
+    loadTranslations();
+  }, [t]);
 
   const openDrawer = (service) => {
     setSelectedService(service);
@@ -60,7 +92,6 @@ const ServiceScreen = () => {
     setIsDrawerVisible(false);
   };
 
-  // Helper to render an icon based on the specified library
   const renderIcon = (icon) => {
     switch (icon.library) {
       case "MaterialIcons":
@@ -80,13 +111,11 @@ const ServiceScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Appbar Header */}
       <Appbar.Header style={{ backgroundColor: "#2196F3" }}>
-        <Appbar.BackAction onPress={() => navigation.goBack()} />
-        <Appbar.Content title="Services" color="white" />
+        <Appbar.BackAction onPress={() => router.back()} />
+        <Appbar.Content title={translations.screenTitle} color="white" />
       </Appbar.Header>
 
-      {/* Grid of Service Cards */}
       <FlatList
         data={services}
         numColumns={3}
@@ -100,19 +129,13 @@ const ServiceScreen = () => {
             <View style={[styles.menuItem, { borderColor: colors.error }]}>
               {renderIcon(item.icon)}
             </View>
-            <Text
-              style={[
-                styles.menuText,
-                { color: colors.tertiary, textAlign: "left" },
-              ]}
-            >
-              {item.title}
+            <Text style={[styles.menuText, { color: colors.tertiary }]}>
+              {translations.services[item.id]?.title || item.title}
             </Text>
           </TouchableOpacity>
         )}
       />
 
-      {/* Bottom Drawer */}
       <Portal>
         <Modal
           visible={isDrawerVisible}
@@ -120,15 +143,19 @@ const ServiceScreen = () => {
           contentContainerStyle={styles.modalContainer}
         >
           <ScrollView style={styles.drawerScroll}>
-            <Text style={styles.drawerHeading}>More Information</Text>
+            <Text style={styles.drawerHeading}>
+              {translations.moreInfo}
+            </Text>
             {selectedService && (
               <>
-                <Text style={styles.drawerTitle}>{selectedService.title}</Text>
+                <Text style={styles.drawerTitle}>
+                  {translations.services[selectedService.id]?.title || selectedService.title}
+                </Text>
                 <Card style={styles.cardCover}>
                   <Card.Cover source={{ uri: "https://picsum.photos/700" }} />
                 </Card>
                 <Text style={styles.drawerDescription}>
-                  {selectedService.info}
+                  {translations.services[selectedService.id]?.info || selectedService.info}
                 </Text>
               </>
             )}
@@ -138,8 +165,6 @@ const ServiceScreen = () => {
     </View>
   );
 };
-
-export default ServiceScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -201,3 +226,5 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 });
+
+export default ServiceScreen;

@@ -15,7 +15,15 @@ export const commonTranslations = {
     News: 'News',
     Partnerships: 'Partnerships',
     Search: 'Search',
-    esnyca: 'esnyca'
+    esnyca: 'esnyca',
+    'LEGAL COMPLIANCE': 'Legal Compliance',
+    'FINANCIAL SERVICES': 'Financial Services',
+    'TRAINING AND DEVELOPMENT': 'Training and Development',
+    'MARKETING AND PROMOTION': 'Marketing and Promotion',
+    'RESEARCH AND INSIGHTS': 'Research and Insights',
+    'More Information': 'More Information',
+    'Legal compliance services for cooperatives': 'Legal compliance services for cooperatives',
+    'Financial support and advisory services': 'Financial support and advisory services',
   },
   ss: {
     Services: 'Umsebenti',
@@ -25,7 +33,15 @@ export const commonTranslations = {
     News: 'Tindzaba',
     Partnerships: 'Budlelwane',
     Search: 'Sesha',
-    esnyca: 'esnyca'
+    esnyca: 'esnyca',
+    'LEGAL COMPLIANCE': 'Kulungisa Kwemtsetfo',
+    'FINANCIAL SERVICES': 'Umsebenti Wetimali',
+    'TRAINING AND DEVELOPMENT': 'Kuceceshwa Nekutfutfuka',
+    'MARKETING AND PROMOTION': 'Kutfengisa Nekukhulisa',
+    'RESEARCH AND INSIGHTS': 'Kucwaninga Nekuvumbulula',
+    'More Information': 'Lwati Lolunyenti',
+    'Legal compliance services for cooperatives': 'Umsebenti wekulungisa kwemtsetfo wemabhizinisi',
+    'Financial support and advisory services': 'Lusito lwetimali neteluleko',
   },
   // Add other languages as needed
 };
