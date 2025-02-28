@@ -157,16 +157,7 @@ const ChatList = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text
-          style={[
-            styles.appName,
-            typography.robotoBold,
-            typography.body,
-            { color: colors.tertiary },
-          ]}
-        >
-          Chats
-        </Text>
+    
       </View>
 
       {/* Stories Section */}

@@ -111,11 +111,8 @@ const ServiceScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Appbar.Header style={{ backgroundColor: "#2196F3" }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title={translations.screenTitle} color="white" />
-      </Appbar.Header>
-
+   
+      {/* Grid of Service Cards */}
       <FlatList
         data={services}
         numColumns={3}
