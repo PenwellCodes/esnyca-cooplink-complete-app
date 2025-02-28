@@ -117,10 +117,7 @@ const TabLayout = () => {
           }}
         />
       </Tabs>
-      <StatusBar
-        backgroundColor={colors.primary}
-        style={dark ? "light" : "dark"}
-      />
+      <StatusBar backgroundColor={colors.background} style="standard" />
     </>
   );
 };

@@ -1,26 +1,43 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Modal, TouchableOpacity, Linking, Share } from "react-native";
-import { Text, List, Divider, Switch, Button, useTheme } from "react-native-paper";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  Linking,
+  Share,
+} from "react-native";
+import {
+  Text,
+  List,
+  Divider,
+  Switch,
+  Button,
+  useTheme,
+} from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import { useLanguage } from '../../context/appstate/LanguageContext';
-import { languages } from '../../utils/translate';
-
+import { useLanguage } from "../../context/appstate/LanguageContext";
+import { languages } from "../../utils/translate";
+import { useCustomTheme } from "../../context/appstate/CustomThemeProvider";
 
 const SettingsScreen = () => {
-  const { colors, dark, toggleTheme } = useTheme();
+  const { toggleTheme, isDarkTheme } = useCustomTheme();
+  const { colors } = useTheme();
+
   const { currentLanguage, changeLanguage, t } = useLanguage();
   const [translations, setTranslations] = useState({
-    settings: 'Settings',
-    profile: 'Profile',
-    privacy: 'Privacy',
-    darkMode: 'Dark Mode',
-    language: 'Language',
-    inviteFriends: 'Invite Friends',
-    selectLanguage: 'Select Language',
-    close: 'Close'
+    settings: "Settings",
+    profile: "Profile",
+    privacy: "Privacy",
+    darkMode: "Dark Mode",
+    language: "Language",
+    inviteFriends: "Invite Friends",
+    selectLanguage: "Select Language",
+    close: "Close",
   });
-  
+
   // Load translations when language changes
   useEffect(() => {
     const loadTranslations = async () => {
@@ -30,7 +47,7 @@ const SettingsScreen = () => {
       }
       setTranslations(translated);
     };
-    
+
     loadTranslations();
   }, [currentLanguage]);
 
@@ -44,72 +61,81 @@ const SettingsScreen = () => {
 
   const handlePrivacyPolicy = async () => {
     try {
-      await Linking.openURL('https://esnyca.pages.dev');
+      await Linking.openURL("https://esnyca.pages.dev");
     } catch (error) {
-      console.error('Error opening privacy policy:', error);
+      console.error("Error opening privacy policy:", error);
     }
   };
 
   const handleInviteFriends = async () => {
     try {
-      const message = "Check out this amazing app: ESNICA - Connect with cooperatives!";
+      const message =
+        "Check out this amazing app: ESNICA - Connect with cooperatives!";
       const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
       await Linking.openURL(whatsappUrl);
     } catch (error) {
       try {
         await Share.share({ message });
       } catch (shareError) {
-        console.error('Error sharing:', shareError);
+        console.error("Error sharing:", shareError);
       }
     }
   };
 
-  const handleLanguageSelect = useCallback(async (langCode) => {
-    await changeLanguage(langCode);
-    setLanguageVisible(false);
-  }, [changeLanguage]);
+  const handleLanguageSelect = useCallback(
+    async (langCode) => {
+      await changeLanguage(langCode);
+      setLanguageVisible(false);
+    },
+    [changeLanguage],
+  );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}> 
-      <StatusBar backgroundColor={colors.primary} style={dark ? "light" : "dark"} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar
+        backgroundColor={colors.primary}
+        style={"light"}
+      />
       <ScrollView>
         <Text style={[styles.appName, { color: colors.tertiary }]}>
           {translations.settings}
         </Text>
-        
+
         <List.Section>
-          <List.Item 
+          <List.Item
             title={translations.profile}
-            left={(props) => <List.Icon {...props} icon="account" />} 
-            onPress={handleUpdateProfile} 
+            left={(props) => <List.Icon {...props} icon="account" />}
+            onPress={handleUpdateProfile}
           />
           <Divider />
 
-          <List.Item 
+          <List.Item
             title={translations.privacy}
-            left={(props) => <List.Icon {...props} icon="lock" />} 
-            onPress={handlePrivacyPolicy} 
+            left={(props) => <List.Icon {...props} icon="lock" />}
+            onPress={handlePrivacyPolicy}
           />
           <Divider />
 
-          <List.Item 
+          <List.Item
             title={translations.darkMode}
-            left={(props) => <List.Icon {...props} icon="brightness-6" />} 
-            right={() => <Switch  />} 
+            left={(props) => <List.Icon {...props} icon="brightness-6" />}
+            right={() => (
+              <Switch value={isDarkTheme} onValueChange={toggleTheme} />
+            )}
           />
           <Divider />
 
-          <List.Item 
+          <List.Item
             title={translations.language}
-            left={(props) => <List.Icon {...props} icon="translate" />} 
-            onPress={() => setLanguageVisible(true)} 
+            left={(props) => <List.Icon {...props} icon="translate" />}
+            onPress={() => setLanguageVisible(true)}
           />
           <Divider />
 
-          <List.Item 
+          <List.Item
             title={translations.inviteFriends}
-            left={(props) => <List.Icon {...props} icon="account-group" />} 
-            onPress={handleInviteFriends} 
+            left={(props) => <List.Icon {...props} icon="account-group" />}
+            onPress={handleInviteFriends}
           />
         </List.Section>
       </ScrollView>
@@ -119,17 +145,17 @@ const SettingsScreen = () => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{translations.selectLanguage}</Text>
             {Object.entries(languages).map(([code, name]) => (
-              <Button 
+              <Button
                 key={code}
                 onPress={() => handleLanguageSelect(code)}
-                mode={currentLanguage === code ? 'contained' : 'outlined'}
+                mode={currentLanguage === code ? "contained" : "outlined"}
               >
                 {name}
               </Button>
             ))}
-            <Button 
-              mode="contained" 
-              onPress={() => setLanguageVisible(false)} 
+            <Button
+              mode="contained"
+              onPress={() => setLanguageVisible(false)}
               style={styles.closeButton}
             >
               {translations.close}
