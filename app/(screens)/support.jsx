@@ -80,12 +80,7 @@ const ServiceScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Appbar Header */}
-      <Appbar.Header style={{ backgroundColor: "#2196F3" }}>
-        <Appbar.BackAction onPress={() => navigation.goBack()} />
-        <Appbar.Content title="Services" color="white" />
-      </Appbar.Header>
-
+   
       {/* Grid of Service Cards */}
       <FlatList
         data={services}

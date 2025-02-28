@@ -1,101 +1,272 @@
-import React from 'react';
-import { View, Image, TouchableOpacity, Text, StyleSheet, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';  // Use expo-router instead of react-navigation
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  TouchableOpacity,
+  FlatList,
+} from "react-native";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
+import {
+  useTheme,
+  Portal,
+  Modal,
+  Menu,
+  TextInput,
+  Button,
+} from "react-native-paper";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { MaterialIcons } from "@expo/vector-icons";
+import { db } from "../../firebase/firebaseConfig";
 
-const CooperativesScreen = () => {
-  const router = useRouter();
-  
+const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
+
+const CooperativeUsersScreen = () => {
+  const { colors } = useTheme();
+  const [users, setUsers] = useState([]);
+  const [selectedRegion, setSelectedRegion] = useState("All");
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [bio, setBio] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Fetch users based on selected region filter
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      let q;
+      if (selectedRegion === "All") {
+        q = query(collection(db, "users"), where("role", "==", "cooperative"));
+      } else {
+        q = query(
+          collection(db, "users"),
+          where("role", "==", "cooperative"),
+          where("region", "==", selectedRegion),
+        );
+      }
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
+      setUsers(data);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, [selectedRegion]);
+
+  // Open the bottom drawer to add/update bio for the selected user
+  const openDrawer = (user) => {
+    setSelectedUser(user);
+    setBio(user.bio || "");
+    setDrawerVisible(true);
+  };
+
+  // Save/update the bio to Firestore
+  const saveBio = async () => {
+    if (selectedUser) {
+      try {
+        const userRef = doc(db, "users", selectedUser.id);
+        await updateDoc(userRef, { bio });
+        // Update local state
+        setUsers(
+          users.map((user) =>
+            user.id === selectedUser.id ? { ...user, bio } : user,
+          ),
+        );
+      } catch (error) {
+        console.error("Error updating bio:", error);
+      }
+    }
+    setDrawerVisible(false);
+  };
+
+  // Render a user card
+  const renderUserCard = ({ item }) => (
+    <View style={styles.card}>
+      <Image
+        source={{ uri: item.profilePic || "https://via.placeholder.com/150" }}
+        style={styles.profilePic}
+        resizeMode="cover"
+      />
+      <View style={styles.infoContainer}>
+        <Text style={styles.displayName}>{item.displayName}</Text>
+        <Text style={styles.email}>{item.email}</Text>
+        <Text style={styles.address}>{item.physicalAddress}</Text>
+        <Text style={styles.registrationNumber}>{item.registrationNumber}</Text>
+        <Text style={styles.registrationNumber}>{item.phoneNumber}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.moreIcon}
+        onPress={() => openDrawer(item)}
+      >
+        <MaterialIcons name="more-vert" size={24} color="black" />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
-    <LinearGradient colors={['#f5f5f5', '#f5f5f5']} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.heading}>Cooperatives By Region</Text>
-        
-        {/* Hhohho Section */}
-        <TouchableOpacity
-          style={styles.buttonContainer}
-          onPress={() => router.push('/(screens)/cooperatives/Hhohho')}
+    <View style={styles.container}>
+      {/* Top bar with filter button */}
+      <View style={styles.topBar}>
+        <Menu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          anchor={
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={() => setMenuVisible(true)}
+            >
+              <Ionicons name="filter" size={20} color="black" />
+              <Text style={styles.filterButtonText}> Filter</Text>
+            </TouchableOpacity>
+          }
         >
-          <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>Hhohho</Text>
-        </TouchableOpacity>
+          {regions.map((region) => (
+            <Menu.Item
+              key={region}
+              onPress={() => {
+                setSelectedRegion(region);
+                setMenuVisible(false);
+              }}
+              title={region}
+            />
+          ))}
+        </Menu>
+      </View>
 
-        {/* Manzini Section */}
-        <TouchableOpacity
-          style={styles.buttonContainer}
-          onPress={() => router.push('/(screens)/cooperatives/Manzini')}
-        >
-          <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>Manzini</Text>
-        </TouchableOpacity>
+      <FlatList
+        data={users}
+        renderItem={renderUserCard}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+      />
 
-        {/* Lubombo Section */}
-        <TouchableOpacity
-          style={styles.buttonContainer}
-          onPress={() => router.push('/(screens)/cooperatives/Lubombo')}
+      <Portal>
+        <Modal
+          visible={drawerVisible}
+          onDismiss={() => setDrawerVisible(false)}
+          contentContainerStyle={styles.drawerContainer}
         >
-          <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>Lubombo</Text>
-        </TouchableOpacity>
-
-        {/* Shiselweni Section */}
-        <TouchableOpacity
-          style={styles.buttonContainer}
-          onPress={() => router.push('/(screens)/cooperatives/Shiselweni')}
-        >
-          <Image source={require('../../assets/images/default_cooperative.png')} style={styles.buttonImage} />
-          <Text style={styles.buttonText}>Shiselweni</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </LinearGradient>
+          <Text style={styles.drawerTitle}>Cooperative Bio</Text>
+          <TextInput
+            label="Description"
+            value={bio}
+            onChangeText={(text) => setBio(text)}
+            multiline
+            style={styles.textInput}
+          />
+          <Button mode="contained" onPress={saveBio} style={styles.saveButton}>
+            Save
+          </Button>
+        </Modal>
+      </Portal>
+    </View>
   );
 };
+
+export default CooperativeUsersScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContainer: {
-    flexGrow: 1,
+  topBar: {
+    alignItems: "flex-end",
     padding: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  buttonContainer: {
-    width: '90%',
-    marginVertical: 10,
-    borderRadius: 10,
-    overflow: 'hidden',
-    elevation: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 5,
-    borderWidth: 2,
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d3d3d3",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  buttonImage: {
-    width: '100%',
+  filterButtonText: {
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderColor: "#d3d3d3",
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 10,
+    marginBottom: 10,
+  },
+  profilePic: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  infoContainer: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
+  displayName: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  email: {
+    fontSize: 14,
+    color: "#555",
+  },
+  address: {
+    fontSize: 14,
+    color: "#555",
+  },
+  registrationNumber: {
+    fontSize: 14,
+    color: "#555",
+  },
+  moreIcon: {
+    padding: 5,
+  },
+  drawerContainer: {
+    backgroundColor: "white",
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "50%",
+  },
+  drawerTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  textInput: {
     height: 150,
+    marginBottom: 10,
   },
-  buttonText: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  heading: {
-    fontSize: 22,
-    margin: 20,
-  },
-  searchHint: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-    fontStyle: 'italic',
+  saveButton: {
+    alignSelf: "flex-end",
   },
 });
-
-export default CooperativesScreen;

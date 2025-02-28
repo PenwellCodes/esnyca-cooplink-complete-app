@@ -20,6 +20,8 @@ import { collection, addDoc } from "firebase/firestore";
 import { Redirect } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
+// Import Firebase Storage methods
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const TOP_SECTION_HEIGHT = 250;
 
@@ -57,25 +59,53 @@ const SignUp = () => {
     }));
   };
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      alert('Permission to access media library is required!');
-      return;
-    }
 
+
+  const pickImage = async () => {
+    // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: [ImagePicker.MediaType.IMAGE],
+      mediaTypes: ['images'],
       allowsEditing: true,
-      aspect: [1, 1],
+      aspect: [4, 3],
       quality: 1,
     });
+
+    console.log(result);
 
     if (!result.canceled) {
       setProfilePic(result.assets[0].uri);
     }
   };
 
+
+  // Helper to extract file name from URI
+  const getFileName = (uri) => uri.split("/").pop();
+
+  // Helper function to upload image to Firebase Storage
+  const uploadImageAsync = async (uri) => {
+    // Convert local URI to a blob
+    const blob = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = () => resolve(xhr.response);
+      xhr.onerror = () => reject(new Error("Network request failed"));
+      xhr.responseType = "blob";
+      xhr.open("GET", uri, true);
+      xhr.send(null);
+    });
+
+    // Get a reference to Firebase Storage
+    const storage = getStorage();
+    const fileRef = ref(storage, `profilePics/${getFileName(uri)}`);
+
+    // Upload the blob to Firebase Storage
+    await uploadBytes(fileRef, blob);
+    // Close the blob to free up memory
+    if (blob.close) blob.close();
+
+    // Retrieve the download URL
+    const downloadURL = await getDownloadURL(fileRef);
+    return downloadURL;
+  };
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -87,13 +117,19 @@ const SignUp = () => {
       );
       console.log("User registered with uid:", userCredential.user.uid);
 
-      // Common user data
+      // Upload image if selected and get its URL
+      let profilePicUrl = null;
+      if (profilePic) {
+        profilePicUrl = await uploadImageAsync(profilePic);
+      }
+
+      // Prepare common user data with the download URL
       const userData = {
         uid: userCredential.user.uid,
         role: role,
         displayName: formData.displayName,
         email: formData.email,
-        profilePic: profilePic, // For production, upload image to storage and save URL
+        profilePic: profilePicUrl, // URL from Firebase Storage
       };
 
       if (role === "cooperative") {
@@ -130,9 +166,6 @@ const SignUp = () => {
   if (redirect) {
     return <Redirect href="/(auth)/sign-in" />;
   }
-
-  // Helper: extract file name from URI
-  const getFileName = (uri) => uri.split("/").pop();
 
   return (
     <KeyboardAvoidingView
@@ -282,7 +315,30 @@ const SignUp = () => {
               </>
             )}
 
-         
+            {/* Profile Picture Upload Section */}
+            <View style={styles.uploadContainer}>
+              <TouchableOpacity
+                onPress={pickImage}
+                style={[styles.uploadButton, { borderColor: colors.primary }]}
+              >
+                <Ionicons
+                  name="attach-outline"
+                  size={24}
+                  color={colors.primary}
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[styles.uploadButtonText, { color: colors.primary }]}
+                >
+                  Upload Profile
+                </Text>
+              </TouchableOpacity>
+              {profilePic && (
+                <Text style={[styles.fileName, { color: colors.text }]}>
+                  {getFileName(profilePic)}
+                </Text>
+              )}
+            </View>
 
             {/* Submit Button */}
             <CustomButton
@@ -323,12 +379,6 @@ const SignUp = () => {
               // Navigation logic if needed
             }}
           />
-          <Ionicons
-          name="arrow-back"
-          size={24}
-          color={colors.background}
-          style={styles.backIcon}
-        />
           <Image source={images.logo} style={styles.logo} />
           <Text
             style={[
@@ -400,10 +450,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   picker: { height: 50 },
-  pickerLabel: {
-    padding: 8,
-    backgroundColor: "#f0f0f0",
-  },
+  pickerLabel: { padding: 8, backgroundColor: "#f0f0f0" },
   uploadContainer: { alignItems: "center", marginVertical: 10 },
   uploadButton: {
     flexDirection: "row",
