@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { searchScreens } from '../../utils/searchScreen';
+import { useLanguage } from '../../context/appstate/LanguageContext';
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -25,10 +26,35 @@ const newsHeadlines = [
 
 const Home = () => {
   const { colors } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [translations, setTranslations] = useState({
+    services: 'Services',
+    aboutUs: 'About Us',
+    profileUpdates: 'Profile Updates',
+    cooperatives: 'Cooperatives',
+    news: 'News',
+    partnerships: 'Partnerships',
+    search: 'Search',
+    appName: 'esnyca'
+  });
+
+  // Load translations
+  useEffect(() => {
+    const loadTranslations = async () => {
+      const translated = {};
+      for (const [key, value] of Object.entries(translations)) {
+        translated[key] = await t(value);
+      }
+      setTranslations(translated);
+    };
+    
+    loadTranslations();
+  }, [t]);
 
   const fadeOut = () => {
     Animated.timing(textOpacity, {
@@ -57,12 +83,12 @@ const Home = () => {
   }, []);
 
   const menuItems = [
-    { name: "Services", icon: "shopping-cart", route: "/support" },
-    { name: "About Us", icon: "groups", route: "/ourstory" },
-    { name: "Profile Updates", icon: "assignment", route: "/profile" },
-    { name: "Cooperatives", icon: "business", route: "/cooperatives" },
-    { name: "News", icon: "newspaper", route: "/news" },
-    { name: "Partnerships", icon: "handshake", route: "/partnerships" },
+    { name: translations.services, icon: "shopping-cart", route: "/support" },
+    { name: translations.aboutUs, icon: "groups", route: "/about-us" },
+    { name: translations.profileUpdates, icon: "assignment", route: "/profile" },
+    { name: translations.cooperatives, icon: "business", route: "/cooperatives" },
+    { name: translations.news, icon: "newspaper", route: "/news" },
+    { name: translations.partnerships, icon: "handshake", route: "/partnerships" },
   ];
 
   const handleSearch = () => {
@@ -96,7 +122,7 @@ const Home = () => {
           { color: colors.tertiary, marginTop: 40 },
         ]}
       >
-        esnyca
+        {translations.appName}
       </Text>
 
       {/* Banner */}
@@ -121,7 +147,7 @@ const Home = () => {
       {/* Updated Search Box */}
       <View style={styles.searchContainer}>
         <TextInput 
-          placeholder="Search" 
+          placeholder={translations.search} 
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
