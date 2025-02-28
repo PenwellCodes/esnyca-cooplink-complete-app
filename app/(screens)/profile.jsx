@@ -9,10 +9,12 @@ import * as Location from 'expo-location';
 import { getAuth } from 'firebase/auth';
 import { useAuth } from '../../context/appstate/AuthContext';
 import { useTheme, Snackbar } from "react-native-paper";  // Add this import
+import { useLanguage } from '../../context/appstate/LanguageContext';
 
 const Profile = () => {
   const { colors } = useTheme();  // Add theme hook
   const { currentUser } = useAuth();
+  const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState(null);
   const [newPhotoUri, setNewPhotoUri] = useState(null);
@@ -24,12 +26,50 @@ const Profile = () => {
   const db = getFirestore();
   const storage = getStorage();
   const auth = getAuth();
+  const [translations, setTranslations] = useState({
+    updateProfile: 'Update Profile',
+    tapToChange: 'Tap to change profile photo',
+    name: 'Name',
+    companyName: 'Company Name',
+    phoneNumber: 'Phone Number',
+    description: 'Description',
+    location: 'Location',
+    enterName: 'Enter your name',
+    enterCoopName: 'Enter cooperative name',
+    enterPhone: 'Enter phone number',
+    enterDesc: 'Enter business description',
+    satelliteView: 'Satellite View',
+    standardView: 'Standard View',
+    selectedLocation: 'Selected',
+    loading: 'Loading profile data...',
+    permissionDenied: 'Permission denied',
+    locationRequired: 'Location permission is required',
+    errorLoading: 'Failed to load profile data',
+    errorLocation: 'Failed to get location details',
+    errorImage: 'There was an issue picking the image. Please try again.',
+    errorUpload: 'Failed to upload profile photo',
+    successUpdate: 'Profile updated successfully',
+    errorUpdate: 'Failed to update profile. Please check your input data.'
+  });
+
+  // Load translations
+  useEffect(() => {
+    const loadTranslations = async () => {
+      const translated = {};
+      for (const [key, value] of Object.entries(translations)) {
+        translated[key] = await t(value);
+      }
+      setTranslations(translated);
+    };
+    
+    loadTranslations();
+  }, [t]);
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required');
+        Alert.alert(translations.permissionDenied, translations.locationRequired);
         return;
       }
 
@@ -41,7 +81,7 @@ const Profile = () => {
         longitudeDelta: 0.0421,
       });
     })();
-  }, []);
+  }, [translations]);
 
   const handleMapLongPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
@@ -66,7 +106,7 @@ const Profile = () => {
       }));
     } catch (error) {
       console.error('Error getting location details:', error);
-      Alert.alert('Error', 'Failed to get location details');
+      Alert.alert('Error', translations.errorLocation);
     }
   };
 
@@ -87,7 +127,7 @@ const Profile = () => {
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
-        Alert.alert("Error", "Failed to load profile data");
+        Alert.alert("Error", translations.errorLoading);
       } finally {
         setIsLoading(false);
       }
@@ -114,7 +154,7 @@ const Profile = () => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "There was an issue picking the image. Please try again.");
+      Alert.alert("Error", translations.errorImage);
     }
   };
 
@@ -132,7 +172,7 @@ const Profile = () => {
       return await getDownloadURL(photoRef);
     } catch (error) {
       console.error("Error uploading photo:", error);
-      Alert.alert("Error", "Failed to upload profile photo");
+      Alert.alert("Error", translations.errorUpload);
       return null;
     }
   };
@@ -186,11 +226,11 @@ const Profile = () => {
         }
       }
 
-      Alert.alert("Success", "Profile updated successfully");
+      Alert.alert("Success", translations.successUpdate);
       navigation.goBack();
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert("Error", "Failed to update profile. Please check your input data.");
+      Alert.alert("Error", translations.errorUpdate);
     } finally {
       setIsLoading(false);
     }
@@ -200,7 +240,7 @@ const Profile = () => {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#191970" />
-        <Text style={styles.loadingText}>Loading profile data...</Text>
+        <Text style={styles.loadingText}>{translations.loading}</Text>
       </View>
     );
   }
@@ -208,7 +248,7 @@ const Profile = () => {
   return (
     <ScrollView style={[styles.scrollContainer, { backgroundColor: colors.background }]}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.header, { color: colors.primary }]}>Update Profile</Text>
+        <Text style={[styles.header, { color: colors.primary }]}>{translations.updateProfile}</Text>
 
         <TouchableOpacity onPress={pickImage}>
           <Image 
@@ -222,15 +262,15 @@ const Profile = () => {
             style={styles.profileImage} 
           />
         </TouchableOpacity>
-        <Text style={[styles.photoText, { color: colors.primary }]}>Tap to change profile photo</Text>
+        <Text style={[styles.photoText, { color: colors.primary }]}>{translations.tapToChange}</Text>
 
         {currentUser?.role === 'individual' ? (
           <>
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.name}</Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter your name"
+                placeholder={translations.enterName}
                 value={userData?.name || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, name: text }))}
               />
@@ -239,36 +279,36 @@ const Profile = () => {
         ) : (
           <>
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Company Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.companyName}</Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter cooperative name"
+                placeholder={translations.enterCoopName}
                 value={userData?.displayName || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Phone Number</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.phoneNumber}</Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter phone number"
+                placeholder={translations.enterPhone}
                 value={userData?.phoneNumber || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, phoneNumber: text }))}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Description</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.description}</Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter business description"
+                placeholder={translations.enterDesc}
                 value={userData?.content || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
               />
             </View>
 
-            <Text style={[styles.sectionTitle, { color: colors.primary }]}>Location</Text>
+            <Text style={[styles.sectionTitle, { color: colors.primary }]}>{translations.location}</Text>
             {location && (
               <View style={styles.mapContainer}>
                 <TouchableOpacity 
@@ -276,7 +316,7 @@ const Profile = () => {
                   onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
                 >
                   <Text style={styles.mapTypeButtonText}>
-                    {mapType === 'standard' ? 'Satellite View' : 'Standard View'}
+                    {mapType === 'standard' ? translations.satelliteView : translations.standardView}
                   </Text>
                 </TouchableOpacity>
 
@@ -298,7 +338,7 @@ const Profile = () => {
                 </MapView>
                 {selectedLocation && (
                   <Text style={styles.locationText}>
-                    Selected: {locationName}
+                    {translations.selectedLocation}: {locationName}
                   </Text>
                 )}
               </View>
@@ -314,7 +354,7 @@ const Profile = () => {
           {isLoading ? (
             <ActivityIndicator size="small" color="#FFF" />
           ) : (
-            <Text style={styles.updateButtonText}>Update Profile</Text>
+            <Text style={styles.updateButtonText}>{translations.updateProfile}</Text>
           )}
         </TouchableOpacity>
       </View>
