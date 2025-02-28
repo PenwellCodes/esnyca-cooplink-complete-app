@@ -7,36 +7,25 @@ import {
   TouchableOpacity,
   FlatList,
 } from "react-native";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  updateDoc,
-  doc,
-} from "firebase/firestore";
-import {
-  useTheme,
-  Portal,
-  Modal,
-  Menu,
-  TextInput,
-  Button,
-} from "react-native-paper";
+import { collection, getDocs, query, where, doc } from "firebase/firestore";
+import { useTheme, Portal, Modal, Menu } from "react-native-paper";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { MaterialIcons } from "@expo/vector-icons";
 import { db } from "../../firebase/firebaseConfig";
+import { useAuth } from "../../context/appstate/AuthContext";
+import { useRouter } from "expo-router";
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
 
 const CooperativeUsersScreen = () => {
   const { colors } = useTheme();
+  const { currentUser } = useAuth();
+  const router = useRouter();
   const [users, setUsers] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState("All");
   const [menuVisible, setMenuVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Fetch users based on selected region filter
@@ -69,53 +58,54 @@ const CooperativeUsersScreen = () => {
     fetchUsers();
   }, [selectedRegion]);
 
-  // Open the bottom drawer to add/update bio for the selected user
+  // Open the bottom drawer to show the cooperative's bio
   const openDrawer = (user) => {
     setSelectedUser(user);
-    setBio(user.bio || "");
     setDrawerVisible(true);
   };
-
-  // Save/update the bio to Firestore
-  const saveBio = async () => {
-    if (selectedUser) {
-      try {
-        const userRef = doc(db, "users", selectedUser.id);
-        await updateDoc(userRef, { bio });
-        // Update local state
-        setUsers(
-          users.map((user) =>
-            user.id === selectedUser.id ? { ...user, bio } : user,
-          ),
-        );
-      } catch (error) {
-        console.error("Error updating bio:", error);
-      }
-    }
-    setDrawerVisible(false);
+  const startChat = (user) => {
+    const predefinedMessage =
+      "Hello 👋 there , can you share more about your cooperative 🥰";
+    router.push({
+      pathname: `/(screens)/chatConversations/${user.uid}`,
+      params: {
+        user: JSON.stringify(user),
+        predefinedMessage, 
+      },
+    });
   };
-
   // Render a user card
   const renderUserCard = ({ item }) => (
     <View style={styles.card}>
-      <Image
-        source={{ uri: item.profilePic || "https://via.placeholder.com/150" }}
-        style={styles.profilePic}
-        resizeMode="cover"
-      />
-      <View style={styles.infoContainer}>
+      <View style={styles.leftColumn}>
+        <Image
+          source={{ uri: item.profilePic || "https://via.placeholder.com/150" }}
+          style={styles.profilePic}
+          resizeMode="cover"
+        />
+        <TouchableOpacity
+          style={styles.chatButton}
+          onPress={() => startChat(item)}
+        >
+          <Ionicons name="chatbubble-outline" size={16} color="white" />
+          <Text style={styles.chatButtonText}> Start Chat</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.infoColumn}>
         <Text style={styles.displayName}>{item.displayName}</Text>
         <Text style={styles.email}>{item.email}</Text>
         <Text style={styles.address}>{item.physicalAddress}</Text>
         <Text style={styles.registrationNumber}>{item.registrationNumber}</Text>
-        <Text style={styles.registrationNumber}>{item.phoneNumber}</Text>
+        <Text style={styles.phoneNumber}>{item.phoneNumber}</Text>
       </View>
-      <TouchableOpacity
-        style={styles.moreIcon}
-        onPress={() => openDrawer(item)}
-      >
-        <MaterialIcons name="more-vert" size={24} color="black" />
-      </TouchableOpacity>
+      <View style={styles.rightColumn}>
+        <TouchableOpacity
+          style={styles.moreIcon}
+          onPress={() => openDrawer(item)}
+        >
+          <MaterialIcons name="more-vert" size={24} color="black" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -163,16 +153,11 @@ const CooperativeUsersScreen = () => {
           contentContainerStyle={styles.drawerContainer}
         >
           <Text style={styles.drawerTitle}>Cooperative Bio</Text>
-          <TextInput
-            label="Description"
-            value={bio}
-            onChangeText={(text) => setBio(text)}
-            multiline
-            style={styles.textInput}
-          />
-          <Button mode="contained" onPress={saveBio} style={styles.saveButton}>
-            Save
-          </Button>
+          <Text style={styles.drawerContent}>
+            {selectedUser && selectedUser.bio
+              ? selectedUser.bio
+              : "This cooperative has not updated its information yet."}
+          </Text>
         </Modal>
       </Portal>
     </View>
@@ -209,23 +194,44 @@ const styles = StyleSheet.create({
   },
   card: {
     flexDirection: "row",
-    alignItems: "center",
     borderColor: "#d3d3d3",
     borderWidth: 1,
     borderRadius: 6,
     padding: 10,
     marginBottom: 10,
+    backgroundColor: "white",
+    alignItems: "flex-start",
+  },
+  leftColumn: {
+    width: 100,
+    alignItems: "center",
   },
   profilePic: {
-    width: 60,
-    height: 60,
+    width: 90,
+    height: 90,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#ccc",
   },
-  infoContainer: {
+  chatButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2196F3",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginTop: 5,
+  },
+  chatButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  infoColumn: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingLeft: 10,
+    justifyContent: "center",
   },
   displayName: {
     fontSize: 18,
@@ -242,6 +248,15 @@ const styles = StyleSheet.create({
   registrationNumber: {
     fontSize: 14,
     color: "#555",
+  },
+  phoneNumber: {
+    fontSize: 14,
+    color: "#555",
+  },
+  rightColumn: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 5,
   },
   moreIcon: {
     padding: 5,
@@ -262,11 +277,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 10,
   },
-  textInput: {
-    height: 150,
-    marginBottom: 10,
-  },
-  saveButton: {
-    alignSelf: "flex-end",
+  drawerContent: {
+    fontSize: 16,
+    color: "#555",
   },
 });

@@ -53,13 +53,13 @@ const ChatList = () => {
     if (currentUser.role === "cooperative") {
       usersQuery = query(
         collection(db, "users"),
-        where("uid", "!=", currentUser.uid),
+        where("uid", "!=", currentUser.uid)
       );
     } else {
       usersQuery = query(
         collection(db, "users"),
         where("role", "==", "cooperative"),
-        where("uid", "!=", currentUser.uid),
+        where("uid", "!=", currentUser.uid)
       );
     }
 
@@ -75,7 +75,7 @@ const ChatList = () => {
 
           const chatQuery = query(
             collection(db, "chats", chatId, "messages"),
-            orderBy("timestamp", "desc"),
+            orderBy("timestamp", "desc")
           );
 
           return new Promise((resolve) => {
@@ -86,7 +86,7 @@ const ChatList = () => {
                   : null;
               const unreadMessages = chatSnapshot.docs.filter(
                 (msg) =>
-                  !msg.data().read && msg.data().sender !== currentUser.uid,
+                  !msg.data().read && msg.data().sender !== currentUser.uid
               ).length;
 
               resolve({
@@ -101,7 +101,7 @@ const ChatList = () => {
               });
             });
           });
-        }),
+        })
       );
 
       setChatList(updatedUsers);
@@ -156,9 +156,7 @@ const ChatList = () => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-    
-      </View>
+      <View style={styles.header}></View>
 
       {/* Stories Section */}
       <View style={styles.statusListContainer}>
@@ -242,7 +240,11 @@ const ChatList = () => {
             onPress={() =>
               router.push({
                 pathname: `/(screens)/chatConversations/${item.uid}`,
-                params: { user: JSON.stringify(item) },
+                params: {
+                  user: JSON.stringify(item),
+                  predefinedMessage:
+                    "Hello 👋 there ",
+                },
               })
             }
           >
