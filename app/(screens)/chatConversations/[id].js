@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../../context/appstate/ChatContext";
 import { useAuth } from "../../../context/appstate/AuthContext";
 import { db } from "../../../firebase/firebaseConfig";
+import { useTheme } from "react-native-paper";
 import {
   addDoc,
   collection,
@@ -59,6 +60,7 @@ const ChatScreen = () => {
 
   const contextMessages = conversations[chatId] || [];
   const messages = [...contextMessages, ...localMessages];
+  const { colors } = useTheme();
 
   // Set activeChatId when entering/leaving the chat
   useEffect(() => {
@@ -417,7 +419,8 @@ const ChatScreen = () => {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+
+    <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
       <View style={styles.header}>
         <Image
           source={{ uri: user.profilePicture || placeholderAvatar }}

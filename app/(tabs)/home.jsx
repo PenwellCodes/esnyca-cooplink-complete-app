@@ -15,8 +15,8 @@ import { typography } from "../../constants";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
-import { searchScreens } from '../../utils/searchScreen';
-import { useLanguage } from '../../context/appstate/LanguageContext';
+import { searchScreens } from "../../utils/searchScreen";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -30,17 +30,17 @@ const Home = () => {
   const router = useRouter();
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [translations, setTranslations] = useState({
-    services: 'Services',
-    aboutUs: 'About Us',
-    profileUpdates: 'Profile Updates',
-    cooperatives: 'Cooperatives',
-    news: 'News',
-    partnerships: 'Partnerships',
-    search: 'Search',
-    appName: 'esnyca'
+    services: "Services",
+    aboutUs: "About Us",
+    profileUpdates: "Profile Updates",
+    cooperatives: "Cooperatives",
+    news: "News",
+    partnerships: "Partnerships",
+    search: "Search",
+    appName: "esnyca",
   });
 
   // Load translations
@@ -52,7 +52,7 @@ const Home = () => {
       }
       setTranslations(translated);
     };
-    
+
     loadTranslations();
   }, [t]);
 
@@ -85,34 +85,41 @@ const Home = () => {
   const menuItems = [
     { name: translations.services, icon: "shopping-cart", route: "/support" },
     { name: translations.aboutUs, icon: "groups", route: "/about-us" },
-    { name: translations.profileUpdates, icon: "assignment", route: "/profile" },
-    { name: translations.cooperatives, icon: "business", route: "/cooperatives" },
+    {
+      name: translations.profileUpdates,
+      icon: "assignment",
+      route: "/profile",
+    },
+    {
+      name: translations.cooperatives,
+      icon: "business",
+      route: "/cooperatives",
+    },
     { name: translations.news, icon: "newspaper", route: "/news" },
-    { name: translations.partnerships, icon: "handshake", route: "/partnerships" },
+    {
+      name: translations.partnerships,
+      icon: "handshake",
+      route: "/partnerships",
+    },
   ];
 
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
-    
+
     const results = searchScreens(searchQuery);
     router.push({
-      pathname: '/(screens)/search-results',
-      params: { 
+      pathname: "/(screens)/search-results",
+      params: {
         searchQuery: searchQuery,
-        results: JSON.stringify(results)
-      }
+        results: JSON.stringify(results),
+      },
     });
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Status Bar */}
-      <StatusBar
-        barStyle={
-          colors.background === "#ffffff" ? "dark-content" : "light-content"
-        }
-        backgroundColor={colors.background}
-      />
+      <StatusBar backgroundColor={colors.background} style="light" />
 
       {/* App Name */}
       <Text
@@ -146,8 +153,8 @@ const Home = () => {
       </View>
       {/* Updated Search Box */}
       <View style={styles.searchContainer}>
-        <TextInput 
-          placeholder={translations.search} 
+        <TextInput
+          placeholder={translations.search}
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={setSearchQuery}
