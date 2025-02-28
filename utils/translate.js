@@ -2,7 +2,8 @@ import { translate } from 'google-translate-api-x';
 
 export const languages = {
   en: 'English',
-  de: 'German'
+  de: 'German',
+  ss: 'Swati',
 };
 
 // Add menu items to common translations
@@ -24,6 +25,21 @@ export const commonTranslations = {
     'More Information': 'More Information',
     'Legal compliance services for cooperatives': 'Legal compliance services for cooperatives',
     'Financial support and advisory services': 'Financial support and advisory services',
+    'Update Profile': 'Update Profile',
+    'Tap to change profile photo': 'Tap to change profile photo',
+    'Name': 'Name',
+    'Company Name': 'Company Name',
+    'Phone Number': 'Phone Number',
+    'Description': 'Description',
+    'Location': 'Location',
+    'Enter your name': 'Enter your name',
+    'Enter cooperative name': 'Enter cooperative name',
+    'Enter phone number': 'Enter phone number',
+    'Enter business description': 'Enter business description',
+    'Satellite View': 'Satellite View',
+    'Standard View': 'Standard View',
+    'Selected': 'Selected',
+    'Loading profile data...': 'Loading profile data...',
   },
   ss: {
     Services: 'Umsebenti',
@@ -42,6 +58,21 @@ export const commonTranslations = {
     'More Information': 'Lwati Lolunyenti',
     'Legal compliance services for cooperatives': 'Umsebenti wekulungisa kwemtsetfo wemabhizinisi',
     'Financial support and advisory services': 'Lusito lwetimali neteluleko',
+    'Update Profile': 'Buyeketa Imininingwane',
+    'Tap to change profile photo': 'Cindzetela kuntjintja sitfombe',
+    'Name': 'Ligama',
+    'Company Name': 'Ligama Lenkapani',
+    'Phone Number': 'Inombolo Yemakhalekhikhini',
+    'Description': 'Inchazelo',
+    'Location': 'Indzawo',
+    'Enter your name': 'Faka ligama lakho',
+    'Enter cooperative name': 'Faka ligama lemabhizinisi',
+    'Enter phone number': 'Faka inombolo yemakhalekhikhini',
+    'Enter business description': 'Faka inchazelo yebhizinisi',
+    'Satellite View': 'Umbuko Wesathelayithi',
+    'Standard View': 'Umbuko Lovamile',
+    'Selected': 'Kukhetsiwe',
+    'Loading profile data...': 'Kulayisha imininingwane...',
   },
   // Add other languages as needed
 };
