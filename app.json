@@ -13,18 +13,13 @@
       "backgroundColor": "#ffffff"
     },
     "scheme": "esnycarecovery",
-    "assetBundlePatterns": [
-      "/*"
-    ],
+    "assetBundlePatterns": ["/*"],
     "ios": {
       "supportsTablet": true,
       "config": {
-
-
         "googleMaps": {
           "apiKey": "process.env.GOOGLE_MAPS_API_KEY"
         }
-
       }
     },
     "android": {
@@ -41,6 +36,26 @@
       "eas": {
         "projectId": "ae924564-5b8d-4ded-8e22-87077d3acda9"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share them with your friends."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ]
   }
 }

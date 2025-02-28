@@ -35,6 +35,7 @@ import {
   getDownloadURL,
 } from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { Audio } from "expo-av";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -42,15 +43,15 @@ const placeholderAvatar =
 const ChatScreen = () => {
   const params = useLocalSearchParams();
   const user = params.user ? JSON.parse(params.user) : null;
-  const predefinedMessage = params.predefinedMessage; // Retrieve predefined message if exists
+  const predefinedMessage = params.predefinedMessage;
   const { currentUser } = useAuth();
-  const { conversations, markMessagesAsRead, setActiveChatId } = useChat(); // Add setActiveChatId
+  const { conversations, markMessagesAsRead, setActiveChatId } = useChat();
   const chatId =
     currentUser.uid > user.uid
       ? `${currentUser.uid}_${user.uid}`
       : `${user.uid}_${currentUser.uid}`;
 
-  // Initialize messageText with predefinedMessage if provided
+  // State for text messages and local messages
   const [messageText, setMessageText] = useState(predefinedMessage || "");
   const [localMessages, setLocalMessages] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -58,14 +59,17 @@ const ChatScreen = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
 
+  // New states for audio recording
+  const [recording, setRecording] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+
   const contextMessages = conversations[chatId] || [];
   const messages = [...contextMessages, ...localMessages];
   const { colors } = useTheme();
 
-  // Set activeChatId when entering/leaving the chat
   useEffect(() => {
-    setActiveChatId(chatId); // Set current chat as active
-    return () => setActiveChatId(null); // Clear when leaving
+    setActiveChatId(chatId);
+    return () => setActiveChatId(null);
   }, [chatId, setActiveChatId]);
 
   useEffect(() => {
@@ -148,7 +152,7 @@ const ChatScreen = () => {
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images", "videos"],
       allowsEditing: true,
       aspect: [4, 3],
       quality: 1,
@@ -254,6 +258,87 @@ const ChatScreen = () => {
       await addDoc(collection(db, "chats", chatId, "messages"), message);
     } catch (error) {
       console.error("Error sending file:", error);
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  // Start recording a voice note
+  const startRecording = async () => {
+    try {
+      console.log("Requesting permissions..");
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== "granted") {
+        Alert.alert("Permission Required", "Microphone permissions are required to record audio.");
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      console.log("Starting recording..");
+      const newRecording = new Audio.Recording();
+      await newRecording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+      await newRecording.startAsync();
+      setRecording(newRecording);
+      setIsRecording(true);
+      console.log("Recording started");
+    } catch (err) {
+      console.error("Failed to start recording", err);
+    }
+  };
+
+  // Stop recording, upload the voice note, and send it as a message
+  const stopRecording = async () => {
+    try {
+      console.log("Stopping recording..");
+      setIsRecording(false);
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      console.log("Recording stopped and stored at", uri);
+      setRecording(null);
+
+      // Create a temporary audio message with status "uploading"
+      const tempMessage = {
+        id: Date.now().toString(),
+        sender: currentUser.uid,
+        receiver: user.uid,
+        fileUrl: uri,
+        type: "audio",
+        timestamp: new Date(),
+        status: "uploading",
+      };
+      setLocalMessages((prev) => [...prev, tempMessage]);
+      flatListRef.current?.scrollToEnd({ animated: true });
+      setUploading(true);
+
+      const fileName = uri.split("/").pop();
+      const storagePath = `chatAttachments/${chatId}/${Date.now()}_${fileName}`;
+      const downloadURL = await uploadFile(uri, storagePath);
+
+      const message = {
+        sender: currentUser.uid,
+        receiver: user.uid,
+        fileUrl: downloadURL,
+        fileName,
+        type: "audio",
+        timestamp: serverTimestamp(),
+        status: "sent",
+      };
+
+      const chatDocRef = doc(db, "chats", chatId);
+      const chatDocSnap = await getDoc(chatDocRef);
+      if (!chatDocSnap.exists()) {
+        await setDoc(chatDocRef, {
+          participants: [currentUser.uid, user.uid],
+          createdAt: serverTimestamp(),
+        });
+      }
+      await addDoc(collection(db, "chats", chatId, "messages"), message);
+      setLocalMessages([]);
+    } catch (error) {
+      console.error("Error recording audio:", error);
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -383,7 +468,62 @@ const ChatScreen = () => {
         </LinearGradient>
       );
     }
-
+    if (item.type === "audio") {
+      return (
+        <View
+          style={{
+            alignSelf: item.sender === currentUser.uid ? "flex-end" : "flex-start",
+            marginVertical: 5,
+            marginHorizontal: 10,
+          }}
+        >
+          <LinearGradient
+            colors={
+              item.sender === currentUser.uid
+                ? ["#4c669f", "#3b5998"]
+                : ["#e0e0e0", "#cfcfcf"]
+            }
+            style={styles.messageBubble}
+          >
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  const { sound } = await Audio.Sound.createAsync({
+                    uri: item.fileUrl,
+                  });
+                  await sound.playAsync();
+                } catch (error) {
+                  console.error("Error playing audio:", error);
+                }
+              }}
+              style={{ flexDirection: "row", alignItems: "center" }}
+            >
+              <Ionicons
+                name="play-circle-outline"
+                size={24}
+                color={item.sender === currentUser.uid ? "#fff" : "black"}
+              />
+              <Text
+                style={{
+                  color: item.sender === currentUser.uid ? "#fff" : "black",
+                  marginLeft: 8,
+                }}
+              >
+                Play Voice Note
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.timestamp}>
+              {item.timestamp &&
+                typeof item.timestamp.toDate === "function"
+                ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
+                  addSuffix: true,
+                })
+                : "Sending..."}
+            </Text>
+          </LinearGradient>
+        </View>
+      );
+    }
     return (
       <LinearGradient
         colors={
@@ -419,7 +559,6 @@ const ChatScreen = () => {
   };
 
   return (
-
     <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
       <View style={styles.header}>
         <Image
@@ -457,6 +596,21 @@ const ChatScreen = () => {
           <Ionicons name="image-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
 
+        <TouchableOpacity onPress={sendFile} style={styles.attachmentButton}>
+          <Ionicons name="attach-outline" size={24} color="#007AFF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={isRecording ? stopRecording : startRecording}
+          style={styles.attachmentButton}
+        >
+          <Ionicons
+            name={isRecording ? "stop-circle" : "mic-outline"}
+            size={24}
+            color={isRecording ? "red" : "#007AFF"}
+          />
+        </TouchableOpacity>
+
         <TextInput
           placeholder="Type a message..."
           value={messageText}
@@ -474,6 +628,9 @@ const ChatScreen = () => {
 export default ChatScreen;
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
