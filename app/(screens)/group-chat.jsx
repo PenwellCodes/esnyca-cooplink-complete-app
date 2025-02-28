@@ -22,6 +22,8 @@ import {
   doc,
   setDoc,
   getDoc,
+  query,
+  getDocs,
 } from "firebase/firestore";
 import { formatDistanceToNow } from "date-fns";
 import { useLocalSearchParams } from "expo-router";
@@ -134,19 +136,28 @@ const ChatScreen = () => {
     try {
       const chatDocRef = doc(db, "chats", chatId);
       const chatDocSnap = await getDoc(chatDocRef);
+      
       if (!chatDocSnap.exists()) {
         if (group) {
+          // For group chats, create an array of all users
+          const usersQuery = query(collection(db, "users"));
+          const usersSnapshot = await getDocs(usersQuery);
+          const allUserIds = usersSnapshot.docs.map(doc => doc.data().uid);
+          
           await setDoc(chatDocRef, {
-            participants: [currentUser.uid],
+            participants: allUserIds, // Add all users as participants
+            isGroup: true,
             createdAt: serverTimestamp(),
           });
         } else {
+          // For individual chats, keep existing behavior
           await setDoc(chatDocRef, {
             participants: [currentUser.uid, individualUser.uid],
             createdAt: serverTimestamp(),
           });
         }
       }
+
       await addDoc(collection(db, "chats", chatId, "messages"), {
         sender: currentUser.uid,
         receiver,
@@ -154,6 +165,7 @@ const ChatScreen = () => {
         type: "text",
         timestamp: serverTimestamp(),
         status: "sent",
+        isGroupMessage: group ? true : false, // Add this flag
       });
     } catch (error) {
       console.error("Error sending message:", error);

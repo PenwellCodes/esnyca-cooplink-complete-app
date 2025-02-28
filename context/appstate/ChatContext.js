@@ -67,13 +67,24 @@ export const ChatProvider = ({ children }) => {
                     collection(db, "chats", chatId, "messages"),
                     orderBy("timestamp", "asc")
                 );
+
+                // Subscribe to messages for each chat
                 onSnapshot(messagesQuery, (messagesSnapshot) => {
                     const messages = messagesSnapshot.docs.map((doc) => ({
                         id: doc.id,
                         ...doc.data(),
                     }));
-                    chatsData[chatId] = messages;
-                    setConversations({ ...chatsData });
+
+                    // For group chats (chatId starting with "group_"), show all messages
+                    // For individual chats, keep existing behavior
+                    if (chatId.startsWith('group_') || 
+                        messages.some(msg => 
+                            msg.sender === currentUser.uid || 
+                            msg.receiver === currentUser.uid
+                        )) {
+                        chatsData[chatId] = messages;
+                        setConversations({ ...chatsData });
+                    }
 
                     // Check for new incoming messages (toast notification)
                     messagesSnapshot.docChanges().forEach((change) => {
