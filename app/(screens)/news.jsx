@@ -99,10 +99,7 @@ const News = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Appbar.Header>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="News" />
-      </Appbar.Header>
+      
       <FlatList
         data={newsData}
         renderItem={({ item }) => <NewsItem item={item} />}
