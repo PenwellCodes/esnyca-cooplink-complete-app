@@ -12,16 +12,12 @@ import { useTheme, Snackbar } from "react-native-paper";  // Add this import
 import { useLanguage } from '../../context/appstate/LanguageContext';
 
 const Profile = () => {
-  const { colors } = useTheme();  // Add theme hook
+  const { colors } = useTheme();
   const { currentUser } = useAuth();
   const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState(null);
   const [newPhotoUri, setNewPhotoUri] = useState(null);
-  const [location, setLocation] = useState(null);
-  const [selectedLocation, setSelectedLocation] = useState(null);
-  const [locationName, setLocationName] = useState('');
-  const [mapType, setMapType] = useState('standard');
   const navigation = useNavigation();
   const db = getFirestore();
   const storage = getStorage();
@@ -66,64 +62,19 @@ const Profile = () => {
   }, [t]);
 
   useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(translations.permissionDenied, translations.locationRequired);
-        return;
-      }
-
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      });
-    })();
-  }, [translations]);
-
-  const handleMapLongPress = async (e) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    try {
-      const [address] = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude
-      });
-      
-      const locationDetails = {
-        latitude,
-        longitude,
-        name: address ? `${address.street || ''} ${address.city || ''} ${address.region || ''}` : 'Selected Location',
-      };
-      
-      setSelectedLocation(locationDetails);
-      setLocationName(locationDetails.name);
-      
-      setUserData(prev => ({
-        ...prev,
-        location: locationDetails
-      }));
-    } catch (error) {
-      console.error('Error getting location details:', error);
-      Alert.alert('Error', translations.errorLocation);
-    }
-  };
-
-  useEffect(() => {
     const fetchUserData = async () => {
       if (!auth.currentUser) return;
-      
+
       setIsLoading(true);
       try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('email', '==', auth.currentUser.email));
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("email", "==", auth.currentUser.email));
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
           const userDoc = querySnapshot.docs[0];
-          const userData = userDoc.data();
-          setUserData({ id: userDoc.id, ...userData });
+          const data = userDoc.data();
+          setUserData({ id: userDoc.id, ...data });
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -154,18 +105,22 @@ const Profile = () => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", translations.errorImage);
+      Alert.alert(
+        "Error",
+        "There was an issue picking the image. Please try again.",
+      );
     }
   };
 
   const uploadProfilePhoto = async () => {
-    if (!newPhotoUri || !userData?.displayName) return null;
-
+    if (!newPhotoUri) return null;
     try {
       const response = await fetch(newPhotoUri);
       const blob = await response.blob();
-      
-      const fileName = `${userData.displayName}_${Date.now()}.jpg`;
+
+      // Use displayName if available, otherwise use name
+      const identifier = userData?.displayName || userData?.name || "profile";
+      const fileName = `${identifier}_${Date.now()}.jpg`;
       const photoRef = ref(storage, `profilePhotos/${fileName}`);
 
       await uploadBytes(photoRef, blob);
@@ -179,16 +134,24 @@ const Profile = () => {
 
   const updateProfile = async () => {
     if (!userData) return;
-
     setIsLoading(true);
     try {
       const updatedFields = {};
 
-      if (userData.displayName) updatedFields.displayName = userData.displayName;
-      if (userData.phoneNumber) updatedFields.phoneNumber = userData.phoneNumber;
-     
-      if (userData.location) updatedFields.location = userData.location;
-      
+      // For cooperative users
+      if (userData.displayName)
+        updatedFields.displayName = userData.displayName;
+      // For individual users
+      if (userData.name) updatedFields.name = userData.name;
+
+      if (userData.phoneNumber)
+        updatedFields.phoneNumber = userData.phoneNumber;
+      // Add the description/content field update
+      if (userData.content) updatedFields.content = userData.content;
+
+      // Removed location update since the map has been removed
+      // if (userData.location) updatedFields.location = userData.location;
+
       if (newPhotoUri) {
         const photoUrl = await uploadProfilePhoto();
         if (photoUrl) {
@@ -196,14 +159,14 @@ const Profile = () => {
         }
       }
 
-      const userDocRef = doc(db, 'users', userData.id);
+      const userDocRef = doc(db, "users", userData.id);
       await updateDoc(userDocRef, updatedFields);
 
-      if (currentUser?.role === 'cooperative') {
+      if (currentUser?.role === "cooperative") {
         try {
           const registrationQuery = query(
-            collection(db, 'registration'),
-            where('email', '==', userData.email)
+            collection(db, "registration"),
+            where("email", "==", userData.email),
           );
           const registrationDocs = await getDocs(registrationQuery);
 
@@ -211,18 +174,21 @@ const Profile = () => {
             const registrationDoc = registrationDocs.docs[0];
             const registrationFields = {
               ...updatedFields,
-              status: 'approved'
+              status: "approved",
             };
-            
+
             if (userData.region) {
               registrationFields.region = userData.region;
             }
 
-            await updateDoc(doc(db, 'registration', registrationDoc.id), registrationFields);
-            console.log('Updated cooperative profile in both collections');
+            await updateDoc(
+              doc(db, "registration", registrationDoc.id),
+              registrationFields,
+            );
+            console.log("Updated cooperative profile in both collections");
           }
         } catch (regError) {
-          console.error('Error updating registration:', regError);
+          console.error("Error updating registration:", regError);
         }
       }
 
@@ -230,7 +196,10 @@ const Profile = () => {
       navigation.goBack();
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert("Error", translations.errorUpdate);
+      Alert.alert(
+        "Error",
+        "Failed to update profile. Please check your input data.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -246,25 +215,27 @@ const Profile = () => {
   }
 
   return (
-    <ScrollView style={[styles.scrollContainer, { backgroundColor: colors.background }]}>
+    <ScrollView
+      style={[styles.scrollContainer, { backgroundColor: colors.background }]}
+    >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.header, { color: colors.primary }]}>{translations.updateProfile}</Text>
 
         <TouchableOpacity onPress={pickImage}>
-          <Image 
+          <Image
             source={
-              newPhotoUri 
+              newPhotoUri
                 ? { uri: newPhotoUri }
-                : userData.photoUrl 
+                : userData.photoUrl
                   ? { uri: userData.photoUrl }
-                  : require('../../assets/images/default_cooperative.png')
-            } 
-            style={styles.profileImage} 
+                  : require("../../assets/images/default_cooperative.png")
+            }
+            style={styles.profileImage}
           />
         </TouchableOpacity>
         <Text style={[styles.photoText, { color: colors.primary }]}>{translations.tapToChange}</Text>
 
-        {currentUser?.role === 'individual' ? (
+        {currentUser?.role === "individual" ? (
           <>
             <View style={styles.inputContainer}>
               <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.name}</Text>
@@ -346,9 +317,12 @@ const Profile = () => {
           </>
         )}
 
-        <TouchableOpacity 
-          style={[styles.updateButton, { backgroundColor: colors.primary, marginTop: 20 }]} 
-          onPress={updateProfile} 
+        <TouchableOpacity
+          style={[
+            styles.updateButton,
+            { backgroundColor: colors.primary, marginTop: 20 },
+          ]}
+          onPress={updateProfile}
           disabled={isLoading}
         >
           {isLoading ? (
@@ -365,24 +339,24 @@ const Profile = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     padding: 20,
     paddingBottom: 40,
   },
   header: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 30,
   },
   input: {
-    width: '100%',
+    width: "100%",
     height: 50,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderWidth: 1,
     borderRadius: 8,
     paddingLeft: 15,
     fontSize: 16,
-    color: '#333',
+    color: "#333",
     marginBottom: 20,
   },
   profileImage: {
@@ -394,88 +368,36 @@ const styles = StyleSheet.create({
   photoText: {
     marginBottom: 20,
   },
-  verifyButton: {
-    backgroundColor: '#191970',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  verifyButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
   updateButton: {
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
+    alignItems: "center",
+    width: "100%",
   },
   updateButtonText: {
-    color: '#FFF',
+    color: "#FFF",
     fontSize: 18,
-    fontWeight: 'bold',
-  },
-  mapContainer: {
-    width: '100%',
-    height: 200,
-    marginBottom: 20,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    alignSelf: 'flex-start',
-  },
-  locationText: {
-    marginTop: 5,
-    fontSize: 14,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  mapTypeButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    padding: 8,
-    borderRadius: 5,
-    zIndex: 1,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  mapTypeButtonText: {
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   inputContainer: {
-    width: '100%',
+    width: "100%",
     marginBottom: 15,
   },
   inputLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
     paddingLeft: 2,
   },
   loadingText: {
     marginTop: 10,
-    color: '#666',
+    color: "#666",
     fontSize: 16,
-  }
+  },
+  scrollContainer: {
+    flex: 1,
+  },
 });
 
 export default Profile;

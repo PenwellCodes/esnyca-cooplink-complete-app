@@ -24,7 +24,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { formatDistanceToNow } from "date-fns";
-import { useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import {
@@ -41,6 +41,7 @@ const placeholderAvatar =
 const ChatScreen = () => {
   const params = useLocalSearchParams();
   const user = params.user ? JSON.parse(params.user) : null;
+  const predefinedMessage = params.predefinedMessage; // Retrieve predefined message if exists
   const { currentUser } = useAuth();
   const { conversations, markMessagesAsRead, setActiveChatId } = useChat(); // Add setActiveChatId
   const chatId =
@@ -48,8 +49,9 @@ const ChatScreen = () => {
       ? `${currentUser.uid}_${user.uid}`
       : `${user.uid}_${currentUser.uid}`;
 
+  // Initialize messageText with predefinedMessage if provided
+  const [messageText, setMessageText] = useState(predefinedMessage || "");
   const [localMessages, setLocalMessages] = useState([]);
-  const [messageText, setMessageText] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -451,7 +453,7 @@ const ChatScreen = () => {
         <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
           <Ionicons name="image-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
-        
+
         <TextInput
           placeholder="Type a message..."
           value={messageText}
