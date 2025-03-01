@@ -15,7 +15,7 @@ import { typography } from "../../constants";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
-import { searchScreens } from "../../utils/searchScreen";
+import { searchScreensAndDatabase } from "../../utils/searchScreen";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const newsHeadlines = [
@@ -103,17 +103,21 @@ const Home = () => {
     },
   ];
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!searchQuery.trim()) return;
 
-    const results = searchScreens(searchQuery);
-    router.push({
-      pathname: "/(screens)/search-results",
-      params: {
-        searchQuery: searchQuery,
-        results: JSON.stringify(results),
-      },
-    });
+    try {
+      const results = await searchScreensAndDatabase(searchQuery);
+      router.push({
+        pathname: "/(screens)/search-results",
+        params: {
+          searchQuery: searchQuery,
+          results: JSON.stringify(results),
+        },
+      });
+    } catch (error) {
+      console.error('Search error:', error);
+    }
   };
 
   return (
