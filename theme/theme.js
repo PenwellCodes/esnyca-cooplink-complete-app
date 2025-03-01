@@ -12,6 +12,7 @@ export const lightTheme = {
     background: '#ffffff',
     surface: '#ffffff',
     error: '#C1B8C8',
+    success: '#FF0000',
     links: '#3590F3',
     secondaryContainer: '#00AAFF',
     surfaceVariant: '#000000',

@@ -11,8 +11,8 @@ export const screens = [
     type: 'menu',
     icon: 'shield-checkmark',
     content: `
-      Your trust, our responsibility. 
-      Staying compliant with regulatory standards is fundamental for maintaining user trust and organizational integrity.
+      Your trust our responsibility. 
+      Staying compliant with regulatory standards is fundamental for maintaining user trust and organizational integrity
 
       Affiliation to Apex Body:
       Cooperatives should be affiliated with an apex body, which ensures representation, coordination, and advocacy within the sector. This provides resources, guidance, and a network of support to strengthen cooperative functions.
