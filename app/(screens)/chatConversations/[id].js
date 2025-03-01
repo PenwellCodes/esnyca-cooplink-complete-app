@@ -91,6 +91,42 @@ const ChatScreen = () => {
     markMessagesAsRead(chatId, messages);
   }, [messages]);
 
+  // Add cleanup for audio
+  useEffect(() => {
+    return () => {
+      if (recording) {
+        recording.stopAndUnloadAsync();
+      }
+    };
+  }, [recording]);
+
+  // Modify audio initialization
+  useEffect(() => {
+    let isMounted = true;
+
+    const initAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+          interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        });
+      } catch (error) {
+        console.error("Error initializing audio:", error);
+      }
+    };
+
+    if (isMounted) {
+      initAudio();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const sendMessage = async () => {
     if (!messageText.trim()) return;
     const tempMessage = {
@@ -282,23 +318,24 @@ const ChatScreen = () => {
   // Start recording a voice note
   const startRecording = async () => {
     try {
-      console.log("Requesting permissions..");
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== "granted") {
         Alert.alert("Permission Required", "Microphone permissions are required to record audio.");
         return;
       }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-      console.log("Starting recording..");
+
       const newRecording = new Audio.Recording();
-      await newRecording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-      await newRecording.startAsync();
-      setRecording(newRecording);
-      setIsRecording(true);
-      console.log("Recording started");
+      try {
+        await newRecording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+        await newRecording.startAsync();
+        setRecording(newRecording);
+        setIsRecording(true);
+      } catch (error) {
+        console.error("Failed to start recording", error);
+        if (newRecording) {
+          await newRecording.stopAndUnloadAsync();
+        }
+      }
     } catch (err) {
       console.error("Failed to start recording", err);
     }

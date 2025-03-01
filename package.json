@@ -21,6 +21,7 @@
     "date-fns": "^4.1.0",
     "esnycarecovery": "file:",
     "expo": "~52.0.36",
+    "expo-av": "~15.0.2",
     "expo-document-picker": "^13.0.3",
     "expo-image-picker": "^16.0.6",
     "expo-linear-gradient": "~14.0.2",
@@ -45,8 +46,7 @@
     "react-native-swiper": "^1.6.0",
     "react-native-toast-message": "^2.2.1",
     "react-native-url-polyfill": "^2.0.0",
-    "react-native-vector-icons": "^10.2.0",
-    "expo-av": "~15.0.2"
+    "react-native-vector-icons": "^10.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

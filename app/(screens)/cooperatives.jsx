@@ -13,7 +13,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { MaterialIcons } from "@expo/vector-icons";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
 
@@ -21,6 +21,8 @@ const CooperativeUsersScreen = () => {
   const { colors } = useTheme();
   const { currentUser } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const highlightId = params.highlightId;
   const [users, setUsers] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState("All");
   const [menuVisible, setMenuVisible] = useState(false);
@@ -58,6 +60,18 @@ const CooperativeUsersScreen = () => {
     fetchUsers();
   }, [selectedRegion]);
 
+  useEffect(() => {
+    // If we have a highlightId, scroll to that cooperative
+    if (highlightId) {
+      const index = users.findIndex(user => user.id === highlightId);
+      if (index !== -1) {
+        // Set the region to match the highlighted cooperative
+        const user = users[index];
+        setSelectedRegion(user.region || 'All');
+      }
+    }
+  }, [highlightId]);
+
   // Open the bottom drawer to show the cooperative's bio
   const openDrawer = (user) => {
     setSelectedUser(user);
@@ -76,7 +90,14 @@ const CooperativeUsersScreen = () => {
   };
   // Render a user card
   const renderUserCard = ({ item }) => (
-    <View style={styles.card}>
+    <View style={[
+      styles.card,
+      highlightId === item.id && {
+        borderColor: colors.primary,
+        borderWidth: 2,
+        backgroundColor: `${colors.primary}10`, // Add slight highlight color
+      }
+    ]}>
       <View style={styles.leftColumn}>
         <Image
           source={{ uri: item.profilePic || "https://via.placeholder.com/150" }}
@@ -154,8 +175,8 @@ const CooperativeUsersScreen = () => {
         >
           <Text style={styles.drawerTitle}>Cooperative Bio</Text>
           <Text style={styles.drawerContent}>
-            {selectedUser && selectedUser.bio
-              ? selectedUser.bio
+            {selectedUser && selectedUser.content
+              ? selectedUser.content
               : "This cooperative has not updated its information yet."}
           </Text>
         </Modal>

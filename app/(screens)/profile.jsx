@@ -150,9 +150,9 @@ const Profile = () => {
       if (userData.location) updatedFields.location = userData.location;
       
       if (newPhotoUri) {
-        const photoUrl = await uploadProfilePhoto();
-        if (photoUrl) {
-          updatedFields.photoUrl = photoUrl;
+        const profilePic = await uploadProfilePhoto();
+        if (profilePic) {
+          updatedFields.profilePic = profilePic;
         }
       }
 
@@ -215,8 +215,8 @@ const Profile = () => {
             source={
               newPhotoUri 
                 ? { uri: newPhotoUri }
-                : userData.photoUrl 
-                  ? { uri: userData.photoUrl }
+                : userData.profilePic 
+                  ? { uri: userData.profilePic }
                   : require('../../assets/images/default_cooperative.png')
             } 
             style={styles.profileImage} 
@@ -231,15 +231,15 @@ const Profile = () => {
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
                 placeholder="Enter your name"
-                value={userData?.name || ''}
-                onChangeText={(text) => setUserData(prev => ({ ...prev, name: text }))}
+                value={userData?.displayName || ''}
+                onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
             </View>
           </>
         ) : (
           <>
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Company Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>Cooperative Name</Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
                 placeholder="Enter cooperative name"

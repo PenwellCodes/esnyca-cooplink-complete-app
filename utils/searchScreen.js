@@ -7,7 +7,7 @@ export const screens = [
   {
     name: 'LegalCompliance',
     title: 'Legal Compliance',
-    screen: 'legal-compliance', // Updated to match file name
+    screen: 'support', // Updated to match file name
     type: 'menu',
     icon: 'shield-checkmark',
     content: `
@@ -36,7 +36,7 @@ export const screens = [
   {
     name: 'MarketingAndPromotion',
     title: 'Marketing and Promotion',
-    screen: 'marketing-and-promotion', // Updated to match file name
+    screen: 'support', // Updated to match file name
     type: 'menu',
     icon: 'megaphone',
     content: `
@@ -48,7 +48,7 @@ export const screens = [
   {
     name: 'FinancialServices',
     title: 'Financial Services',
-    screen: 'financial-services', // Updated to match file name
+    screen: 'support', // Updated to match file name
     type: 'menu',
     icon: 'cash',
     content: `
@@ -110,7 +110,7 @@ export const screens = [
   {
     name: 'MissionsAndVisions',
     title: 'Mission & Vision',
-    screen: 'MissionsAndVisions',
+    screen: 'support',
     type: 'menu',
     icon: 'telescope',
     content: `
@@ -123,7 +123,7 @@ export const screens = [
   {
     name: 'Cooperatives',
     title: 'Regional Cooperatives',
-    screen: 'Cooperatives',
+    screen: 'cooperatives',
     type: 'menu',
     icon: 'business',
     content: `
@@ -138,7 +138,7 @@ export const screens = [
   {
     name: 'ResearchAndInsights',
     title: 'Research and Insights',
-    screen: 'ResearchAndInsights',
+    screen: 'support',
     type: 'menu',
     icon: 'analytics',
     content: `
@@ -151,7 +151,7 @@ export const screens = [
   {
     name: 'PrivacyPolicy',
     title: 'Privacy Policy',
-    screen: 'privacy-policy', // Updated to match file name
+    screen: 'settings', // Updated to match file name
     type: 'menu',
     icon: 'shield',
     content: `
@@ -163,7 +163,7 @@ export const screens = [
   {
     name: 'TrainingAndDevelopment',
     title: 'Training and Development',
-    screen: 'TrainingAndDevelopment',
+    screen: 'support',
     type: 'menu',
     icon: 'school',
     content: `
@@ -257,66 +257,37 @@ const searchDatabase = async (searchTerm) => {
   const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
   try {
-    // Fetch and filter cooperatives from "users" collection
+    // Search in users collection
     const usersSnapshot = await getDocs(collection(db, 'users'));
-    console.log(`Found ${usersSnapshot.size} documents in users collection`);
     
     usersSnapshot.forEach(doc => {
       const data = doc.data();
       if (data.role === 'cooperative') {
         const isMatch = 
-          (data.displayNameName && data.displayNameName.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.region && data.region.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.content && data.content.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.description && data.description.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.address && data.address.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.services && data.services.toLowerCase().includes(lowerSearchTerm));
+          (data.displayName?.toLowerCase().includes(lowerSearchTerm)) ||
+          (data.email?.toLowerCase().includes(lowerSearchTerm)) ||
+          (data.physicalAddress?.toLowerCase().includes(lowerSearchTerm)) ||
+          (data.registrationNumber?.toLowerCase().includes(lowerSearchTerm)) ||
+          (data.bio?.toLowerCase().includes(lowerSearchTerm)) ||
+          (data.region?.toLowerCase().includes(lowerSearchTerm));
         
         if (isMatch) {
-          console.log('Match found in users:', data.displayNameName);
           results.push({
             id: doc.id,
-            name: data.displayNameName || 'Unnamed Cooperative',
-            title: data.displayNameName || 'Unnamed Cooperative',
-            screen: 'CooperativeDetails',
+            name: data.displayName || 'Unnamed Cooperative',
+            title: data.displayName || 'Unnamed Cooperative',
+            screen: 'cooperatives', // Changed to match the screen name
             type: 'cooperative',
             icon: 'business',
-            content: data.content || data.description || `Cooperative in ${data.region || 'unknown'} region`,
+            content: `${data.bio || ''}\n${data.physicalAddress || ''}`,
             region: data.region || 'Unknown Region',
-            params: { cooperativeId: doc.id }
+            params: { 
+              selectedRegion: data.region || 'All',
+              cooperativeId: doc.id,
+              highlightId: doc.id // Add this to highlight the searched cooperative
+            }
           });
         }
-      }
-    });
-
-    // Fetch and filter cooperatives from "registration" collection
-    const regSnapshot = await getDocs(collection(db, 'registration'));
-    console.log(`Found ${regSnapshot.size} documents in registration collection`);
-
-    regSnapshot.forEach(doc => {
-      const data = doc.data();
-      // Skip pending registrations
-      if (data.status && data.status === 'pending') return;
-      
-      const isMatch = 
-          (data.displayNameName && data.displayNameName.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.region && data.region.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.content && data.content.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.description && data.description.toLowerCase().includes(lowerSearchTerm));
-      
-      if (isMatch) {
-        console.log('Match found in registration:', data.displayName);
-        results.push({
-          id: doc.id,
-          name: data.displayNameName || 'Unnamed Cooperative',
-          title: data.displayNameName || 'Unnamed Cooperative',
-          screen: 'CooperativeDetails',
-          type: 'cooperative',
-          icon: 'business',
-          content: data.content || data.description || `Cooperative in ${data.region || 'unknown'} region`,
-          region: data.region || 'Unknown Region',
-          params: { cooperativeId: doc.id }
-        });
       }
     });
     
