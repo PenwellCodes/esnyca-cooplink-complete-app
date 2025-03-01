@@ -6,7 +6,7 @@ import { SplashScreen, Stack } from "expo-router";
 import GlobalContextProvider from "../context/appstate/GlobalContextProvider";
 import { PaperProvider } from "react-native-paper";
 import theme from "../theme/theme";
-import Toast from 'react-native-toast-message';
+import Toast from "react-native-toast-message";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -41,7 +41,6 @@ const RootLayout = () => {
   return (
     <PaperProvider theme={theme}>
       <GlobalContextProvider>
-       
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

@@ -1,36 +1,24 @@
+// CustomThemeProvider.js
 import React, { createContext, useState, useContext } from 'react';
-import { DefaultTheme, DarkTheme } from 'react-native-paper';
+import { Provider as PaperProvider } from 'react-native-paper';
+import { lightTheme, darkTheme } from '../../theme/theme';
 
 const ThemeContext = createContext();
 
-export const useTheme = () => useContext(ThemeContext);
+export const useCustomTheme = () => useContext(ThemeContext);
 
-export const ThemeProvider = ({ children }) => {
-  const [isDark, setIsDark] = useState(false);
+export const CustomThemeProvider = ({ children }) => {
+  const [isDarkTheme, setIsDarkTheme] = useState(false); // Default to light theme
 
-  const theme = isDark ? {
-    ...DarkTheme,
-    colors: {
-      ...DarkTheme.colors,
-      primary: '#191970',
-      tertiary: '#ffffff',
-    },
-  } : {
-    ...DefaultTheme,
-    colors: {
-      ...DefaultTheme.colors,
-      primary: '#191970',
-      tertiary: '#000000',
-    },
+  const toggleTheme = () => {
+    setIsDarkTheme((prev) => !prev);
   };
 
-  const toggleTheme = () => setIsDark(!isDark);
+  const theme = isDarkTheme ? darkTheme : lightTheme;
 
   return (
-    <ThemeContext.Provider value={{ theme, dark: isDark, toggleTheme }}>
-      {children}
+    <ThemeContext.Provider value={{ toggleTheme, isDarkTheme }}>
+      <PaperProvider theme={theme}>{children}</PaperProvider>
     </ThemeContext.Provider>
   );
 };
-
-export default ThemeContext;

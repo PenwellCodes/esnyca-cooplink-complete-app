@@ -12,229 +12,48 @@ const Layout = () => {
   return (
     <>
       <Stack>
-        <Stack.Screen
-          name="about-us"
-          options={{
-            title: "About Us",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-
-        <Stack.Screen
-          name="account-settings"
-          options={{
-            title: "Account Settings",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="add-story"
-          options={{
-            title: "Add Story",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="group-chat"
-          options={{
-            title: "Group Chat",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="view-story"
-          options={{
-            title: "View Story",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="news"
-          options={{
-            title: "News",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="cooperatives"
-          options={{
-            title: "   Cooperatives",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="financial-services"
-          options={{
-            title: "Financial Services",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="marketing-and-promotion"
-          options={{
-            title: "Marketing and Promotion",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="research-and-insights"
-          options={{
-            title: "Research and Insights",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="support"
-          options={{
-            title: "Support",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="missions-and-vision"
-          options={{
-            title: "Missions and Vision",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="news-listing"
-          options={{
-            title: "News Listing",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="partnerships"
-          options={{
-            title: "Partnerships",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="training-and-development"
-          options={{
+        {[
+          { name: "about-us", title: "About Us" },
+          { name: "account-settings", title: "Account Settings" },
+          { name: "add-story", title: "Add Story" },
+          { name: "group-chat", title: "Group Chat" },
+          { name: "view-story", title: "View Story" },
+          { name: "news", title: "News" },
+          { name: "cooperatives", title: "Cooperatives" },
+          { name: "financial-services", title: "Financial Services" },
+          { name: "marketing-and-promotion", title: "Marketing and Promotion" },
+          { name: "research-and-insights", title: "Research and Insights" },
+          { name: "support", title: "Support" },
+          { name: "missions-and-vision", title: "Missions and Vision" },
+          { name: "news-listing", title: "News Listing" },
+          { name: "partnerships", title: "Partnerships" },
+          {
+            name: "training-and-development",
             title: "Training and Development",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="profile"
-          options={{
-            title: "Profile",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="ourstory"
-          options={{
-            title: "Our Story",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="meet-the-team"
-          options={{
-            title: "Meet The Team",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="cooperative-listing"
-          options={{
-            title: "Cooperative Listing",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="legalcompliance"
-          options={{
-            title: "Legal Compliance",
-            headerLeft: () => (
-              <TouchableOpacity onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
+          },
+          { name: "profile", title: "Profile" },
+          { name: "ourstory", title: "Our Story" },
+          { name: "meet-the-team", title: "Meet The Team" },
+          { name: "cooperative-listing", title: "Cooperative Listing" },
+          { name: "legalcompliance", title: "Legal Compliance" },
+        ].map(({ name, title }) => (
+          <Stack.Screen
+            key={name}
+            name={name}
+            options={{
+              title,
+              headerStyle: { backgroundColor: colors.background },
+              headerTintColor: "#fff", // Ensures text is visible
+              headerLeft: () => (
+                <TouchableOpacity onPress={() => router.back()}>
+                  <Ionicons name="arrow-back" size={24} color="#fff" />
+                </TouchableOpacity>
+              ),
+            }}
+          />
+        ))}
       </Stack>
-      <StatusBar backgroundColor={colors.primary} style="light" />
+      <StatusBar backgroundColor={colors.background} style="light" />
     </>
   );
 };

@@ -154,7 +154,7 @@ const ChatList = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={styles.header}></View>
 
@@ -243,7 +243,7 @@ const ChatList = () => {
                 params: {
                   user: JSON.stringify(item),
                   predefinedMessage:
-                    "Hello 👋 there ",
+                    " ",
                 },
               })
             }
@@ -276,7 +276,7 @@ export default ChatList;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+
   },
   header: {
     paddingHorizontal: 16,
