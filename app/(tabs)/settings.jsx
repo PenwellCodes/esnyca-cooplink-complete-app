@@ -28,6 +28,8 @@ const SettingsScreen = () => {
   });
 
   // Load translations when language changes
+  // Load translations when language changes
+  // Load translations when language changes
   useEffect(() => {
     const loadTranslations = async () => {
       const translated = {};
@@ -111,10 +113,7 @@ const SettingsScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar
-        backgroundColor={colors.primary}
-        style={"light"}
-      />
+      <StatusBar backgroundColor={colors.primary} style={"light"} />
       <ScrollView>
         <Text style={[styles.appName, { color: colors.tertiary }]}>
           {translations.settings}

@@ -110,7 +110,7 @@ const CooperativeUsersScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Top bar with filter button */}
       <View style={styles.topBar}>
         <Menu
