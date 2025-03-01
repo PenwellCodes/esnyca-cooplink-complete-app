@@ -13,16 +13,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { typography, images } from "../../constants";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useStories } from "../../context/appstate/StoriesContext";
+import { useChat } from "../../context/appstate/ChatContext"; // Add this import
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -32,6 +27,7 @@ const ChatList = () => {
   const router = useRouter();
   const { currentUser } = useAuth();
   const { stories: activeStories } = useStories();
+  const { conversations, lastMessages, getSortedChats } = useChat(); // Add this line
   const [chatList, setChatList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [groupMemberCount, setGroupMemberCount] = useState(0);
@@ -64,52 +60,40 @@ const ChatList = () => {
     }
 
     const unsubscribe = onSnapshot(usersQuery, async (snapshot) => {
-      let users = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const users = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      
+      const updatedUsers = users.map(user => {
+        const chatId = currentUser.uid > user.uid
+          ? `${currentUser.uid}_${user.uid}`
+          : `${user.uid}_${currentUser.uid}`;
+          
+        const chatData = conversations[chatId] || [];
+        const lastMessage = chatData[chatData.length - 1];
+        
+        return {
+          ...user,
+          lastMessage: lastMessage?.text || 
+            (lastMessage?.fileUrl ? "📂 File sent" : "Start a conversation"),
+          lastMessageTimestamp: lastMessages[chatId],
+          unreadCount: chatData.filter(
+            msg => !msg.read && msg.sender !== currentUser.uid
+          ).length,
+        };
+      });
 
-      const updatedUsers = await Promise.all(
-        users.map(async (user) => {
-          const chatId =
-            currentUser.uid > user.uid
-              ? `${currentUser.uid}_${user.uid}`
-              : `${user.uid}_${currentUser.uid}`;
+      // Sort users based on last message timestamp
+      const sortedUsers = updatedUsers.sort((a, b) => {
+        const timeA = a.lastMessageTimestamp?.toDate?.() || 0;
+        const timeB = b.lastMessageTimestamp?.toDate?.() || 0;
+        return timeB - timeA;
+      });
 
-          const chatQuery = query(
-            collection(db, "chats", chatId, "messages"),
-            orderBy("timestamp", "desc")
-          );
-
-          return new Promise((resolve) => {
-            onSnapshot(chatQuery, (chatSnapshot) => {
-              const lastMessage =
-                chatSnapshot.docs.length > 0
-                  ? chatSnapshot.docs[0].data()
-                  : null;
-              const unreadMessages = chatSnapshot.docs.filter(
-                (msg) =>
-                  !msg.data().read && msg.data().sender !== currentUser.uid
-              ).length;
-
-              resolve({
-                ...user,
-                lastMessage:
-                  lastMessage?.text ||
-                  (lastMessage?.fileUrl
-                    ? "📂 File sent"
-                    : "Start a conversation"),
-                lastSender: lastMessage?.sender || null,
-                unreadCount: unreadMessages,
-              });
-            });
-          });
-        })
-      );
-
-      setChatList(updatedUsers);
+      setChatList(sortedUsers);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, conversations, lastMessages]);
 
   if (loading) {
     return (

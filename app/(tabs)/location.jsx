@@ -222,12 +222,22 @@ const LocationsScreen = () => {
         provider={PROVIDER_GOOGLE}
         mapType={mapType}
         showsUserLocation
+        showsMyLocationButton={true}
+        showsCompass={true}
+        zoomControlEnabled={true}
         initialRegion={{
           latitude: currentLocation ? currentLocation.latitude : -26.5225,
           longitude: currentLocation ? currentLocation.longitude : 31.4659,
           latitudeDelta: 0.0922,
           longitudeDelta: 0.0421,
         }}
+        customMapStyle={[
+          {
+            featureType: "poi",
+            elementType: "labels",
+            stylers: [{ visibility: "off" }],
+          },
+        ]}
       >
         {searchResults.map(renderMarker)}
         {userLocations.map(renderMarker)}
@@ -334,6 +344,7 @@ const styles = StyleSheet.create({
     height: height * 0.5,
     borderRadius: 10,
     marginVertical: 10,
+    zIndex: 1,
   },
   resultItem: {
     padding: 12,

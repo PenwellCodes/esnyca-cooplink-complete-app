@@ -17,9 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "config": {
-        "googleMaps": {
-          "apiKey": "process.env.GOOGLE_MAPS_API_KEY"
-        }
+        "googleMapsApiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
       }
     },
     "android": {
@@ -30,7 +28,7 @@
       "package": "com.penwellcodes.esnycarecovery",
       "config": {
         "googleMaps": {
-          "apiKey": "process.env.GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
         }
       },
       "permissions": [
