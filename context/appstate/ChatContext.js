@@ -16,15 +16,15 @@ export const ChatProvider = ({ children }) => {
     const [conversations, setConversations] = useState({});
     const [loadingChats, setLoadingChats] = useState(true);
     const [activeChatId, setActiveChatId] = useState(null);
-
-
+    const [lastMessages, setLastMessages] = useState({});
     const [userMap, setUserMap] = useState({});
 
-
-
-    
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            setConversations({});
+            setLastMessages({});
+            return;
+        }
 
         const userUid = currentUser.uid;
 
@@ -59,21 +59,31 @@ export const ChatProvider = ({ children }) => {
             where("participants", "array-contains", userUid)
         );
 
-        const unsubscribeChats = onSnapshot(chatsQuery, (snapshot) => {
-            let chatsData = { ...conversations };
+        const unsubscribeChats = onSnapshot(chatsQuery, async (snapshot) => {
+            const chatUpdates = {};
+            const lastMessageUpdates = {};
+
             snapshot.docs.forEach((chatDoc) => {
                 const chatId = chatDoc.id;
                 const messagesQuery = query(
                     collection(db, "chats", chatId, "messages"),
-                    orderBy("timestamp", "asc")
+                    orderBy("timestamp", "desc")
                 );
 
                 // Subscribe to messages for each chat
-                onSnapshot(messagesQuery, (messagesSnapshot) => {
+                const messageUnsubscribe = onSnapshot(messagesQuery, (messagesSnapshot) => {
                     const messages = messagesSnapshot.docs.map((doc) => ({
                         id: doc.id,
                         ...doc.data(),
                     }));
+
+                    // Store last message for sorting
+                    if (messages.length > 0) {
+                        lastMessageUpdates[chatId] = messages[0].timestamp;
+                    }
+
+                    // Store messages in reverse chronological order
+                    chatUpdates[chatId] = messages.reverse();
 
                     // For group chats (chatId starting with "group_"), show all messages
                     // For individual chats, keep existing behavior
@@ -82,8 +92,10 @@ export const ChatProvider = ({ children }) => {
                             msg.sender === currentUser.uid || 
                             msg.receiver === currentUser.uid
                         )) {
-                        chatsData[chatId] = messages;
-                        setConversations({ ...chatsData });
+                        setConversations(prev => ({
+                            ...prev,
+                            [chatId]: chatUpdates[chatId]
+                        }));
                     }
 
                     // Check for new incoming messages (toast notification)
@@ -107,7 +119,14 @@ export const ChatProvider = ({ children }) => {
                         }
                     });
 
+                    setLastMessages(prev => ({
+                        ...prev,
+                        [chatId]: lastMessageUpdates[chatId]
+                    }));
                 });
+
+                // Clean up message listener when chat is removed
+                return () => messageUnsubscribe();
             });
             setLoadingChats(false);
         });
@@ -122,6 +141,21 @@ export const ChatProvider = ({ children }) => {
         // Your existing implementation
     };
 
+    // Get sorted chat list
+    const getSortedChats = () => {
+        return Object.keys(lastMessages)
+            .sort((a, b) => {
+                const timeA = lastMessages[a]?.toDate?.() || 0;
+                const timeB = lastMessages[b]?.toDate?.() || 0;
+                return timeB - timeA;
+            })
+            .map(chatId => ({
+                chatId,
+                messages: conversations[chatId] || [],
+                lastMessageTime: lastMessages[chatId]
+            }));
+    };
+
     return (
         <ChatContext.Provider
             value={{
@@ -132,6 +166,8 @@ export const ChatProvider = ({ children }) => {
                 activeChatId,
                 setActiveChatId,
                 userMap, // Exposing userMap for group chat sender details
+                getSortedChats,
+                lastMessages
             }}
         >
             {children}
