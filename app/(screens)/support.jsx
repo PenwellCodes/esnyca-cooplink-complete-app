@@ -11,7 +11,26 @@ const services = [
     title: "LEGAL COMPLIANCE",
     titleKey: 'legalCompliance',
     icon: { library: "MaterialIcons", name: "gavel" },
-    info: "Legal compliance services for cooperatives",
+    info: `Comprehensive legal compliance services for cooperatives, including regulatory guidance, documentation, and legal advisory support.     Your trust our responsibility. 
+      Staying compliant with regulatory standards is fundamental for maintaining user trust and organizational integrity
+
+      Affiliation to Apex Body:
+      Cooperatives should be affiliated with an apex body, which ensures representation, coordination, and advocacy within the sector. This provides resources, guidance, and a network of support to strengthen cooperative functions.
+
+      Financial Statements:
+      Regular audited financial statements ensure transparency and accountability.
+
+      Cooperative Capital Fund:
+      Maintaining proper capital structure and fund management.
+
+      User Privacy:
+      Protecting member information and maintaining confidentiality.
+
+      Data Protection:
+      Implementing robust security measures to protect cooperative data.
+
+      Grievance Redressal:
+      Established procedures for handling member complaints and disputes.`,
     infoKey: 'legalComplianceInfo'
   },
   {
@@ -19,7 +38,11 @@ const services = [
     title: "FINANCIAL SERVICES",
     titleKey: 'financialServices',
     icon: { library: "FontAwesome", name: "money" },
-    info: "Financial support and advisory services",
+    info: `
+      Specialized financial services to support cooperative growth.
+      Youth Fund for Cooperative Development, Investment Opportunities,
+      Mentorship and Financial Advisory, Financial Literacy Programs.
+    `,
     infoKey: 'financialServicesInfo'
   },
   {
@@ -27,7 +50,12 @@ const services = [
     title: "TRAINING AND DEVELOPMENT",
     titleKey: 'trainingAndDevelopment',
     icon: { library: "MaterialIcons", name: "school" },
-    info: "Detailed information about Training and Development. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    info:  `
+    Workshops and Skill Development for youth cooperatives.
+    Ongoing Advisory Services for business optimization.
+    Success Stories of transformed youth cooperatives.
+    Topics including financial literacy, cooperative management, and business innovation.
+  `,
     infoKey: 'trainingAndDevelopmentInfo'
   },
   {
@@ -35,7 +63,11 @@ const services = [
     title: "MARKETING AND PROMOTION",
     titleKey: 'marketingAndPromotion',
     icon: { library: "Ionicons", name: "megaphone" },
-    info: "Detailed information about Marketing and Promotion. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    info:  `
+    Marketing initiatives designed to amplify the impact of youth cooperatives.
+    Annual Marketing Events, Media Outreach, Social Media Marketing.
+    Creating value for customers and driving visibility in local markets.
+  `,
     infoKey: 'marketingAndPromotionInfo'
   },
   {
@@ -43,7 +75,12 @@ const services = [
     title: "RESEARCH AND INSIGHTS",
     titleKey: 'researchAndInsights',
     icon: { library: "MaterialIcons", name: "search" },
-    info: "Detailed information about Research and Insights. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. [Dummy long text...]",
+    info: `
+      Guidance Research, Matchmaking Services, Linkable Businesses.
+      Market research, competitive assessments, and trend analyses.
+      Connecting youth cooperatives with potential partners and investors.
+      Identifying complementary businesses for cooperative activities.
+    `,
     infoKey: 'researchAndInsightsInfo'
   },
 ];
@@ -60,7 +97,6 @@ const ServiceScreen = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
-  // Load translations
   useEffect(() => {
     const loadTranslations = async () => {
       const translated = {
@@ -68,18 +104,14 @@ const ServiceScreen = () => {
         moreInfo: await t('More Information'),
         services: {}
       };
-
-      // Translate service titles and info
       for (const service of services) {
         translated.services[service.id] = {
           title: await t(service.title),
           info: await t(service.info)
         };
       }
-      
       setTranslations(translated);
     };
-
     loadTranslations();
   }, [t]);
 
@@ -95,13 +127,9 @@ const ServiceScreen = () => {
   const renderIcon = (icon) => {
     switch (icon.library) {
       case "MaterialIcons":
-        return (
-          <MaterialIcons name={icon.name} size={40} color={colors.primary} />
-        );
+        return <MaterialIcons name={icon.name} size={40} color={colors.primary} />;
       case "FontAwesome":
-        return (
-          <FontAwesome name={icon.name} size={40} color={colors.primary} />
-        );
+        return <FontAwesome name={icon.name} size={40} color={colors.primary} />;
       case "Ionicons":
         return <Ionicons name={icon.name} size={40} color={colors.primary} />;
       default:
@@ -110,9 +138,7 @@ const ServiceScreen = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-   
-      {/* Grid of Service Cards */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>  
       <FlatList
         data={services}
         numColumns={3}
@@ -123,10 +149,10 @@ const ServiceScreen = () => {
             style={styles.menuItemContainer}
             onPress={() => openDrawer(item)}
           >
-            <View style={[styles.menuItem, { borderColor: colors.error }]}>
+            <View style={[styles.menuItem, { borderColor: colors.error }]}>  
               {renderIcon(item.icon)}
             </View>
-            <Text style={[styles.menuText, { color: colors.tertiary }]}>
+            <Text style={[styles.menuText, { color: colors.tertiary }]}>  
               {translations.services[item.id]?.title || item.title}
             </Text>
           </TouchableOpacity>
@@ -140,9 +166,7 @@ const ServiceScreen = () => {
           contentContainerStyle={styles.modalContainer}
         >
           <ScrollView style={styles.drawerScroll}>
-            <Text style={styles.drawerHeading}>
-              {translations.moreInfo}
-            </Text>
+            <Text style={styles.drawerHeading}>{translations.moreInfo}</Text>
             {selectedService && (
               <>
                 <Text style={styles.drawerTitle}>
@@ -173,7 +197,7 @@ const styles = StyleSheet.create({
   },
   menuItemContainer: {
     flex: 1,
-    alignItems: "flex-start", // changed from center to flex-start
+    alignItems: "center",
     margin: 10,
   },
   menuItem: {
@@ -186,7 +210,7 @@ const styles = StyleSheet.create({
   },
   menuText: {
     marginTop: 5,
-    textAlign: "left",
+    textAlign: "center",
     fontSize: 14,
     fontWeight: "bold",
   },

@@ -84,17 +84,13 @@ const SignIn = () => {
           />
         </View>
 
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/(auth)/reset-password")}>
           <Text style={[styles.forgotPassword, typography.small, { color: colors.primary }]}>
             Forget password?
           </Text>
         </TouchableOpacity>
 
-        {/* Remember Me */}
-        <View style={styles.rememberContainer}>
-          <TouchableOpacity style={styles.checkbox} />
-          <Text style={[typography.body, { color: colors.text }]}>Remember me</Text>
-        </View>
+    
 
         {/* Sign In Button */}
         <CustomButton
