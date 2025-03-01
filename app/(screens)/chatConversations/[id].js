@@ -37,6 +37,7 @@ import {
 } from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Audio } from "expo-av";
+import { Stack } from "expo-router";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -124,6 +125,13 @@ const ChatScreen = () => {
       isMounted = false;
     };
   }, []);
+
+  // Add this useEffect to mark messages as read when the chat is opened
+  useEffect(() => {
+    if (messages.length > 0) {
+      markMessagesAsRead(chatId, messages);
+    }
+  }, [messages, chatId]);
 
   const sendMessage = async () => {
     if (!messageText.trim()) return;
@@ -609,69 +617,79 @@ const ChatScreen = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
-      <View style={styles.header}>
-        <Image
-          source={{ uri: user.profilePicture || placeholderAvatar }}
-          style={styles.headerAvatar}
-        />
-        <Text style={styles.headerTitle}>{user.displayName}</Text>
-      </View>
-
-      {messages.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Start a conversation</Text>
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={{ padding: 10 }}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-        />
-      )}
-
-      {uploading && (
-        <View style={styles.uploadingOverlay}>
-          <Text style={styles.uploadProgressText}>
-            {Math.floor(uploadProgress)}%
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.inputContainer}>
-        <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
-          <Ionicons name="image-outline" size={24} color="#007AFF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={pickDocuments} style={styles.attachmentButton}>
-          <Ionicons name="attach-outline" size={24} color="#007AFF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={isRecording ? stopRecording : startRecording}
-          style={styles.attachmentButton}
-        >
-          <Ionicons
-            name={isRecording ? "stop-circle" : "mic-outline"}
-            size={24}
-            color={isRecording ? "red" : "#007AFF"}
+    <>
+      <Stack.Screen 
+        options={{ 
+          headerShown: false 
+        }} 
+      />
+      <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
+        <View style={[styles.header, { marginTop: 35 }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <Image
+            source={{ uri: user.profilePic || placeholderAvatar }}
+            style={styles.headerAvatar}
           />
-        </TouchableOpacity>
+          <Text style={styles.headerTitle}>{user.displayName}</Text>
+        </View>
 
-        <TextInput
-          placeholder="Type a message..."
-          value={messageText}
-          onChangeText={setMessageText}
-          style={styles.input}
-        />
-        <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
-          <Ionicons name="send" size={24} color="#007AFF" />
-        </TouchableOpacity>
+        {messages.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Start a conversation</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
+            contentContainerStyle={{ padding: 10 }}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+          />
+        )}
+
+        {uploading && (
+          <View style={styles.uploadingOverlay}>
+            <Text style={styles.uploadProgressText}>
+              {Math.floor(uploadProgress)}%
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.inputContainer}>
+          <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
+            <Ionicons name="image-outline" size={24} color="#007AFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={pickDocuments} style={styles.attachmentButton}>
+            <Ionicons name="attach-outline" size={24} color="#007AFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={isRecording ? stopRecording : startRecording}
+            style={styles.attachmentButton}
+          >
+            <Ionicons
+              name={isRecording ? "stop-circle" : "mic-outline"}
+              size={24}
+              color={isRecording ? "red" : "#007AFF"}
+            />
+          </TouchableOpacity>
+
+          <TextInput
+            placeholder="Type a message..."
+            value={messageText}
+            onChangeText={setMessageText}
+            style={styles.input}
+          />
+          <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
+            <Ionicons name="send" size={24} color="#007AFF" />
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </>
   );
 };
 
@@ -686,6 +704,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 10,
     backgroundColor: "#007AFF",
+    paddingVertical: 15,
   },
   headerAvatar: {
     width: 40,
@@ -696,6 +715,10 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 18,
     marginLeft: 10,
+  },
+  backButton: {
+    marginRight: 10,
+    padding: 5,
   },
   emptyContainer: {
     flex: 1,

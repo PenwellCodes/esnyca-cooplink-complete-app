@@ -70,14 +70,17 @@ const ChatList = () => {
         const chatData = conversations[chatId] || [];
         const lastMessage = chatData[chatData.length - 1];
         
+        // Only count messages that are not read and not from current user
+        const unreadCount = chatData.filter(
+          msg => !msg.read && msg.sender !== currentUser.uid
+        ).length;
+        
         return {
           ...user,
           lastMessage: lastMessage?.text || 
             (lastMessage?.fileUrl ? "📂 File sent" : "Start a conversation"),
           lastMessageTimestamp: lastMessages[chatId],
-          unreadCount: chatData.filter(
-            msg => !msg.read && msg.sender !== currentUser.uid
-          ).length,
+          unreadCount,
         };
       });
 

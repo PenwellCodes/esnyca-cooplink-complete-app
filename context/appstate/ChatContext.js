@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "./AuthContext";
 import Toast from "react-native-toast-message";
@@ -18,17 +18,33 @@ export const ChatProvider = ({ children }) => {
     const [activeChatId, setActiveChatId] = useState(null);
     const [lastMessages, setLastMessages] = useState({});
     const [userMap, setUserMap] = useState({});
+    const [unreadCounts, setUnreadCounts] = useState({});
+
+    // Function to update unread counts
+    const updateUnreadCount = (chatId, messages) => {
+        const unreadCount = messages.filter(
+            msg => !msg.read && msg.sender !== currentUser?.uid
+        ).length;
+        
+        setUnreadCounts(prev => ({
+            ...prev,
+            [chatId]: unreadCount
+        }));
+        
+        return unreadCount;
+    };
 
     useEffect(() => {
         if (!currentUser) {
             setConversations({});
             setLastMessages({});
+            setUnreadCounts({});
             return;
         }
 
         const userUid = currentUser.uid;
 
-        // Fetch users for chat list and create userMap
+        // Fetch users for chat list
         let usersQuery;
         if (currentUser.role === "cooperative") {
             usersQuery = query(collection(db, "users"), where("uid", "!=", userUid));
@@ -53,16 +69,13 @@ export const ChatProvider = ({ children }) => {
             setUserMap(newUserMap);
         });
 
-        // Listen to chats where currentUser is a participant
+        // Listen to chats
         const chatsQuery = query(
             collection(db, "chats"),
             where("participants", "array-contains", userUid)
         );
 
-        const unsubscribeChats = onSnapshot(chatsQuery, async (snapshot) => {
-            const chatUpdates = {};
-            const lastMessageUpdates = {};
-
+        const unsubscribeChats = onSnapshot(chatsQuery, (snapshot) => {
             snapshot.docs.forEach((chatDoc) => {
                 const chatId = chatDoc.id;
                 const messagesQuery = query(
@@ -71,62 +84,52 @@ export const ChatProvider = ({ children }) => {
                 );
 
                 // Subscribe to messages for each chat
-                const messageUnsubscribe = onSnapshot(messagesQuery, (messagesSnapshot) => {
+                onSnapshot(messagesQuery, (messagesSnapshot) => {
                     const messages = messagesSnapshot.docs.map((doc) => ({
                         id: doc.id,
                         ...doc.data(),
                     }));
 
-                    // Store last message for sorting
+                    // Update conversations and last messages
+                    setConversations(prev => ({
+                        ...prev,
+                        [chatId]: messages.reverse()
+                    }));
+
                     if (messages.length > 0) {
-                        lastMessageUpdates[chatId] = messages[0].timestamp;
-                    }
-
-                    // Store messages in reverse chronological order
-                    chatUpdates[chatId] = messages.reverse();
-
-                    // For group chats (chatId starting with "group_"), show all messages
-                    // For individual chats, keep existing behavior
-                    if (chatId.startsWith('group_') || 
-                        messages.some(msg => 
-                            msg.sender === currentUser.uid || 
-                            msg.receiver === currentUser.uid
-                        )) {
-                        setConversations(prev => ({
+                        setLastMessages(prev => ({
                             ...prev,
-                            [chatId]: chatUpdates[chatId]
+                            [chatId]: messages[0].timestamp
                         }));
                     }
 
-                    // Check for new incoming messages (toast notification)
+                    // Update unread count
+                    const unreadCount = updateUnreadCount(chatId, messages);
+
+                    // Check for new messages and show toast
                     messagesSnapshot.docChanges().forEach((change) => {
                         if (change.type === "added") {
                             const newMessage = change.doc.data();
                             if (
                                 newMessage.sender !== currentUser.uid &&
-                                chatId !== activeChatId
+                                chatId !== activeChatId &&
+                                !newMessage.read
                             ) {
                                 const sender = userMap[newMessage.sender];
                                 if (sender) {
                                     Toast.show({
                                         type: "info",
-                                        text1: `🆕 New message from ${sender.displayName}`,
+                                        text1: `New message from ${sender.displayName}`,
+                                        text2: `${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`,
                                         position: "top",
-                                        visibilityTime: 4000,
+                                        visibilityTime: 3000,
+                                        autoHide: true,
                                     });
                                 }
                             }
                         }
                     });
-
-                    setLastMessages(prev => ({
-                        ...prev,
-                        [chatId]: lastMessageUpdates[chatId]
-                    }));
                 });
-
-                // Clean up message listener when chat is removed
-                return () => messageUnsubscribe();
             });
             setLoadingChats(false);
         });
@@ -138,7 +141,34 @@ export const ChatProvider = ({ children }) => {
     }, [currentUser, activeChatId]);
 
     const markMessagesAsRead = async (chatId, messages) => {
-        // Your existing implementation
+        try {
+            const unreadMessages = messages.filter(
+                msg => !msg.read && msg.sender !== currentUser.uid
+            );
+
+            if (unreadMessages.length === 0) return;
+
+            const batch = writeBatch(db);
+            
+            for (const message of unreadMessages) {
+                if (message.id) {
+                    const messageRef = doc(db, "chats", chatId, "messages", message.id);
+                    batch.update(messageRef, { read: true });
+                }
+            }
+
+            await batch.commit();
+            
+            // Update local unread count
+            updateUnreadCount(chatId, messages.map(msg => 
+                unreadMessages.includes(msg) ? { ...msg, read: true } : msg
+            ));
+
+            // Dismiss any existing toast notifications for this chat
+            Toast.hide();
+        } catch (error) {
+            console.error("Error marking messages as read:", error);
+        }
     };
 
     // Get sorted chat list
@@ -165,9 +195,10 @@ export const ChatProvider = ({ children }) => {
                 markMessagesAsRead,
                 activeChatId,
                 setActiveChatId,
-                userMap, // Exposing userMap for group chat sender details
+                userMap,
                 getSortedChats,
-                lastMessages
+                lastMessages,
+                unreadCounts
             }}
         >
             {children}
