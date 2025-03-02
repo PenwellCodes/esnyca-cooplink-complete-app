@@ -4,11 +4,11 @@
     "slug": "Esnyca",
     "version": "5.1.3",
     "orientation": "portrait",
-    "icon": "./assets/image.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/image.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -26,7 +26,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.esnyca.app",
-      "versionCode": 6, 
+      "versionCode": 6,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
