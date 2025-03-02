@@ -218,22 +218,74 @@ const ChatScreen = () => {
 
   const pickDocuments = async () => {
     try {
-      // Only enable multiple selection on web
-      const options = Platform.OS === 'web' ? { multiple: true } : {};
-      const result = await DocumentPicker.getDocumentAsync(options);
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Allow all file types
+        copyToCacheDirectory: true
+      });
 
-      if (result.type === 'success') {
-        setSelectedDocuments((prevDocuments) => [
-          ...prevDocuments,
-          result,
-        ]);
-      } else {
-        console.log('Document selection canceled.');
+      if (result.assets && result.assets.length > 0) {
+        // Handle the new DocumentPicker response format
+        const file = result.assets[0];
+        await sendDocument(file);
       }
     } catch (error) {
-      console.log('Error picking documents:', error);
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
     }
   };
+
+  const sendDocument = async (file) => {
+    if (!file) return;
+
+    const tempMessage = {
+      id: Date.now().toString(),
+      sender: currentUser.uid,
+      receiver: user.uid,
+      fileUrl: file.uri,
+      fileName: file.name,
+      type: "file",
+      timestamp: new Date(),
+      status: "uploading",
+    };
+
+    setLocalMessages((prev) => [...prev, tempMessage]);
+    flatListRef.current?.scrollToEnd({ animated: true });
+    setUploading(true);
+
+    try {
+      const storagePath = `chatAttachments/${chatId}/${Date.now()}_${file.name}`;
+      const downloadURL = await uploadFile(file.uri, storagePath);
+
+      const message = {
+        sender: currentUser.uid,
+        receiver: user.uid,
+        fileUrl: downloadURL,
+        fileName: file.name,
+        type: "file",
+        timestamp: serverTimestamp(),
+        status: "sent",
+      };
+
+      const chatDocRef = doc(db, "chats", chatId);
+      const chatDocSnap = await getDoc(chatDocRef);
+      if (!chatDocSnap.exists()) {
+        await setDoc(chatDocRef, {
+          participants: [currentUser.uid, user.uid],
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      await addDoc(collection(db, "chats", chatId, "messages"), message);
+      setLocalMessages([]);
+    } catch (error) {
+      console.error("Error sending document:", error);
+      Alert.alert('Error', 'Failed to send document');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
   const sendImage = async () => {
     const uri = await pickImage();
     if (!uri) return;
@@ -715,7 +767,11 @@ const ChatScreen = () => {
             placeholder="Type a message..."
             value={messageText}
             onChangeText={setMessageText}
-            style={styles.input}
+            style={[styles.input, { 
+              borderColor: colors.error,
+              color: colors.error
+            }]}
+            placeholderTextColor={colors.error}
           />
           <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
             <Ionicons name="send" size={24} color="#007AFF" />

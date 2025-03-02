@@ -92,6 +92,7 @@ const CooperativeUsersScreen = () => {
   const renderUserCard = ({ item }) => (
     <View style={[
       styles.card,
+      { backgroundColor: colors.background },
       highlightId === item.id && {
         borderColor: colors.primary,
         borderWidth: 2,
@@ -139,11 +140,11 @@ const CooperativeUsersScreen = () => {
           onDismiss={() => setMenuVisible(false)}
           anchor={
             <TouchableOpacity
-              style={styles.filterButton}
+              style={[styles.filterButton, { borderColor: colors.primary }]}
               onPress={() => setMenuVisible(true)}
             >
-              <Ionicons name="filter" size={20} color="black" />
-              <Text style={styles.filterButtonText}> Filter</Text>
+              <Ionicons name="filter" size={20} color={colors.primary} />
+              <Text style={[styles.filterButtonText, { color: colors.primary }]}> Filter</Text>
             </TouchableOpacity>
           }
         >
@@ -199,7 +200,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#d3d3d3",
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 10,
     marginBottom: 10,
-    backgroundColor: "white",
     alignItems: "flex-start",
   },
   leftColumn: {

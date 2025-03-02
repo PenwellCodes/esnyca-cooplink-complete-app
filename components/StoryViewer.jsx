@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
-const STORY_DURATION = 2000;
+const STORY_DURATION = 5000;
 
 const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
