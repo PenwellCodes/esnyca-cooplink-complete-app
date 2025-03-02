@@ -135,12 +135,17 @@ const ChatScreen = () => {
 
   const sendMessage = async () => {
     if (!messageText.trim()) return;
+    
+    // Check if there's a story preview in the params
+    const storyPreview = params.storyPreview ? JSON.parse(params.storyPreview) : null;
+    
     const tempMessage = {
       id: Date.now().toString(),
       sender: currentUser.uid,
       receiver: user.uid,
       text: messageText,
-      type: "text",
+      type: storyPreview ? "story_reply" : "text",
+      storyPreview,
       timestamp: new Date(),
       status: "sent",
     };
@@ -160,7 +165,8 @@ const ChatScreen = () => {
         sender: currentUser.uid,
         receiver: user.uid,
         text: messageText,
-        type: "text",
+        type: storyPreview ? "story_reply" : "text",
+        storyPreview,
         timestamp: serverTimestamp(),
         status: "sent",
       });
@@ -404,6 +410,33 @@ const ChatScreen = () => {
   };
 
   const renderMessage = ({ item }) => {
+    if (item.type === "story_reply") {
+      return (
+        <View
+          style={[
+            styles.messageBubble,
+            {
+              alignSelf: item.sender === currentUser.uid ? "flex-end" : "flex-start",
+            },
+          ]}
+        >
+          {item.storyPreview?.imageURL && (
+            <View style={styles.storyPreviewContainer}>
+              <Image 
+                source={{ uri: item.storyPreview.imageURL }} 
+                style={styles.storyPreviewImage}
+              />
+              {item.storyPreview.caption && (
+                <Text style={styles.storyPreviewCaption}>
+                  {item.storyPreview.caption}
+                </Text>
+              )}
+            </View>
+          )}
+          <Text style={styles.messageText}>{item.text}</Text>
+        </View>
+      );
+    }
     if (item.type === "image") {
       return (
         <View
@@ -789,5 +822,24 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 16,
     color: "#007AFF",
+  },
+  storyPreviewContainer: {
+    marginBottom: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  storyPreviewImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+  },
+  storyPreviewCaption: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 8,
+    color: 'white',
   },
 });

@@ -52,9 +52,31 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
 
   const handleReply = () => {
     if (replyText.trim()) {
-      onReply(stories[currentIndex], replyText);
+      // Get current story data
+      const currentStory = stories[currentIndex];
+      const replyData = {
+        text: replyText.trim(),
+        storyPreview: {
+          imageURL: currentStory?.imageURL,
+          caption: currentStory?.caption,
+          storyId: currentStory?.id
+        }
+      };
+      
+      onReply(stories[currentIndex], replyData);
       setReplyText('');
+      startProgress();
     }
+  };
+
+  const handleInputFocus = () => {
+    setIsPaused(true);
+    progressAnim.stopAnimation();
+  };
+
+  const handleInputBlur = () => {
+    // Don't resume automatically on blur, let the send action handle it
+    // This prevents auto-resume when user is still typing
   };
 
   const togglePause = () => {
@@ -72,15 +94,6 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
       >
-        <View style={styles.header}>
-          <Text style={styles.userName}>
-            {userName?.length > 8 ? `${userName.substring(0, 8)}...` : userName}
-          </Text>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Ionicons name="close" size={28} color="white" />
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.progressContainer}>
           {stories.map((_, index) => (
             <View key={index} style={styles.progressBar}>
@@ -88,35 +101,49 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
                 style={[
                   styles.progressFill,
                   {
-                    width: index === currentIndex ? progressAnim : index < currentIndex ? '100%' : 0,
-                  },
+                    width: index === currentIndex 
+                      ? progressAnim 
+                      : index < currentIndex 
+                        ? '100%' 
+                        : 0
+                  }
                 ]}
               />
             </View>
           ))}
         </View>
 
-        <TouchableOpacity 
-          activeOpacity={1}
-          onPress={togglePause}
-          style={styles.contentContainer}
-        >
-          {stories[currentIndex]?.imageURL ? (
-            <Image
-              source={{ uri: stories[currentIndex].imageURL }}
-              style={styles.storyImage}
-              resizeMode="contain"
-            />
-          ) : null}
-          
-          {stories[currentIndex]?.caption && (
-            <View style={styles.captionContainer}>
-              <Text style={styles.captionText}>
-                {stories[currentIndex].caption}
-              </Text>
-            </View>
-          )}
+        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <Ionicons name="close" size={28} color="white" />
         </TouchableOpacity>
+
+        <View style={styles.contentWrapper}>
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={togglePause}
+            style={styles.contentContainer}
+          >
+            {stories[currentIndex]?.imageURL ? (
+              <Image
+                source={{ uri: stories[currentIndex].imageURL }}
+                style={styles.storyImage}
+                resizeMode="contain"
+              />
+            ) : null}
+            
+            {stories[currentIndex]?.caption && (
+              <View style={styles.captionContainer}>
+                <Text style={styles.captionText}>
+                  {stories[currentIndex].caption}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.userName}>
+            {userName?.length > 8 ? `${userName.substring(0, 8)}...` : userName}
+          </Text>
+        </View>
 
         <View style={styles.replyContainer}>
           <TextInput
@@ -125,8 +152,8 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
             placeholderTextColor="#999"
             value={replyText}
             onChangeText={setReplyText}
-            onFocus={() => setIsPaused(true)}
-            onBlur={() => setIsPaused(false)}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
           />
           <TouchableOpacity 
             style={styles.sendButton}
@@ -149,7 +176,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 40,
     right: 20,
-    zIndex: 1,
+    zIndex: 2,
   },
   progressContainer: {
     flexDirection: 'row',
@@ -175,7 +202,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     padding: 15,
     paddingTop: 40,
@@ -184,6 +211,17 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+    textAlign: 'center',
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  contentWrapper: {
+    flex: 1,
+    position: 'relative',
   },
   contentContainer: {
     flex: 1,
