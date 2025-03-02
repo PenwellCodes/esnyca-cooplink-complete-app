@@ -2,13 +2,12 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Image,
   ActivityIndicator,
 } from "react-native";
-import { useTheme, Snackbar } from "react-native-paper";
+import { useTheme, Snackbar, TextInput } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import { CustomButton } from "./../../components";
 import { typography, images } from "../../constants";
@@ -63,34 +62,30 @@ const SignIn = () => {
 
       {/* Form Section */}
       <View style={styles.formContainer}>
-        <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={20} color={colors.primary} />
-          <TextInput
-            placeholder="Email"
-            style={[styles.input, typography.body]}
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
+        <TextInput
+          mode="outlined"
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+          left={<TextInput.Icon icon="email" color={colors.primary} />}
+        />
 
-        <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color={colors.primary} />
-          <TextInput
-            placeholder="Password"
-            secureTextEntry
-            style={[styles.input, typography.body]}
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
+        <TextInput
+          mode="outlined"
+          label="Password"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+          style={styles.input}
+          left={<TextInput.Icon icon="lock" color={colors.primary} />}
+        />
 
         <TouchableOpacity onPress={() => router.push("/(auth)/reset-password")}>
           <Text style={[styles.forgotPassword, typography.small, { color: colors.primary }]}>
             Forget password?
           </Text>
         </TouchableOpacity>
-
-    
 
         {/* Sign In Button */}
         <CustomButton
@@ -107,9 +102,9 @@ const SignIn = () => {
 
         {/* Sign Up Link */}
         <TouchableOpacity onPress={() => router.push("/(auth)/sign-up")}>
-          <Text style={[styles.signUpText, typography.small]}>
+          <Text style={{ color: colors.error }}>
             DON'T HAVE AN ACCOUNT?{" "}
-            <Text style={{ color: colors.primary, fontWeight: "bold" }}>
+            <Text style={{ color: colors.error, fontWeight: "bold" }}>
               SIGN UP NOW
             </Text>
           </Text>
@@ -151,15 +146,13 @@ const styles = StyleSheet.create({
   },
   title: { marginTop: 10 },
   formContainer: { flex: 1, padding: 20, justifyContent: "center" },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-    paddingVertical: 8,
-    marginBottom: 20,
+  input: { 
+    marginBottom: 15,
+    backgroundColor: 'transparent'
   },
-  input: { flex: 1, marginLeft: 10 },
+  inputContainer: {
+    // Remove or comment out the old inputContainer style
+  },
   forgotPassword: { alignSelf: "flex-end", marginBottom: 20 },
   rememberContainer: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
   checkbox: { width: 20, height: 20, borderWidth: 1, borderColor: "#000", marginRight: 10 },

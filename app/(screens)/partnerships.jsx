@@ -67,10 +67,7 @@ const Partnerships = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Appbar Header */}
-      <Appbar.Header style={{ backgroundColor: "#2196F3" }}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Partnerships" color="white" />
-      </Appbar.Header>
+      
 
       {/* Partner Cards */}
       <FlatList
@@ -109,13 +106,20 @@ const Partnerships = () => {
         <Modal
           visible={isDrawerVisible}
           onDismiss={closeDrawer}
-          contentContainerStyle={styles.modalContainer}
+          contentContainerStyle={[
+            styles.modalContainer, 
+            { backgroundColor: colors.background }
+          ]}
         >
-          <Text style={styles.drawerHeading}>More Information</Text>
+          <Text style={[styles.drawerHeading, { color: colors.error }]}>
+            More Information
+          </Text>
           {selectedPartner && (
             <>
-              <Text style={styles.drawerTitle}>{selectedPartner.title}</Text>
-              <Text style={styles.drawerDescription}>
+              <Text style={[styles.drawerTitle, { color: colors.error }]}>
+                {selectedPartner.title}
+              </Text>
+              <Text style={[styles.drawerDescription, { color: colors.error }]}>
                 {selectedPartner.description}
               </Text>
               {selectedPartner.facebookUrl && (
@@ -123,12 +127,10 @@ const Partnerships = () => {
                   style={styles.facebookButton}
                   onPress={() => openFacebook(selectedPartner.facebookUrl)}
                 >
-                  <FontAwesome
-                    name="facebook"
-                    size={24}
-                    color={colors.primary}
-                  />
-                  <Text style={styles.facebookText}>Facebook</Text>
+                  <FontAwesome name="facebook" size={24} color={colors.primary} />
+                  <Text style={[styles.facebookText, { color: colors.primary }]}>
+                    Facebook
+                  </Text>
                 </TouchableOpacity>
               )}
             </>
@@ -172,7 +174,6 @@ const styles = StyleSheet.create({
     borderRadius: 40,
   },
   modalContainer: {
-    backgroundColor: "#fff",
     padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -193,7 +194,6 @@ const styles = StyleSheet.create({
   },
   drawerDescription: {
     fontSize: 14,
-    color: "#444",
     marginBottom: 10,
   },
   facebookButton: {

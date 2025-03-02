@@ -163,19 +163,24 @@ const ServiceScreen = () => {
         <Modal
           visible={isDrawerVisible}
           onDismiss={closeDrawer}
-          contentContainerStyle={styles.modalContainer}
+          contentContainerStyle={[
+            styles.modalContainer, 
+            { backgroundColor: colors.background }
+          ]}
         >
           <ScrollView style={styles.drawerScroll}>
-            <Text style={styles.drawerHeading}>{translations.moreInfo}</Text>
+            <Text style={[styles.drawerHeading, { color: colors.error }]}>
+              {translations.moreInfo}
+            </Text>
             {selectedService && (
               <>
-                <Text style={styles.drawerTitle}>
+                <Text style={[styles.drawerTitle, { color: colors.error }]}>
                   {translations.services[selectedService.id]?.title || selectedService.title}
                 </Text>
                 <Card style={styles.cardCover}>
-                  <Card.Cover source={{ uri: "https://picsum.photos/700" }} />
+                  <Card.Cover source={{ uri: "https://media.istockphoto.com/id/625736338/photo/stack-of-hands-showing-unity.jpg?s=612x612&w=0&k=20&c=20mAQjGRQ5XVKqHe2qFguqGZ4dwto6lxxinciCfnVI0=" }} />
                 </Card>
-                <Text style={styles.drawerDescription}>
+                <Text style={[styles.drawerDescription, { color: colors.error }]}>
                   {translations.services[selectedService.id]?.info || selectedService.info}
                 </Text>
               </>
@@ -215,7 +220,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   modalContainer: {
-    backgroundColor: "#fff",
     padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -240,7 +244,6 @@ const styles = StyleSheet.create({
   },
   drawerDescription: {
     fontSize: 14,
-    color: "#444",
     marginTop: 10,
   },
   cardCover: {

@@ -156,14 +156,15 @@ const Home = () => {
         </Animated.Text>
       </View>
       {/* Updated Search Box */}
-      <View style={styles.searchContainer}>
+      <View style={[styles.searchContainer, { borderColor: colors.error }]}>
         <TextInput
           placeholder={translations.search}
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.error }]}
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={handleSearch}
           returnKeyType="search"
+          placeholderTextColor={colors.error}
         />
         <TouchableOpacity onPress={handleSearch}>
           <Ionicons name="search" size={28} color={colors.primary} />
