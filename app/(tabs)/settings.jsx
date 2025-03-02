@@ -27,6 +27,18 @@ const SettingsScreen = () => {
     close: "Close",
   });
 
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!currentUser) {
+      router.replace('/sign-in');
+    }
+  }, [currentUser]);
+
+  if (!currentUser) {
+    return null;
+  }
+
   // Load translations when language changes
   // Load translations when language changes
   // Load translations when language changes
@@ -50,7 +62,6 @@ const SettingsScreen = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [signOutDialogVisible, setSignOutDialogVisible] = useState(false);
-  const router = useRouter();
 
   const handleUpdateProfile = () => {
     router.push("/(screens)/profile");
