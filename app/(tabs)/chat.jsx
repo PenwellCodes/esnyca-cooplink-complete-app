@@ -111,13 +111,20 @@ const ChatList = () => {
     return groups;
   }, [activeStories]);
 
-  const [selectedUserStories, setSelectedUserStories] = useState([]);
+  const [selectedUserStories, setSelectedUserStories] = useState({
+    stories: [],
+    userName: ''
+  });
+
   const [isStoryViewerVisible, setIsStoryViewerVisible] = useState(false);
 
   const handleStoryPress = (userId) => {
     if (groupedStories[userId]) {
-      const userName = chatList.find(user => user.uid === userId)?.displayName || '';
-      setSelectedUserStories(groupedStories[userId]);
+      const storyUser = chatList.find(user => user.uid === userId);
+      setSelectedUserStories({
+        stories: groupedStories[userId],
+        userName: storyUser?.displayName || 'Unknown User'
+      });
       setIsStoryViewerVisible(true);
     }
   };
@@ -189,46 +196,61 @@ const ChatList = () => {
             </TouchableOpacity>
           )}
           
-          {/* Render user story containers */}
-          {Object.entries(groupedStories).map(([userId, stories]) => (
-            <TouchableOpacity
-              key={userId}
-              style={styles.statusItem}
-              onPress={() => handleStoryPress(userId)}
-            >
-              <LinearGradient
-                colors={["#a8e0ff", "#8ee3f5"]}
-                style={styles.statusBorder}
+          {/* Render user story containers with usernames */}
+          {Object.entries(groupedStories).map(([userId, stories]) => {
+            const storyUser = chatList.find(user => user.uid === userId);
+            const displayName = storyUser?.displayName || 'Unknown';
+            const shortName = displayName.length > 8 
+              ? `${displayName.substring(0, 8)}...` 
+              : displayName;
+
+            return (
+              <TouchableOpacity
+                key={userId}
+                style={styles.statusItem}
+                onPress={() => handleStoryPress(userId)}
               >
-                <View style={styles.statusInner}>
-                  <Image
-                    source={{ uri: stories[0].imageURL }}
-                    style={styles.statusImage}
-                  />
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
+                <LinearGradient
+                  colors={["#a8e0ff", "#8ee3f5"]}
+                  style={styles.statusBorder}
+                >
+                  <View style={styles.statusInner}>
+                    <Image
+                      source={{ uri: stories[0].imageURL }}
+                      style={styles.statusImage}
+                    />
+                  </View>
+                </LinearGradient>
+                <Text style={[styles.menuText, typography.small]}>
+                  {shortName}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
       {/* Story Viewer Modal */}
       <StoryViewer
-        stories={selectedUserStories}
+        stories={selectedUserStories.stories}
         isVisible={isStoryViewerVisible}
-        userName={selectedUserStories[0]?.userName || ''}
+        userName={selectedUserStories.userName}
         onClose={() => {
           setIsStoryViewerVisible(false);
-          setSelectedUserStories([]);
+          setSelectedUserStories({ stories: [], userName: '' });
         }}
-        onReply={(story, replyText) => {
-          router.push({
-            pathname: `/(screens)/chatConversations/${story.userId}`,
-            params: {
-              user: JSON.stringify(userMap[story.userId]),
-              predefinedMessage: replyText,
-            },
-          });
+        onReply={(story, replyData) => {
+          const storyUser = chatList.find(user => user.uid === story.userId);
+          if (storyUser) {
+            router.push({
+              pathname: `/(screens)/chatConversations/${story.userId}`,
+              params: {
+                user: JSON.stringify(storyUser),
+                predefinedMessage: replyData.text,
+                storyPreview: JSON.stringify(replyData.storyPreview)
+              },
+            });
+          }
           setIsStoryViewerVisible(false);
         }}
       />
@@ -236,12 +258,12 @@ const ChatList = () => {
       {/* Group Chat Item */}
       <TouchableOpacity
         style={[styles.chatItem, { backgroundColor: "#8ee4f59c" }]}
-        onPress={() =>
+        onPress={() => {
           router.push({
             pathname: "/(screens)/group-chat",
             params: { id: groupChat.uid, group: JSON.stringify(groupChat) },
           })
-        }
+        }}
       >
         <Image
           source={{ uri: groupChat.profilePicture }}
@@ -264,7 +286,7 @@ const ChatList = () => {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.chatItem}
-            onPress={() =>
+            onPress={() => {
               router.push({
                 pathname: `/(screens)/chatConversations/${item.uid}`,
                 params: {
@@ -273,7 +295,7 @@ const ChatList = () => {
                     " ",
                 },
               })
-            }
+            }}
           >
             <Image
               source={{ uri: item.profilePic || placeholderAvatar }}
@@ -298,12 +320,11 @@ const ChatList = () => {
   );
 };
 
-export default ChatList;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   header: {
     paddingHorizontal: 16,
@@ -345,6 +366,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     textAlign: "center",
+    color: "#333", // Add this to ensure text visibility
+    width: 60, // Add this to ensure consistent width
   },
   chatList: {
     paddingHorizontal: 16,
@@ -398,3 +421,5 @@ const styles = StyleSheet.create({
     height: 50,
   },
 });
+
+export default ChatList;
