@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image, ActivityIndicator, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router'; // Add this import
 import * as ImagePicker from 'expo-image-picker';
 import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -11,6 +12,7 @@ import { useAuth } from '../../context/appstate/AuthContext';
 import { useTheme, Snackbar } from "react-native-paper";  // Add this import
 
 const Profile = () => {
+  const router = useRouter(); // Add this
   const { colors } = useTheme();  // Add theme hook
   const { currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -24,6 +26,16 @@ const Profile = () => {
   const db = getFirestore();
   const storage = getStorage();
   const auth = getAuth();
+
+  // Add this useEffect for authentication check
+  useEffect(() => {
+    if (!currentUser) {
+      router.replace('/(auth)/sign-in');
+    }
+  }, [currentUser]);
+
+  // If not authenticated, return null to prevent rendering the protected content
+  if (!currentUser) return null;
 
   useEffect(() => {
     (async () => {

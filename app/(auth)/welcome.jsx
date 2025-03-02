@@ -21,7 +21,7 @@ const Onboarding = () => {
     >
       <TouchableOpacity
         onPress={() => {
-          router.replace("/(auth)/sign-in");
+          router.replace("/(tabs)/home");
         }}
         style={styles.skipButton}
       >
@@ -126,6 +126,7 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: 300,
+    borderRadius: 6
   },
   titleContainer: {
     width: "100%",
