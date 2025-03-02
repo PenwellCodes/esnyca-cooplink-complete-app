@@ -31,7 +31,7 @@ const TOTAL_DURATION = 10000; // total duration in ms (10 seconds)
 const ViewStoryScreen = () => {
   const { storyId, userId } = useLocalSearchParams();
   const router = useRouter();
-  const { stories, recordView } = useStories();
+  const { stories, recordView, deleteStory } = useStories();
   const { currentUser } = useAuth();
   const { setActiveChatId } = useChat();
 
@@ -62,6 +62,13 @@ const ViewStoryScreen = () => {
       keyboardDidHideListener.remove();
     };
   }, [isPaused, remainingDuration]);
+
+  useEffect(() => {
+    if (!story) {
+      Alert.alert("Story not found", "This story may have expired or been deleted.");
+      router.back();
+    }
+  }, [story, router]);
 
   useEffect(() => {
     if (!story) {
@@ -148,6 +155,38 @@ const ViewStoryScreen = () => {
     }
   };
 
+  const handleLongPress = () => {
+    if (currentUser.uid !== story.userId) return;
+    
+    Alert.alert(
+        "Delete Story",
+        "Are you sure you want to delete this story?",
+        [
+            {
+                text: "Cancel",
+                style: "cancel"
+            },
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                    try {
+                        await deleteStory(storyId, story.imageURL);
+                        Alert.alert("Success", "Story deleted successfully");
+                        router.push("/(tabs)/chat"); // Changed from router.back() to explicitly navigate to chat
+                    } catch (error) {
+                        Alert.alert("Error", "Failed to delete story");
+                    }
+                }
+            }
+        ]
+    );
+  };
+
+  if (!story) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       {/* Progress Bar */}
@@ -159,6 +198,8 @@ const ViewStoryScreen = () => {
       <TouchableOpacity
         activeOpacity={1}
         onPress={togglePause}
+        onLongPress={handleLongPress}
+        delayLongPress={500}
         style={styles.imageContainer}
       >
         <Image

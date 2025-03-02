@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { collection, addDoc, onSnapshot, query, where, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, where, serverTimestamp, Timestamp, deleteDoc, doc } from "firebase/firestore";
 import { db, storage } from "../../firebase/firebaseConfig";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, ref as storageRef, deleteObject } from "firebase/storage";
 
 const StoriesContext = createContext();
 export const useStories = () => useContext(StoriesContext);
@@ -24,32 +24,40 @@ export const StoriesProvider = ({ children }) => {
     // Function to post a story with image upload and Firestore document creation
     const postStory = async ({ imageURI, caption, userId }) => {
         try {
-            const response = await fetch(imageURI);
-            const blob = await response.blob();
-            const storageRef = ref(storage, `stories/${userId}_${Date.now()}`);
-            const uploadTask = uploadBytesResumable(storageRef, blob);
+            let downloadURL = null;
+            
+            if (imageURI) {
+                const response = await fetch(imageURI);
+                const blob = await response.blob();
+                const storageRef = ref(storage, `stories/${userId}_${Date.now()}`);
+                const uploadTask = uploadBytesResumable(storageRef, blob);
 
-            return new Promise((resolve, reject) => {
-                uploadTask.on(
-                    "state_changed",
-                    (snapshot) => {
-                        // Optionally, you can track upload progress here if needed
-                    },
-                    (error) => reject(error),
-                    async () => {
-                        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                        // Save story metadata to Firestore, using serverTimestamp for createdAt
-                        const storyDoc = await addDoc(collection(db, "stories"), {
-                            userId,
-                            imageURL: downloadURL,
-                            caption,
-                            createdAt: serverTimestamp(),
-                            views: [],
-                        });
-                        resolve(storyDoc.id);
-                    }
-                );
-            });
+                downloadURL = await new Promise((resolve, reject) => {
+                    uploadTask.on(
+                        "state_changed",
+                        (snapshot) => {},
+                        (error) => reject(error),
+                        async () => {
+                            const url = await getDownloadURL(uploadTask.snapshot.ref);
+                            resolve(url);
+                        }
+                    );
+                });
+            }
+
+            const storyData = {
+                userId,
+                caption,
+                createdAt: serverTimestamp(),
+                views: [],
+            };
+
+            if (downloadURL) {
+                storyData.imageURL = downloadURL;
+            }
+
+            const storyDoc = await addDoc(collection(db, "stories"), storyData);
+            return storyDoc.id;
         } catch (error) {
             console.error("Error posting story:", error);
             throw error;
@@ -61,7 +69,23 @@ export const StoriesProvider = ({ children }) => {
         // Add logic here to add the viewerId to the story’s 'views' array if not already present
     };
 
-    const value = { stories, postStory, recordView };
+    const deleteStory = async (storyId, imageURL) => {
+        try {
+            // Delete from Firestore
+            await deleteDoc(doc(db, "stories", storyId));
+            
+            // Delete the image from Storage
+            const imageRef = storageRef(storage, imageURL);
+            await deleteObject(imageRef);
+            
+            return true;
+        } catch (error) {
+            console.error("Error deleting story:", error);
+            throw error;
+        }
+    };
+
+    const value = { stories, postStory, recordView, deleteStory };
     return <StoriesContext.Provider value={value}>{children}</StoriesContext.Provider>;
 };
 

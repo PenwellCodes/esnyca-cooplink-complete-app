@@ -18,6 +18,7 @@ import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useStories } from "../../context/appstate/StoriesContext";
 import { useChat } from "../../context/appstate/ChatContext"; // Add this import
+import StoryViewer from "../../components/StoryViewer"; // Add this import
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -98,6 +99,29 @@ const ChatList = () => {
     return () => unsubscribe();
   }, [currentUser, conversations, lastMessages]);
 
+  // Group stories by user
+  const groupedStories = React.useMemo(() => {
+    const groups = {};
+    activeStories.forEach((story) => {
+      if (!groups[story.userId]) {
+        groups[story.userId] = [];
+      }
+      groups[story.userId].push(story);
+    });
+    return groups;
+  }, [activeStories]);
+
+  const [selectedUserStories, setSelectedUserStories] = useState([]);
+  const [isStoryViewerVisible, setIsStoryViewerVisible] = useState(false);
+
+  const handleStoryPress = (userId) => {
+    if (groupedStories[userId]) {
+      const userName = chatList.find(user => user.uid === userId)?.displayName || '';
+      setSelectedUserStories(groupedStories[userId]);
+      setIsStoryViewerVisible(true);
+    }
+  };
+
   if (loading) {
     return (
       <View
@@ -148,50 +172,66 @@ const ChatList = () => {
       {/* Stories Section */}
       <View style={styles.statusListContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {storiesForDisplay.map((story) => (
+          {currentUser?.role === "cooperative" && (
             <TouchableOpacity
-              key={story.id}
               style={styles.statusItem}
-              onPress={() =>
-                story.addStory
-                  ? router.push("/add-story")
-                  : router.push({
-                      pathname: "/view-story",
-                      params: { storyId: story.id, userId: story.userId },
-                    })
-              }
+              onPress={() => router.push("/add-story")}
             >
               <LinearGradient
                 colors={["#a8e0ff", "#8ee3f5"]}
                 style={styles.statusBorder}
               >
                 <View style={styles.statusInner}>
-                  {story.addStory ? (
-                    <Ionicons name="add-circle" size={24} color="#007AFF" />
-                  ) : (
-                    <Image
-                      source={{ uri: story.avatar }}
-                      style={styles.statusImage}
-                    />
-                  )}
+                  <Ionicons name="add-circle" size={24} color="#007AFF" />
                 </View>
               </LinearGradient>
-              <Text
-                style={[
-                  styles.menuText,
-                  typography.robotoMedium,
-                  typography.small,
-                  { color: colors.tertiary },
-                ]}
+              <Text style={[styles.menuText, typography.small]}>Add Story</Text>
+            </TouchableOpacity>
+          )}
+          
+          {/* Render user story containers */}
+          {Object.entries(groupedStories).map(([userId, stories]) => (
+            <TouchableOpacity
+              key={userId}
+              style={styles.statusItem}
+              onPress={() => handleStoryPress(userId)}
+            >
+              <LinearGradient
+                colors={["#a8e0ff", "#8ee3f5"]}
+                style={styles.statusBorder}
               >
-                {story.name.length > 8
-                  ? story.name.substring(0, 8) + "..."
-                  : story.name}
-              </Text>
+                <View style={styles.statusInner}>
+                  <Image
+                    source={{ uri: stories[0].imageURL }}
+                    style={styles.statusImage}
+                  />
+                </View>
+              </LinearGradient>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
+
+      {/* Story Viewer Modal */}
+      <StoryViewer
+        stories={selectedUserStories}
+        isVisible={isStoryViewerVisible}
+        userName={selectedUserStories[0]?.userName || ''}
+        onClose={() => {
+          setIsStoryViewerVisible(false);
+          setSelectedUserStories([]);
+        }}
+        onReply={(story, replyText) => {
+          router.push({
+            pathname: `/(screens)/chatConversations/${story.userId}`,
+            params: {
+              user: JSON.stringify(userMap[story.userId]),
+              predefinedMessage: replyText,
+            },
+          });
+          setIsStoryViewerVisible(false);
+        }}
+      />
 
       {/* Group Chat Item */}
       <TouchableOpacity
