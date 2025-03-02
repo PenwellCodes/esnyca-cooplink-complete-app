@@ -14,28 +14,17 @@ const Layout = () => {
       <Stack>
         {[
           { name: "about-us", title: "About Us" },
-          { name: "account-settings", title: "Account Settings" },
           { name: "add-story", title: "Add Story" },
           { name: "group-chat", title: "Group Chat" },
           { name: "view-story", title: "View Story" },
           { name: "news", title: "News" },
           { name: "cooperatives", title: "Cooperatives" },
-          { name: "financial-services", title: "Financial Services" },
-          { name: "marketing-and-promotion", title: "Marketing and Promotion" },
-          { name: "research-and-insights", title: "Research and Insights" },
           { name: "support", title: "Support" },
-          { name: "missions-and-vision", title: "Missions and Vision" },
           { name: "news-listing", title: "News Listing" },
           { name: "partnerships", title: "Partnerships" },
-          {
-            name: "training-and-development",
-            title: "Training and Development",
-          },
           { name: "profile", title: "Profile" },
           { name: "ourstory", title: "Our Story" },
-          { name: "meet-the-team", title: "Meet The Team" },
-          { name: "cooperative-listing", title: "Cooperative Listing" },
-          { name: "legalcompliance", title: "Legal Compliance" },
+       
         ].map(({ name, title }) => (
           <Stack.Screen
             key={name}
