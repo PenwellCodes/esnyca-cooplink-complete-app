@@ -37,7 +37,11 @@ const SignIn = () => {
         router.replace("/(tabs)/home"); // redirect to home page
       }, 1500);
     } else {
-      setSnackbarMessage(result.error);
+      if (result.error.includes("auth/invalid-credential") || result.error.includes("auth/user-not-found")) {
+        setSnackbarMessage("Wrong password or email");
+      } else {
+        setSnackbarMessage(result.error);
+      }
       setSnackbarStyle({ backgroundColor: "red" });
       setSnackbarVisible(true);
     }
@@ -104,7 +108,7 @@ const SignIn = () => {
         <TouchableOpacity onPress={() => router.push("/(auth)/sign-up")}>
           <Text style={{ color: colors.error }}>
             DON'T HAVE AN ACCOUNT?{" "}
-            <Text style={{ color: colors.error, fontWeight: "bold" }}>
+            <Text style={{ color: colors.primary, fontWeight: "bold" }}>
               SIGN UP NOW
             </Text>
           </Text>

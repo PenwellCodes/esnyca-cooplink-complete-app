@@ -154,8 +154,12 @@ const SignUp = () => {
         setRedirect(true);
       }, 1500);
     } catch (error) {
-      console.error("Error during sign up:", error);
-      setSnackbarMessage(error.message);
+      
+      if (error.message.includes("auth/weak-password")) {
+        setSnackbarMessage("At least password must be 6 characters");
+      } else {
+        setSnackbarMessage(error.message);
+      }
       setSnackbarStyle({ backgroundColor: "red" });
       setSnackbarVisible(true);
     } finally {
