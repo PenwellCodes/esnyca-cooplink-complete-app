@@ -9,7 +9,7 @@ import { useAuth } from '../../context/appstate/AuthContext';
 import { auth } from '../../firebase/firebaseConfig';
 import { signOut, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { useCustomTheme } from "../../context/appstate/CustomThemeProvider";
-import { collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 
 const SettingsScreen = () => {
@@ -108,36 +108,59 @@ const SettingsScreen = () => {
       console.error('Error signing out:', error);
     }
   };
+ 
 
-  const handleDeleteAccount = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const credential = EmailAuthProvider.credential(email, password);
-      await reauthenticateWithCredential(auth.currentUser, credential);
+const handleDeleteAccount = async () => {
+  setLoading(true);
+  setError('');
+  try {
+    const credential = EmailAuthProvider.credential(email, password);
+    await reauthenticateWithCredential(auth.currentUser, credential);
 
-      // Delete user's stories
-      const storiesQuery = query(collection(db, "stories"), where("userId", "==", auth.currentUser.uid));
-      const storiesSnapshot = await getDocs(storiesQuery);
-      const deletePromises = storiesSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
+    const uid = auth.currentUser.uid; // Auth UID
 
-      // Delete user account
-      await deleteUser(auth.currentUser);
-      router.replace('/sign-in');
-    } catch (error) {
-      if (error.code === 'auth/user-not-found') {
-        setError('User does not exist');
-      } else if (error.code === 'auth/wrong-password') {
-        setError('Wrong password or email');
-      } else {
-        setError(error.message);
-      }
-    } finally {
-      setLoading(false);
+    // 🔹 Find the correct Firestore document based on UID
+    const usersCollection = collection(db, "users");
+    const userQuery = query(usersCollection, where("uid", "==", uid));
+    const querySnapshot = await getDocs(userQuery);
+
+    if (!querySnapshot.empty) {
+      querySnapshot.forEach(async (docSnapshot) => {
+        await deleteDoc(docSnapshot.ref); // ✅ Correctly deletes Firestore user
+      });
+    } else {
+      console.log("No user document found for UID:", uid);
     }
-  };
 
+    // 🔹 Delete user-related data (stories, posts, etc.)
+    const collectionsToDelete = ["stories", "posts", "comments"];
+    for (const collectionName of collectionsToDelete) {
+      const querySnapshot = await getDocs(query(collection(db, collectionName), where("userId", "==", uid)));
+      const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+    }
+
+    // 🔹 Delete user from Firebase Authentication
+    await deleteUser(auth.currentUser);
+
+    // 🔹 Logout user to prevent issues
+    await signOut(auth);
+
+    router.replace('/sign-in');
+  } catch (error) {
+    if (error.code === 'auth/user-not-found') {
+      setError('User does not exist');
+    } else if (error.code === 'auth/wrong-password') {
+      setError('Wrong password or email');
+    } else {
+      setError(error.message);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+
+  
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar backgroundColor={colors.primary} style={"light"} />
