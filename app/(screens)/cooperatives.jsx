@@ -61,6 +61,18 @@ const CooperativeUsersScreen = () => {
   }, [selectedRegion]);
 
   useEffect(() => {
+    if (highlightId && users.length > 0) {
+      // Sort users to put highlighted user first
+      const sortedUsers = [...users].sort((a, b) => {
+        if (a.id === highlightId) return -1;
+        if (b.id === highlightId) return 1;
+        return 0;
+      });
+      setUsers(sortedUsers);
+    }
+  }, [highlightId, users.length]);
+
+  useEffect(() => {
     // If we have a highlightId, scroll to that cooperative
     if (highlightId) {
       const index = users.findIndex(user => user.id === highlightId);
