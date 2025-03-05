@@ -158,7 +158,7 @@ const Profile = () => {
 
       if (userData.displayName) updatedFields.displayName = userData.displayName;
       if (userData.phoneNumber) updatedFields.phoneNumber = userData.phoneNumber;
-     
+      if (userData.content) updatedFields.content = userData.content; // Add content field
       if (userData.location) updatedFields.location = userData.location;
       
       if (newPhotoUri) {
@@ -183,6 +183,7 @@ const Profile = () => {
             const registrationDoc = registrationDocs.docs[0];
             const registrationFields = {
               ...updatedFields,
+              content: userData.content, // Ensure content is included in registration update
               status: 'approved'
             };
             
@@ -271,10 +272,10 @@ const Profile = () => {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Description</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>Product/Service</Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter business description"
+                placeholder="Enter product/service"
                 value={userData?.content || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
               />
