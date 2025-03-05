@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { collection, query, where, orderBy, onSnapshot, writeBatch, doc } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, writeBatch, doc, getDocs } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "./AuthContext";
 import Toast from "react-native-toast-message";
@@ -44,7 +44,18 @@ export const ChatProvider = ({ children }) => {
 
         const userUid = currentUser.uid;
 
-        // Fetch users for chat list
+        // First fetch all existing users
+        const fetchAndValidateUsers = async () => {
+            const existingUsers = new Set();
+            const usersQuery = query(collection(db, "users"));
+            const snapshot = await getDocs(usersQuery);
+            snapshot.forEach(doc => {
+                existingUsers.add(doc.data().uid);
+            });
+            return existingUsers;
+        };
+
+        // Modified users query listener
         let usersQuery;
         if (currentUser.role === "cooperative") {
             usersQuery = query(collection(db, "users"), where("uid", "!=", userUid));
@@ -56,17 +67,33 @@ export const ChatProvider = ({ children }) => {
             );
         }
 
-        const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-            const users = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
+        const unsubscribeUsers = onSnapshot(usersQuery, async (snapshot) => {
+            const existingUsers = await fetchAndValidateUsers();
+            const users = snapshot.docs
+                .map((doc) => ({
+                    id: doc.id,
+                    ...doc.data(),
+                }))
+                .filter(user => existingUsers.has(user.uid)); // Filter out non-existent users
+
             const newUserMap = {};
             users.forEach((user) => {
                 newUserMap[user.uid] = user;
             });
+            
             setChatList(users);
             setUserMap(newUserMap);
+
+            // Cleanup conversations for non-existent users
+            const currentChats = { ...conversations };
+            Object.keys(currentChats).forEach(chatId => {
+                const [uid1, uid2] = chatId.split('_');
+                const otherUserId = uid1 === currentUser.uid ? uid2 : uid1;
+                if (!existingUsers.has(otherUserId)) {
+                    delete currentChats[chatId];
+                }
+            });
+            setConversations(currentChats);
         });
 
         // Listen to chats

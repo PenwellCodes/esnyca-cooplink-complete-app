@@ -164,9 +164,12 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
             )}
           </TouchableOpacity>
 
-          <Text style={styles.userName}>
-            {userName?.length > 8 ? `${userName.substring(0, 8)}...` : userName}
-          </Text>
+          {/* Only show username if it exists */}
+          {userName && (
+            <Text style={styles.userName}>
+              {userName?.length > 8 ? `${userName.substring(0, 8)}...` : userName}
+            </Text>
+          )}
         </View>
 
         {showDeleteOption && (
@@ -180,23 +183,26 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
           </View>
         )}
 
-        <View style={styles.replyContainer}>
-          <TextInput
-            style={styles.replyInput}
-            placeholder="Reply to story..."
-            placeholderTextColor="#999"
-            value={replyText}
-            onChangeText={setReplyText}
-            onFocus={handleInputFocus}
-            onBlur={handleInputBlur}
-          />
-          <TouchableOpacity 
-            style={styles.sendButton}
-            onPress={handleReply}
-          >
-            <Ionicons name="send" size={24} color="#007AFF" />
-          </TouchableOpacity>
-        </View>
+        {/* Only show reply container if user is not the story owner */}
+        {stories[currentIndex]?.userId !== currentUser?.uid && (
+          <View style={styles.replyContainer}>
+            <TextInput
+              style={styles.replyInput}
+              placeholder="Reply to story..."
+              placeholderTextColor="#999"
+              value={replyText}
+              onChangeText={setReplyText}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
+            />
+            <TouchableOpacity 
+              style={styles.sendButton}
+              onPress={handleReply}
+            >
+              <Ionicons name="send" size={24} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </Modal>
   );
