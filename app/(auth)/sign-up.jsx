@@ -16,7 +16,7 @@ import { CustomButton } from "./../../components";
 import { typography, images } from "../../constants";
 import { auth, db } from "../../firebase/firebaseConfig";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
 import { Redirect } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
@@ -59,8 +59,6 @@ const SignUp = () => {
     }));
   };
 
-
-
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -76,7 +74,6 @@ const SignUp = () => {
       setProfilePic(result.assets[0].uri);
     }
   };
-
 
   // Helper to extract file name from URI
   const getFileName = (uri) => uri.split("/").pop();
@@ -107,9 +104,30 @@ const SignUp = () => {
     return downloadURL;
   };
 
+  // Add this function before handleSubmit
+  const checkRegistrationNumberExists = async (regNumber) => {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("registrationNumber", "==", regNumber));
+    const querySnapshot = await getDocs(q);
+    return !querySnapshot.empty;
+  };
+
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      // For cooperatives, check if registration number exists
+      if (role === "cooperative") {
+        const exists = await checkRegistrationNumberExists(formData.registrationNumber);
+        if (exists) {
+          setSnackbarMessage("Registration number already exists");
+          setSnackbarStyle({ backgroundColor: "red" });
+          setSnackbarVisible(true);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Continue with existing registration logic
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
@@ -154,7 +172,6 @@ const SignUp = () => {
         setRedirect(true);
       }, 1500);
     } catch (error) {
-      
       if (error.message.includes("auth/weak-password")) {
         setSnackbarMessage("At least password must be 6 characters");
       } else {
