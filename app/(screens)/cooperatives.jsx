@@ -135,7 +135,7 @@ const CooperativeUsersScreen = () => {
         <Text style={styles.displayName}>{item.displayName}</Text>
         <Text style={styles.email}>{item.email}</Text>
         <Text style={styles.address}>{item.physicalAddress}</Text>
-        <Text style={styles.registrationNumber}>{item.registrationNumber}</Text>
+        <Text style={styles.content}>{item.content}</Text>
         <Text style={styles.phoneNumber}>{item.phoneNumber}</Text>
       </View>
       <View style={styles.rightColumn}>
