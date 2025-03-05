@@ -126,7 +126,13 @@ const SettingsScreen = () => {
       await deleteUser(auth.currentUser);
       router.replace('/sign-in');
     } catch (error) {
-      setError(error.message);
+      if (error.code === 'auth/user-not-found') {
+        setError('User does not exist');
+      } else if (error.code === 'auth/wrong-password') {
+        setError('Wrong password or email');
+      } else {
+        setError(error.message);
+      }
     } finally {
       setLoading(false);
     }

@@ -11,17 +11,23 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/appstate/AuthContext';
+import { useStories } from '../context/appstate/StoriesContext';
 
 const { width } = Dimensions.get('window');
 const STORY_DURATION = 5000;
 
 const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
+  const { currentUser } = useAuth();
+  const { deleteStory } = useStories();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [replyText, setReplyText] = useState('');
   const progressAnim = useRef(new Animated.Value(0)).current;
   const [isPaused, setIsPaused] = useState(false);
+  const [showDeleteOption, setShowDeleteOption] = useState(false);
 
   useEffect(() => {
     if (isVisible) {
@@ -52,7 +58,6 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
 
   const handleReply = () => {
     if (replyText.trim()) {
-      // Get current story data
       const currentStory = stories[currentIndex];
       const replyData = {
         text: replyText.trim(),
@@ -76,7 +81,6 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
 
   const handleInputBlur = () => {
     // Don't resume automatically on blur, let the send action handle it
-    // This prevents auto-resume when user is still typing
   };
 
   const togglePause = () => {
@@ -85,6 +89,25 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
       progressAnim.stopAnimation();
     } else {
       startProgress();
+    }
+  };
+
+  const handleLongPress = () => {
+    if (stories[currentIndex]?.userId === currentUser.uid) {
+      setShowDeleteOption(true);
+      setIsPaused(true);
+      progressAnim.stopAnimation();
+    }
+  };
+
+  const handleDeleteStory = async () => {
+    try {
+      await deleteStory(stories[currentIndex].id, stories[currentIndex].imageURL);
+      Alert.alert("Success", "Story deleted successfully");
+      onClose();
+    } catch (error) {
+      console.error("Error deleting story:", error);
+      Alert.alert("Error", "Failed to delete story");
     }
   };
 
@@ -121,6 +144,7 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
           <TouchableOpacity 
             activeOpacity={1}
             onPress={togglePause}
+            onLongPress={handleLongPress}
             style={styles.contentContainer}
           >
             {stories[currentIndex]?.imageURL ? (
@@ -144,6 +168,17 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
             {userName?.length > 8 ? `${userName.substring(0, 8)}...` : userName}
           </Text>
         </View>
+
+        {showDeleteOption && (
+          <View style={styles.deleteOptionContainer}>
+            <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteStory}>
+              <Text style={styles.deleteButtonText}>Delete Story</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowDeleteOption(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.replyContainer}>
           <TextInput
@@ -258,6 +293,32 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     padding: 8,
+  },
+  deleteOptionContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  deleteButton: {
+    backgroundColor: 'red',
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  cancelButton: {
+    backgroundColor: 'gray',
+    padding: 10,
+    borderRadius: 5,
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontSize: 16,
   },
 });
 
