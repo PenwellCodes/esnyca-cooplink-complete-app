@@ -10,9 +10,9 @@ export const StoriesProvider = ({ children }) => {
     const [stories, setStories] = useState([]);
 
     useEffect(() => {
-        // Create a cutoff timestamp for stories less than 24 hours old
+        // Create a cutoff timestamp for stories less than 3 minutes old
         const now = new Date();
-        const cutoff = Timestamp.fromDate(new Date(now.getTime() - 24 * 60 * 60 * 3000));
+        const cutoff = Timestamp.fromDate(new Date(now.getTime() - 3 * 60 * 1000));
         const q = query(collection(db, "stories"), where("createdAt", ">", cutoff));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const fetchedStories = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
