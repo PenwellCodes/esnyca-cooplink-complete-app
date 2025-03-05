@@ -52,12 +52,7 @@ const SignIn = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Top Section */}
       <View style={[styles.topSection, { backgroundColor: colors.primary }]}>
-        <Ionicons
-          name="arrow-back"
-          size={24}
-          color={colors.background}
-          style={styles.backIcon}
-        />
+     
         <Image source={images.logo} style={styles.logo} />
         <Text style={[styles.title, typography.title, { color: colors.background }]}>
           CHAT CORNER

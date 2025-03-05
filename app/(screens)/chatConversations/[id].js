@@ -44,6 +44,7 @@ const placeholderAvatar =
 
 const ChatScreen = () => {
   const params = useLocalSearchParams();
+  const router = useRouter();
   const user = params.user ? JSON.parse(params.user) : null;
   const predefinedMessage = params.predefinedMessage;
   const { currentUser } = useAuth();

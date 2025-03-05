@@ -374,15 +374,7 @@ const SignUp = () => {
             },
           ]}
         >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={colors.background}
-            style={styles.backIcon}
-            onPress={() => {
-              // Navigation logic if needed
-            }}
-          />
+       
           <Image source={images.logo} style={styles.logo} />
           <Text
             style={[
