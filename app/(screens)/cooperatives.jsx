@@ -78,13 +78,19 @@ const CooperativeUsersScreen = () => {
     setDrawerVisible(true);
   };
   const startChat = (user) => {
-    const predefinedMessage =
-      "Hello 👋 there , can you share more about your cooperative 🥰";
+    if (!currentUser) {
+      // Encode the return path with the highlight parameter
+      const returnTo = encodeURIComponent(`/cooperatives?highlightId=${user.id}`);
+      router.push(`/(auth)/sign-in?returnTo=${returnTo}`);
+      return;
+    }
+
+    const predefinedMessage = "Hello 👋 there , can you share more about your cooperative 🥰";
     router.push({
       pathname: `/(screens)/chatConversations/${user.uid}`,
       params: {
         user: JSON.stringify(user),
-        predefinedMessage, 
+        predefinedMessage,
       },
     });
   };

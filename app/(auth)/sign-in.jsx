@@ -12,12 +12,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { CustomButton } from "./../../components";
 import { typography, images } from "../../constants";
 import { useAuth } from "../../context/appstate/AuthContext"; 
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 
 const SignIn = () => {
   const { colors } = useTheme();
   const { login } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const returnTo = params.returnTo;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +36,12 @@ const SignIn = () => {
       setSnackbarStyle({ backgroundColor: "green" });
       setSnackbarVisible(true);
       setTimeout(() => {
-        router.replace("/(tabs)/home"); // redirect to home page
+        // If returnTo is provided, decode and navigate to it, otherwise go to home
+        if (returnTo) {
+          router.replace(decodeURIComponent(returnTo));
+        } else {
+          router.replace("/(tabs)/home");
+        }
       }, 1500);
     } else {
       if (result.error.includes("auth/invalid-credential") || result.error.includes("auth/user-not-found")) {
