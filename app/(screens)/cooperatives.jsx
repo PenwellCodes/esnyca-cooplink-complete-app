@@ -135,7 +135,12 @@ const CooperativeUsersScreen = () => {
         <Text style={styles.displayName}>{item.displayName}</Text>
         <Text style={styles.email}>{item.email}</Text>
         <Text style={styles.address}>{item.physicalAddress}</Text>
-        <Text style={styles.content}>{item.content}</Text>
+        {item.content && (
+          <>
+            <Text style={styles.contentLabel}>Product/Service:</Text>
+            <Text style={styles.content}>{item.content}</Text>
+          </>
+        )}
         <Text style={styles.phoneNumber}>{item.phoneNumber}</Text>
       </View>
       <View style={styles.rightColumn}>
@@ -192,12 +197,22 @@ const CooperativeUsersScreen = () => {
           onDismiss={() => setDrawerVisible(false)}
           contentContainerStyle={styles.drawerContainer}
         >
-          <Text style={styles.drawerTitle}>Cooperative Bio</Text>
-          <Text style={styles.drawerContent}>
-            {selectedUser && selectedUser.content
-              ? selectedUser.content
-              : "This cooperative has not updated its information yet."}
-          </Text>
+          <Text style={styles.drawerTitle}>Cooperative Details</Text>
+          <View style={styles.drawerContentContainer}>
+            <Text style={styles.drawerLabel}>Name:</Text>
+            <Text style={styles.drawerText}>{selectedUser?.displayName}</Text>
+            
+            <Text style={styles.drawerLabel}>Product/Service:</Text>
+            <Text style={styles.drawerText}>
+              {selectedUser?.content || "No product/service information available"}
+            </Text>
+            
+            <Text style={styles.drawerLabel}>Contact:</Text>
+            <Text style={styles.drawerText}>{selectedUser?.phoneNumber}</Text>
+            
+            <Text style={styles.drawerLabel}>Location:</Text>
+            <Text style={styles.drawerText}>{selectedUser?.physicalAddress}</Text>
+          </View>
         </Modal>
       </Portal>
     </View>
@@ -318,5 +333,30 @@ const styles = StyleSheet.create({
   drawerContent: {
     fontSize: 16,
     color: "#555",
+  },
+  contentLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 4,
+  },
+  content: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+  },
+  drawerContentContainer: {
+    marginTop: 10,
+  },
+  drawerLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 12,
+  },
+  drawerText: {
+    fontSize: 15,
+    color: '#666',
+    marginTop: 4,
   },
 });

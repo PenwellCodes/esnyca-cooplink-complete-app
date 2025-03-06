@@ -257,7 +257,6 @@ const searchDatabase = async (searchTerm) => {
   const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
   try {
-    // Search in users collection
     const usersSnapshot = await getDocs(collection(db, 'users'));
     
     usersSnapshot.forEach(doc => {
@@ -268,7 +267,7 @@ const searchDatabase = async (searchTerm) => {
           (data.email?.toLowerCase().includes(lowerSearchTerm)) ||
           (data.physicalAddress?.toLowerCase().includes(lowerSearchTerm)) ||
           (data.registrationNumber?.toLowerCase().includes(lowerSearchTerm)) ||
-          (data.bio?.toLowerCase().includes(lowerSearchTerm)) ||
+          (data.content?.toLowerCase().includes(lowerSearchTerm)) || // Add content field check
           (data.region?.toLowerCase().includes(lowerSearchTerm));
         
         if (isMatch) {
@@ -276,15 +275,15 @@ const searchDatabase = async (searchTerm) => {
             id: doc.id,
             name: data.displayName || 'Unnamed Cooperative',
             title: data.displayName || 'Unnamed Cooperative',
-            screen: 'cooperatives', // Changed to match the screen name
+            screen: 'cooperatives',
             type: 'cooperative',
             icon: 'business',
-            content: `${data.bio || ''}\n${data.physicalAddress || ''}`,
+            content: data.content || '', // Include content field
             region: data.region || 'Unknown Region',
             params: { 
               selectedRegion: data.region || 'All',
               cooperativeId: doc.id,
-              highlightId: doc.id // Add this to highlight the searched cooperative
+              highlightId: doc.id
             }
           });
         }
@@ -294,6 +293,42 @@ const searchDatabase = async (searchTerm) => {
     return results;
   } catch (error) {
     console.error('Database search failed:', error);
+    return [];
+  }
+};
+
+// Add new function for product/service search
+export const searchProductsAndServices = async (searchTerm) => {
+  console.log('Searching products/services for:', searchTerm);
+  const results = [];
+  const lowerSearchTerm = searchTerm.toLowerCase().trim();
+
+  try {
+    const usersSnapshot = await getDocs(collection(db, 'users'));
+    
+    usersSnapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.role === 'cooperative' && data.content) {
+        const contentMatch = data.content.toLowerCase().includes(lowerSearchTerm);
+        
+        if (contentMatch) {
+          results.push({
+            id: doc.id,
+            name: data.displayName || 'Unnamed Cooperative',
+            content: data.content,
+            region: data.region || 'Unknown Region',
+            profilePic: data.profilePic,
+            email: data.email,
+            phoneNumber: data.phoneNumber,
+            physicalAddress: data.physicalAddress
+          });
+        }
+      }
+    });
+    
+    return results;
+  } catch (error) {
+    console.error('Product/service search failed:', error);
     return [];
   }
 };

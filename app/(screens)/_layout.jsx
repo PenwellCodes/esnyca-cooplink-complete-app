@@ -24,6 +24,7 @@ const Layout = () => {
           { name: "partnerships", title: "Partnerships" },
           { name: "profile", title: "Profile" },
           { name: "ourstory", title: "Our Story" },
+          { name: "product-services-result"}
        
         ].map(({ name, title }) => (
           <Stack.Screen
