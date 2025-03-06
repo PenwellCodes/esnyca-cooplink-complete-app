@@ -1,28 +1,43 @@
 import { Image, Text, TouchableOpacity, View, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import Swiper from "react-native-swiper";
 import { CustomButton } from "../../components";
 import { onboardingText, typography } from "../../constants";
 import { useTheme } from "react-native-paper";
+import { useOnboarding } from "../../hooks/useOnboarding";
 
 import React from "react";
 
 const Onboarding = () => {
   const { colors } = useTheme();
+  const { isFirstLaunch, completeOnboarding } = useOnboarding();
   const swiperRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const isLastSlide = activeIndex === onboardingText.length - 1;
+
+  useEffect(() => {
+    if (isFirstLaunch === false) {
+      router.replace("/(tabs)/home");
+    }
+  }, [isFirstLaunch]);
+
+  if (isFirstLaunch === null || isFirstLaunch === false) {
+    return null;
+  }
+
+  const handleComplete = async () => {
+    await completeOnboarding();
+    router.replace("/(tabs)/home");
+  };
 
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <TouchableOpacity
-        onPress={() => {
-          router.replace("/(tabs)/home");
-        }}
+        onPress={handleComplete}
         style={styles.skipButton}
       >
         <Text
@@ -82,7 +97,7 @@ const Onboarding = () => {
         title={isLastSlide ? "Get Started" : "Next"}
         onPress={() =>
           isLastSlide
-            ? router.replace("/(tabs)/home")
+            ? handleComplete()
             : swiperRef.current?.scrollBy(1)
         }
         style={styles.customButton}
