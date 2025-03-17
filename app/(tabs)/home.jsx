@@ -17,6 +17,9 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { searchScreensAndDatabase } from "../../utils/searchScreen";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from "../../firebase/firebaseConfig";
+import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -31,6 +34,7 @@ const Home = () => {
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasUnreadNews, setHasUnreadNews] = useState(false);
 
   const [translations, setTranslations] = useState({
     services: "Services",
@@ -82,6 +86,35 @@ const Home = () => {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const checkUnreadNews = async () => {
+      try {
+        const lastReadTime = await AsyncStorage.getItem('lastNewsReadTime') || '0';
+        const newsQuery = query(
+          collection(db, "news"),
+          orderBy("date", "desc"),
+          limit(1)
+        );
+        const newsSnapshot = await getDocs(newsQuery);
+        
+        if (!newsSnapshot.empty) {
+          const latestNews = newsSnapshot.docs[0].data();
+          setHasUnreadNews(latestNews.date.seconds * 1000 > parseInt(lastReadTime));
+        }
+      } catch (error) {
+        console.error("Error checking unread news:", error);
+      }
+    };
+
+    checkUnreadNews();
+  }, []);
+
+  const handleNewsPress = async () => {
+    await AsyncStorage.setItem('lastNewsReadTime', Date.now().toString());
+    setHasUnreadNews(false);
+    router.push('/news');
+  };
+
   const menuItems = [
     { name: translations.services, icon: "shopping-cart", route: "/support" },
     { name: translations.aboutUs, icon: "groups", route: "/about-us" },
@@ -95,7 +128,13 @@ const Home = () => {
       icon: "business",
       route: "/cooperatives",
     },
-    { name: translations.news, icon: "newspaper", route: "/news" },
+    { 
+      name: translations.news, 
+      icon: "newspaper", 
+      route: "/news",
+      onPress: handleNewsPress,
+      hasNotification: hasUnreadNews 
+    },
     {
       name: translations.partnerships,
       icon: "handshake",
@@ -180,7 +219,7 @@ const Home = () => {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.menuItemContainer}
-            onPress={() => router.push(item.route)}
+            onPress={item.onPress || (() => router.push(item.route))}
           >
             <View style={[styles.menuItem, { borderColor: colors.error }]}>
               <MaterialIcons
@@ -188,6 +227,11 @@ const Home = () => {
                 size={40}
                 color={colors.primary}
               />
+              {item.hasNotification && (
+                <View style={[styles.notificationDot, { backgroundColor: colors.error }]}>
+                  <MaterialIcons name="notifications" size={16} color="white" />
+                </View>
+              )}
             </View>
             <Text
               style={[
@@ -270,5 +314,15 @@ const styles = StyleSheet.create({
   menuText: {
     marginTop: 5,
     textAlign: "center",
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

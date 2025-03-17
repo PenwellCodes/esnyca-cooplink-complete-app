@@ -14,6 +14,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { typography, images } from "../../constants"; // Add this import at the top
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
 
@@ -119,7 +120,7 @@ const CooperativeUsersScreen = () => {
     ]}>
       <View style={styles.leftColumn}>
         <Image
-          source={{ uri: item.profilePic || "https://via.placeholder.com/150" }}
+          source={{ uri: item.profilePic || images.defaultAvatar }}
           style={styles.profilePic}
           resizeMode="cover"
         />

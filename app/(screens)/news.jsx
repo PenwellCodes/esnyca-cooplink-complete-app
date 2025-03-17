@@ -73,7 +73,10 @@ const News = () => {
           id: doc.id,
           ...doc.data(),
         }));
-        setNewsData(newsList);
+        
+        // Sort news by date in descending order (newest first)
+        const sortedNews = newsList.sort((a, b) => b.date.seconds - a.date.seconds);
+        setNewsData(sortedNews);
       } catch (error) {
         console.error("Error fetching news:", error);
       } finally {

@@ -11,5 +11,6 @@ export default {
   slide3,
   logo,
   govern,
-  loader
+  loader,
+  defaultAvatar: "https://res.cloudinary.com/dtdcvyuvd/image/upload/v1742192833/Profile_avatar_placeholder_large_xj0snc.png"
 };

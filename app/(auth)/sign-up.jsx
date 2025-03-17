@@ -127,7 +127,6 @@ const SignUp = () => {
         }
       }
 
-      // Continue with existing registration logic
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
@@ -135,19 +134,19 @@ const SignUp = () => {
       );
       console.log("User registered with uid:", userCredential.user.uid);
 
-      // Upload image if selected and get its URL
-      let profilePicUrl = null;
+      // Set default avatar for both individual and cooperative if no profile picture
+      let profilePicUrl = images.defaultAvatar;
       if (profilePic) {
         profilePicUrl = await uploadImageAsync(profilePic);
       }
 
-      // Prepare common user data with the download URL
+      // Prepare common user data
       const userData = {
         uid: userCredential.user.uid,
         role: role,
         displayName: formData.displayName,
         email: formData.email,
-        profilePic: profilePicUrl, // URL from Firebase Storage
+        profilePic: profilePicUrl,
       };
 
       if (role === "cooperative") {
