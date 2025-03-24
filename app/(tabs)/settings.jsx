@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { View, ScrollView, StyleSheet, Modal, TouchableOpacity, Linking, Share } from "react-native";
 import { Text, List, Divider, Switch, Button, useTheme, TextInput, Dialog, Portal } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
@@ -9,15 +9,16 @@ import { useAuth } from '../../context/appstate/AuthContext';
 import { auth } from '../../firebase/firebaseConfig';
 import { signOut, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { useCustomTheme } from "../../context/appstate/CustomThemeProvider";
-import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 
 const SettingsScreen = () => {
   const { toggleTheme, isDarkTheme } = useCustomTheme();
   const { colors } = useTheme();
-
   const { currentLanguage, changeLanguage, t } = useLanguage();
   const { currentUser } = useAuth();
+  const router = useRouter();
+
   const [translations, setTranslations] = useState({
     settings: "Settings",
     profile: "Profile",
@@ -29,33 +30,6 @@ const SettingsScreen = () => {
     close: "Close",
   });
 
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!currentUser) {
-      router.replace('/sign-in');
-    }
-  }, [currentUser]);
-
-  if (!currentUser) {
-    return null;
-  }
-
-  // Load translations when language changes
-  // Load translations when language changes
-  // Load translations when language changes
-  useEffect(() => {
-    const loadTranslations = async () => {
-      const translated = {};
-      for (const [key, value] of Object.entries(translations)) {
-        translated[key] = await t(value);
-      }
-      setTranslations(translated);
-    };
-
-    loadTranslations();
-  }, [currentLanguage]);
-
   const [faqVisible, setFaqVisible] = useState(false);
   const [languageVisible, setLanguageVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -66,12 +40,16 @@ const SettingsScreen = () => {
   const [signOutDialogVisible, setSignOutDialogVisible] = useState(false);
 
   const handleUpdateProfile = () => {
+    if (!currentUser) {
+      router.push("/(auth)/sign-in");
+      return;
+    }
     router.push("/(screens)/profile");
   };
 
   const handlePrivacyPolicy = async () => {
     try {
-      await Linking.openURL("https://esnyca.pages.dev");
+      await Linking.openURL("https://youthcorner.pages.dev");
     } catch (error) {
       console.error("Error opening privacy policy:", error);
     }
@@ -103,64 +81,75 @@ const SettingsScreen = () => {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      router.replace('/sign-in');
+      // Use setTimeout to avoid state updates during render
+      setTimeout(() => {
+        router.replace('/(auth)/sign-in');
+      }, 0);
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
- 
 
-const handleDeleteAccount = async () => {
-  setLoading(true);
-  setError('');
-  try {
-    const credential = EmailAuthProvider.credential(email, password);
-    await reauthenticateWithCredential(auth.currentUser, credential);
+  const handleDeleteAccount = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      // If no user is logged in, show error
+      if (!currentUser) {
+        setError('Please sign in first');
+        setLoading(false);
+        return;
+      }
 
-    const uid = auth.currentUser.uid; // Auth UID
+      const credential = EmailAuthProvider.credential(email, password);
+      await reauthenticateWithCredential(auth.currentUser, credential);
 
-    // 🔹 Find the correct Firestore document based on UID
-    const usersCollection = collection(db, "users");
-    const userQuery = query(usersCollection, where("uid", "==", uid));
-    const querySnapshot = await getDocs(userQuery);
+      const uid = auth.currentUser.uid; // Auth UID
 
-    if (!querySnapshot.empty) {
-      querySnapshot.forEach(async (docSnapshot) => {
-        await deleteDoc(docSnapshot.ref); // ✅ Correctly deletes Firestore user
-      });
-    } else {
-      console.log("No user document found for UID:", uid);
+      // 🔹 Find the correct Firestore document based on UID
+      const usersCollection = collection(db, "users");
+      const userQuery = query(usersCollection, where("uid", "==", uid));
+      const querySnapshot = await getDocs(userQuery);
+
+      if (!querySnapshot.empty) {
+        querySnapshot.forEach(async (docSnapshot) => {
+          await deleteDoc(docSnapshot.ref); // ✅ Correctly deletes Firestore user
+        });
+      } else {
+        console.log("No user document found for UID:", uid);
+      }
+
+      // 🔹 Delete user-related data (stories, posts, etc.)
+      const collectionsToDelete = ["stories", "posts", "comments"];
+      for (const collectionName of collectionsToDelete) {
+        const querySnapshot = await getDocs(query(collection(db, collectionName), where("userId", "==", uid)));
+        const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+      }
+
+      // 🔹 Delete user from Firebase Authentication
+      await deleteUser(auth.currentUser);
+
+      // 🔹 Logout user to prevent issues
+      await signOut(auth);
+
+      // Use setTimeout for navigation
+      setTimeout(() => {
+        router.replace('/(auth)/sign-in');
+      }, 0);
+    } catch (error) {
+      if (error.code === 'auth/user-not-found') {
+        setError('User does not exist');
+      } else if (error.code === 'auth/wrong-password') {
+        setError('Wrong password or email');
+      } else {
+        setError(error.message);
+      }
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // 🔹 Delete user-related data (stories, posts, etc.)
-    const collectionsToDelete = ["stories", "posts", "comments"];
-    for (const collectionName of collectionsToDelete) {
-      const querySnapshot = await getDocs(query(collection(db, collectionName), where("userId", "==", uid)));
-      const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
-    }
-
-    // 🔹 Delete user from Firebase Authentication
-    await deleteUser(auth.currentUser);
-
-    // 🔹 Logout user to prevent issues
-    await signOut(auth);
-
-    router.replace('/sign-in');
-  } catch (error) {
-    if (error.code === 'auth/user-not-found') {
-      setError('User does not exist');
-    } else if (error.code === 'auth/wrong-password') {
-      setError('Wrong password or email');
-    } else {
-      setError(error.message);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-
-  
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar backgroundColor={colors.primary} style={"light"} />
@@ -170,6 +159,7 @@ const handleDeleteAccount = async () => {
         </Text>
 
         <List.Section>
+          {/* Modify auth-dependent items to check for currentUser */}
           <List.Item
             title={translations.profile}
             left={(props) => <List.Icon {...props} icon="account" />}
@@ -177,6 +167,7 @@ const handleDeleteAccount = async () => {
           />
           <Divider />
 
+          {/* These items don't need auth */}
           <List.Item
             title={translations.privacy}
             left={(props) => <List.Icon {...props} icon="lock" />}
@@ -207,17 +198,36 @@ const handleDeleteAccount = async () => {
           />
           <Divider />
 
+          {/* Always show sign out and delete account */}
           <List.Item 
             title="Sign Out"
             left={(props) => <List.Icon {...props} icon="logout" color="orange" />} 
-            onPress={() => setSignOutDialogVisible(true)}
+            onPress={() => {
+              if (!currentUser) {
+                // If not logged in, redirect to sign in
+                setTimeout(() => {
+                  router.push('/(auth)/sign-in');
+                }, 0);
+                return;
+              }
+              setSignOutDialogVisible(true);
+            }}
           />
           <Divider />
 
           <List.Item 
             title="Delete Account"
             left={(props) => <List.Icon {...props} icon="delete" color="red" />} 
-            onPress={() => setDeleteModalVisible(true)}
+            onPress={() => {
+              if (!currentUser) {
+                // If not logged in, redirect to sign in
+                setTimeout(() => {
+                  router.push('/(auth)/sign-in');
+                }, 0);
+                return;
+              }
+              setDeleteModalVisible(true);
+            }}
           />
         </List.Section>
       </ScrollView>

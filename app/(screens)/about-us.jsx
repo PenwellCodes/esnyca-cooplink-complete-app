@@ -22,10 +22,14 @@ const aboutus = () => {
   const router = useRouter();
   const { currentUser } = useAuth();
 
-  // Redirect if not authenticated
-  if (!loadingAuth && !currentUser) {
-    router.replace("/(auth)/sign-in");
-  }
+  // Remove direct navigation and use useEffect instead
+  useEffect(() => {
+    if (!currentUser) {
+      setTimeout(() => {
+        router.replace("/(auth)/sign-in");
+      }, 0);
+    }
+  }, [currentUser]);
 
   const [aboutus, setaboutus] = useState([]);
   const [selectedPartner, setSelectedPartner] = useState(null);
@@ -63,6 +67,11 @@ const aboutus = () => {
       Linking.openURL(url);
     }
   };
+
+  // If still loading auth state, you can optionally show a loading indicator
+  if (!currentUser) {
+    return null; // Or return a loading spinner
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
