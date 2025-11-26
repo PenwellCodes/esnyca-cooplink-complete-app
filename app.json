@@ -2,7 +2,7 @@
   "expo": {
     "name": "youthcorner",
     "slug": "youthcorner",
-    "version": "3.1.0",
+    "version": "5.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -24,13 +24,12 @@
       }
     },
     "android": {
-      "versionCode": 14,
+      "versionCode": 17,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.youthcorner.app",
-     
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
@@ -58,6 +57,18 @@
     "owner": "lihawu",
     "plugins": [
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "kotlinVersion": "1.9.24",
+            "composeCompilerVersion": "1.5.14"
+          }
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "The app accesses your photos to let you share them with your friends."
@@ -74,7 +85,8 @@
         {
           "iCloudContainerEnvironment": "Production"
         }
-      ]
+      ],
+      "expo-router"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
