@@ -6,7 +6,7 @@ export const languages = {
   ss: 'Swati',
 };
 
-// Add menu items to common translations
+
 export const commonTranslations = {
   en: {
     Services: 'Services',
