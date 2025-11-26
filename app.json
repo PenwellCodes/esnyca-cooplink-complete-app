@@ -2,7 +2,7 @@
   "expo": {
     "name": "youthcorner",
     "slug": "youthcorner",
-    "version": "1.1.0",
+    "version": "3.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,12 +17,14 @@
       "/*"
     ],
     "ios": {
+      "buildNumber": "42",
       "supportsTablet": true,
       "config": {
         "googleMapsApiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
       }
     },
     "android": {
+      "versionCode": 14,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
