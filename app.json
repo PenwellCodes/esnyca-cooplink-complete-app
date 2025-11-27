@@ -86,7 +86,8 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "expo-router"
+      "expo-router",
+      "expo-secure-store"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
