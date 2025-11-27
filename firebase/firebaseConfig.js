@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
-import { getFirestore, initializeFirestore } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -24,15 +24,10 @@ if (!getApps().length || !auth) {
   });
 }
 
-// Optionally initialize Firestore with long polling if needed
-const firestore = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-});
-
-// Alternatively, get a Firestore instance
+// Get a Firestore instance
 const db = getFirestore(app);
 
 // Initialize Firebase Storage
 const storage = getStorage(app);
 
-export { auth, db, storage, firestore };
+export { auth, db, storage };
