@@ -63,7 +63,7 @@
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "buildToolsVersion": "35.0.0",
-            "kotlinVersion": "1.9.25",
+            "kotlinVersion": "2.0.0",
             "composeCompilerVersion": "1.5.15"
           }
         }
