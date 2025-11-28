@@ -162,7 +162,7 @@ const Home = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Status Bar */}
-      <StatusBar backgroundColor={colors.background} style="light" />
+      <StatusBar style="light" />
 
       {/* App Name */}
       <Text

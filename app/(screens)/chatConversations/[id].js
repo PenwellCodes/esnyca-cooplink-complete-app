@@ -36,11 +36,43 @@ import {
   getDownloadURL,
 } from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { Audio } from "expo-av";
+import { useAudioRecorder, useAudioPlayer } from "expo-audio";
 import { Stack } from "expo-router";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
+
+// Audio player component for playing voice notes
+const AudioPlayerComponent = ({ uri, isSender }) => {
+  const player = useAudioPlayer(uri);
+  
+  return (
+    <TouchableOpacity
+      onPress={() => {
+        if (player.playing) {
+          player.pause();
+        } else {
+          player.play();
+        }
+      }}
+      style={{ flexDirection: "row", alignItems: "center" }}
+    >
+      <Ionicons
+        name={player.playing ? "pause-circle-outline" : "play-circle-outline"}
+        size={24}
+        color={isSender ? "#fff" : "black"}
+      />
+      <Text
+        style={{
+          color: isSender ? "#fff" : "black",
+          marginLeft: 8,
+        }}
+      >
+        {player.playing ? "Pause" : "Play Voice Note"}
+      </Text>
+    </TouchableOpacity>
+  );
+};
 
 const ChatScreen = () => {
   const params = useLocalSearchParams();
@@ -62,9 +94,8 @@ const ChatScreen = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
 
-  // New states for audio recording
-  const [recording, setRecording] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
+  // Audio recording hook
+  const audioRecorder = useAudioRecorder();
   const [selectedDocuments, setSelectedDocuments] = useState([]);
 
 
@@ -93,39 +124,14 @@ const ChatScreen = () => {
     markMessagesAsRead(chatId, messages);
   }, [messages]);
 
-  // Add cleanup for audio
+  // Cleanup audio recorder on unmount
   useEffect(() => {
     return () => {
-      if (recording) {
-        recording.stopAndUnloadAsync();
+      if (audioRecorder.isRecording) {
+        audioRecorder.stop();
       }
     };
-  }, [recording]);
-
-  // Modify audio initialization
-  useEffect(() => {
-    let isMounted = true;
-
-    const initAudio = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-        });
-      } catch (error) {
-        console.error("Error initializing audio:", error);
-      }
-    };
-
-    if (isMounted) {
-      initAudio();
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [audioRecorder]);
 
   // Add this useEffect to mark messages as read when the chat is opened
   useEffect(() => {
@@ -383,26 +389,16 @@ const ChatScreen = () => {
   // Start recording a voice note
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== "granted") {
+      const permission = await audioRecorder.requestPermissions();
+      if (!permission.granted) {
         Alert.alert("Permission Required", "Microphone permissions are required to record audio.");
         return;
       }
 
-      const newRecording = new Audio.Recording();
-      try {
-        await newRecording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-        await newRecording.startAsync();
-        setRecording(newRecording);
-        setIsRecording(true);
-      } catch (error) {
-        console.error("Failed to start recording", error);
-        if (newRecording) {
-          await newRecording.stopAndUnloadAsync();
-        }
-      }
+      await audioRecorder.record();
     } catch (err) {
       console.error("Failed to start recording", err);
+      Alert.alert("Error", "Failed to start recording");
     }
   };
 
@@ -410,11 +406,14 @@ const ChatScreen = () => {
   const stopRecording = async () => {
     try {
       console.log("Stopping recording..");
-      setIsRecording(false);
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
       console.log("Recording stopped and stored at", uri);
-      setRecording(null);
+      
+      if (!uri) {
+        console.error("No recording URI available");
+        return;
+      }
 
       // Create a temporary audio message with status "uploading"
       const tempMessage = {
@@ -629,33 +628,7 @@ const ChatScreen = () => {
             }
             style={styles.messageBubble}
           >
-            <TouchableOpacity
-              onPress={async () => {
-                try {
-                  const { sound } = await Audio.Sound.createAsync({
-                    uri: item.fileUrl,
-                  });
-                  await sound.playAsync();
-                } catch (error) {
-                  console.error("Error playing audio:", error);
-                }
-              }}
-              style={{ flexDirection: "row", alignItems: "center" }}
-            >
-              <Ionicons
-                name="play-circle-outline"
-                size={24}
-                color={item.sender === currentUser.uid ? "#fff" : "black"}
-              />
-              <Text
-                style={{
-                  color: item.sender === currentUser.uid ? "#fff" : "black",
-                  marginLeft: 8,
-                }}
-              >
-                Play Voice Note
-              </Text>
-            </TouchableOpacity>
+            <AudioPlayerComponent uri={item.fileUrl} isSender={item.sender === currentUser.uid} />
             <Text style={styles.timestamp}>
               {item.timestamp &&
                 typeof item.timestamp.toDate === "function"
@@ -754,13 +727,13 @@ const ChatScreen = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={isRecording ? stopRecording : startRecording}
+            onPress={audioRecorder.isRecording ? stopRecording : startRecording}
             style={styles.attachmentButton}
           >
             <Ionicons
-              name={isRecording ? "stop-circle" : "mic-outline"}
+              name={audioRecorder.isRecording ? "stop-circle" : "mic-outline"}
               size={24}
-              color={isRecording ? "red" : "#007AFF"}
+              color={audioRecorder.isRecording ? "red" : "#007AFF"}
             />
           </TouchableOpacity>
 

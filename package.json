@@ -20,7 +20,7 @@
     "date-fns": "^4.1.0",
     "expo": "~53.0.23",
     "expo-asset": "~11.1.7",
-    "expo-av": "~15.1.7",
+    "expo-audio": "~0.4.9",
     "expo-build-properties": "~0.14.8",
     "expo-constants": "~17.1.7",
     "expo-dev-client": "~5.2.4",
@@ -64,7 +64,7 @@
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
-          "expo-av",
+          "expo-audio",
           "firebase",
           "google-translate-api-x",
           "haversine",

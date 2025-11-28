@@ -20,7 +20,6 @@ const Layout = () => {
           { name: "news", title: "News" },
           { name: "cooperatives", title: "Cooperatives" },
           { name: "support", title: "Support" },
-          { name: "news-listing", title: "News Listing" },
           { name: "partnerships", title: "Partnerships" },
           { name: "profile", title: "Profile" },
           { name: "ourstory", title: "Our Story" },
@@ -43,7 +42,7 @@ const Layout = () => {
           />
         ))}
       </Stack>
-      <StatusBar backgroundColor={colors.background} style="light" />
+      <StatusBar style="light" />
     </>
   );
 };

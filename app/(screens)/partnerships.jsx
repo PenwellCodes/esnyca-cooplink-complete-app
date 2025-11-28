@@ -20,16 +20,18 @@ import { collection, getDocs } from "firebase/firestore";
 const Partnerships = () => {
   const { colors } = useTheme();
   const router = useRouter();
-  const { currentUser } = useAuth();
-
-  // Redirect if not authenticated
-  if (!loadingAuth && !currentUser) {
-    router.replace("/(auth)/sign-in");
-  }
+  const { currentUser, loadingAuth } = useAuth();
 
   const [partners, setPartners] = useState([]);
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!loadingAuth && !currentUser) {
+      router.replace("/(auth)/sign-in");
+    }
+  }, [loadingAuth, currentUser, router]);
 
   // Fetch partners data from Firestore
   useEffect(() => {
