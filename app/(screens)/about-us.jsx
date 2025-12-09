@@ -31,26 +31,63 @@ const aboutus = () => {
     }
   }, [currentUser]);
 
-  const [aboutus, setaboutus] = useState([]);
+  const [team, setTeam] = useState([]);
+  const [mission, setMission] = useState("");
+  const [vision, setVision] = useState("");
+  const [ourStory, setOurStory] = useState("");
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
-  // Fetch aboutus data from Firestore
+  // Fetch meet our team + mission/vision/story from Firestore
   useEffect(() => {
-    const fetchaboutus = async () => {
+    const fetchData = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "aboutus"));
-        const aboutusData = querySnapshot.docs.map((doc) => ({
+        const [teamSnap, missionSnap, storySnap] = await Promise.all([
+          getDocs(collection(db, "meetourteam")),
+          getDocs(collection(db, "missionandvision")),
+          getDocs(collection(db, "ourstory")),
+        ]);
+
+        const teamData = teamSnap.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
-        setaboutus(aboutusData);
+        setTeam(teamData);
+
+        const missionDoc = missionSnap.docs[0]?.data() || {};
+        // Support various key casings that might come from Firestore
+        setMission(
+          missionDoc.mission ||
+            missionDoc.Mission ||
+            missionDoc.missionText ||
+            missionDoc.description ||
+            "",
+        );
+        setVision(
+          missionDoc.vision ||
+            missionDoc.Vision ||
+            missionDoc.visionText ||
+            missionDoc.descriptionVision ||
+            "",
+        );
+
+        const storyDoc = storySnap.docs[0]?.data() || {};
+        setOurStory(
+          storyDoc.story ||
+            storyDoc.Story ||
+            storyDoc["Our Story"] ||
+            storyDoc.ourStory ||
+            storyDoc.ourstory ||
+            storyDoc.description ||
+            storyDoc.text ||
+            "",
+        );
       } catch (error) {
-        console.error("Error fetching aboutus: ", error);
+        console.error("Error fetching meetourteam/mission/ourstory: ", error);
       }
     };
 
-    fetchaboutus();
+    fetchData();
   }, []);
 
   const openDrawer = (partner) => {
@@ -62,7 +99,7 @@ const aboutus = () => {
     setIsDrawerVisible(false);
   };
 
-  const openFacebook = (url) => {
+  const openLink = (url) => {
     if (url) {
       Linking.openURL(url);
     }
@@ -75,11 +112,45 @@ const aboutus = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-   
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.error }]}>
+          Mission & Vision
+        </Text>
+        {mission ? (
+          <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
+            {mission}
+          </Text>
+        ) : null}
+        {vision ? (
+          <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
+            {vision}
+          </Text>
+        ) : null}
+      </View>
 
-      {/* Partner Cards */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.error }]}>
+          Our Story
+        </Text>
+        {ourStory ? (
+          <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
+            {ourStory}
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Meet the Team */}
+      <Text
+        style={[
+          styles.sectionTitle,
+          styles.teamHeader,
+          { color: colors.error },
+        ]}
+      >
+        Meet the Team
+      </Text>
       <FlatList
-        data={aboutus}
+        data={team}
         numColumns={3}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.flatListContainer}
@@ -90,9 +161,9 @@ const aboutus = () => {
           >
             <View style={[styles.menuItem, { borderColor: colors.error }]}>
               <Image
-                source={{ uri: item.imageUrl }}
+                source={{ uri: item.image }}
                 style={styles.partnerImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             </View>
             <Text
@@ -103,7 +174,7 @@ const aboutus = () => {
                 { color: colors.tertiary },
               ]}
             >
-              {item.title}
+              {item.name || item.title}
             </Text>
           </TouchableOpacity>
         )}
@@ -115,12 +186,12 @@ const aboutus = () => {
           visible={isDrawerVisible}
           onDismiss={closeDrawer}
           contentContainerStyle={[
-            styles.modalContainer, 
-            { 
+            styles.modalContainer,
+            {
               backgroundColor: colors.background,
               borderTopColor: colors.primary,
               borderTopWidth: 3,
-            }
+            },
           ]}
         >
           <Text style={[styles.drawerHeading, { color: colors.error }]}>
@@ -129,26 +200,33 @@ const aboutus = () => {
           {selectedPartner && (
             <>
               <Text style={[styles.drawerTitle, { color: colors.error }]}>
+                {selectedPartner.name || selectedPartner.title}
+              </Text>
+              <Text style={[styles.drawerSubTitle, { color: colors.tertiary }]}>
                 {selectedPartner.title}
               </Text>
               <Text style={[styles.drawerDescription, { color: colors.error }]}>
-                {selectedPartner.description}
+                {selectedPartner.description || selectedPartner.bio}
               </Text>
-              {selectedPartner.facebookUrl && (
-                <TouchableOpacity
-                  style={styles.facebookButton}
-                  onPress={() => openFacebook(selectedPartner.facebookUrl)}
-                >
-                  <FontAwesome
-                    name="facebook"
-                    size={24}
-                    color={colors.primary}
-                  />
-                  <Text style={[styles.facebookText, { color: colors.primary }]}>
-                    Facebook
-                  </Text>
-                </TouchableOpacity>
-              )}
+              {Array.isArray(selectedPartner.socialmedia) &&
+                selectedPartner.socialmedia.map((url, index) => (
+                  <TouchableOpacity
+                    key={`${selectedPartner.id}-social-${index}`}
+                    style={styles.facebookButton}
+                    onPress={() => openLink(url)}
+                  >
+                    <FontAwesome
+                      name="facebook"
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text
+                      style={[styles.facebookText, { color: colors.primary }]}
+                    >
+                      Social Link
+                    </Text>
+                  </TouchableOpacity>
+                ))}
             </>
           )}
         </Modal>
@@ -162,6 +240,23 @@ export default aboutus;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  section: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 6,
+  },
+  sectionBody: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  teamHeader: {
+    marginTop: 16,
+    paddingHorizontal: 16,
   },
   flatListContainer: {
     flexGrow: 1,
@@ -207,6 +302,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 10,
+  },
+  drawerSubTitle: {
+    fontSize: 14,
+    marginBottom: 6,
   },
   drawerDescription: {
     fontSize: 14,
