@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from "react";
-import { View, FlatList, TouchableOpacity, Text, StyleSheet, ScrollView } from "react-native";
+import {
+  View,
+  FlatList,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  ScrollView,
+} from "react-native";
 import { Appbar, Portal, Modal, Card, useTheme } from "react-native-paper";
-import { useRouter } from 'expo-router';
+import { useRouter } from "expo-router";
 import { MaterialIcons, FontAwesome, Ionicons } from "@expo/vector-icons";
-import { useLanguage } from '../../context/appstate/LanguageContext';
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const services = [
   {
     id: "1",
-    title: "LEGAL COMPLIANCE",
-    titleKey: 'legalCompliance',
+    title: " COMPLIANCE",
+    titleKey: "legalCompliance",
     icon: { library: "MaterialIcons", name: "gavel" },
     info: `Comprehensive legal compliance services for cooperatives, including regulatory guidance, documentation, and legal advisory support.     Your trust our responsibility. 
       Staying compliant with regulatory standards is fundamental for maintaining user trust and organizational integrity
@@ -31,49 +38,49 @@ const services = [
 
       Grievance Redressal:
       Established procedures for handling member complaints and disputes.`,
-    infoKey: 'legalComplianceInfo'
+    infoKey: "legalComplianceInfo",
   },
   {
     id: "2",
     title: "FINANCIAL SERVICES",
-    titleKey: 'financialServices',
+    titleKey: "financialServices",
     icon: { library: "FontAwesome", name: "money" },
     info: `
       Specialized financial services to support cooperative growth.
       Youth Fund for Cooperative Development, Investment Opportunities,
       Mentorship and Financial Advisory, Financial Literacy Programs.
     `,
-    infoKey: 'financialServicesInfo'
+    infoKey: "financialServicesInfo",
   },
   {
     id: "3",
     title: "TRAINING AND DEVELOPMENT",
-    titleKey: 'trainingAndDevelopment',
+    titleKey: "trainingAndDevelopment",
     icon: { library: "MaterialIcons", name: "school" },
-    info:  `
+    info: `
     Workshops and Skill Development for youth cooperatives.
     Ongoing Advisory Services for business optimization.
     Success Stories of transformed youth cooperatives.
     Topics including financial literacy, cooperative management, and business innovation.
   `,
-    infoKey: 'trainingAndDevelopmentInfo'
+    infoKey: "trainingAndDevelopmentInfo",
   },
   {
     id: "4",
     title: "MARKETING AND PROMOTION",
-    titleKey: 'marketingAndPromotion',
+    titleKey: "marketingAndPromotion",
     icon: { library: "Ionicons", name: "megaphone" },
-    info:  `
+    info: `
     Marketing initiatives designed to amplify the impact of youth cooperatives.
     Annual Marketing Events, Media Outreach, Social Media Marketing.
     Creating value for customers and driving visibility in local markets.
   `,
-    infoKey: 'marketingAndPromotionInfo'
+    infoKey: "marketingAndPromotionInfo",
   },
   {
     id: "5",
     title: "RESEARCH AND INSIGHTS",
-    titleKey: 'researchAndInsights',
+    titleKey: "researchAndInsights",
     icon: { library: "MaterialIcons", name: "search" },
     info: `
       Guidance Research, Matchmaking Services, Linkable Businesses.
@@ -81,7 +88,7 @@ const services = [
       Connecting youth cooperatives with potential partners and investors.
       Identifying complementary businesses for cooperative activities.
     `,
-    infoKey: 'researchAndInsightsInfo'
+    infoKey: "researchAndInsightsInfo",
   },
 ];
 
@@ -90,9 +97,9 @@ const ServiceScreen = () => {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const [translations, setTranslations] = useState({
-    screenTitle: 'Services',
-    moreInfo: 'More Information',
-    services: {}
+    screenTitle: "Services",
+    moreInfo: "More Information",
+    services: {},
   });
   const [selectedService, setSelectedService] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
@@ -100,14 +107,14 @@ const ServiceScreen = () => {
   useEffect(() => {
     const loadTranslations = async () => {
       const translated = {
-        screenTitle: await t('Services'),
-        moreInfo: await t('More Information'),
-        services: {}
+        screenTitle: await t("Services"),
+        moreInfo: await t("More Information"),
+        services: {},
       };
       for (const service of services) {
         translated.services[service.id] = {
           title: await t(service.title),
-          info: await t(service.info)
+          info: await t(service.info),
         };
       }
       setTranslations(translated);
@@ -127,9 +134,13 @@ const ServiceScreen = () => {
   const renderIcon = (icon) => {
     switch (icon.library) {
       case "MaterialIcons":
-        return <MaterialIcons name={icon.name} size={40} color={colors.primary} />;
+        return (
+          <MaterialIcons name={icon.name} size={40} color={colors.primary} />
+        );
       case "FontAwesome":
-        return <FontAwesome name={icon.name} size={40} color={colors.primary} />;
+        return (
+          <FontAwesome name={icon.name} size={40} color={colors.primary} />
+        );
       case "Ionicons":
         return <Ionicons name={icon.name} size={40} color={colors.primary} />;
       default:
@@ -138,7 +149,7 @@ const ServiceScreen = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>  
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
         data={services}
         numColumns={3}
@@ -149,10 +160,10 @@ const ServiceScreen = () => {
             style={styles.menuItemContainer}
             onPress={() => openDrawer(item)}
           >
-            <View style={[styles.menuItem, { borderColor: colors.error }]}>  
+            <View style={[styles.menuItem, { borderColor: colors.error }]}>
               {renderIcon(item.icon)}
             </View>
-            <Text style={[styles.menuText, { color: colors.tertiary }]}>  
+            <Text style={[styles.menuText, { color: colors.tertiary }]}>
               {translations.services[item.id]?.title || item.title}
             </Text>
           </TouchableOpacity>
@@ -164,8 +175,8 @@ const ServiceScreen = () => {
           visible={isDrawerVisible}
           onDismiss={closeDrawer}
           contentContainerStyle={[
-            styles.modalContainer, 
-            { backgroundColor: colors.background }
+            styles.modalContainer,
+            { backgroundColor: colors.background },
           ]}
         >
           <ScrollView style={styles.drawerScroll}>
@@ -175,13 +186,21 @@ const ServiceScreen = () => {
             {selectedService && (
               <>
                 <Text style={[styles.drawerTitle, { color: colors.error }]}>
-                  {translations.services[selectedService.id]?.title || selectedService.title}
+                  {translations.services[selectedService.id]?.title ||
+                    selectedService.title}
                 </Text>
                 <Card style={styles.cardCover}>
-                  <Card.Cover source={{ uri: "https://media.istockphoto.com/id/625736338/photo/stack-of-hands-showing-unity.jpg?s=612x612&w=0&k=20&c=20mAQjGRQ5XVKqHe2qFguqGZ4dwto6lxxinciCfnVI0=" }} />
+                  <Card.Cover
+                    source={{
+                      uri: "https://media.istockphoto.com/id/625736338/photo/stack-of-hands-showing-unity.jpg?s=612x612&w=0&k=20&c=20mAQjGRQ5XVKqHe2qFguqGZ4dwto6lxxinciCfnVI0=",
+                    }}
+                  />
                 </Card>
-                <Text style={[styles.drawerDescription, { color: colors.error }]}>
-                  {translations.services[selectedService.id]?.info || selectedService.info}
+                <Text
+                  style={[styles.drawerDescription, { color: colors.error }]}
+                >
+                  {translations.services[selectedService.id]?.info ||
+                    selectedService.info}
                 </Text>
               </>
             )}
