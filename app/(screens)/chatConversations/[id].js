@@ -10,7 +10,7 @@ import {
   Linking,
   ActivityIndicator,
   Alert,
-  Platform
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../../context/appstate/ChatContext";
@@ -36,43 +36,10 @@ import {
   getDownloadURL,
 } from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
-import { useAudioRecorder, useAudioPlayer } from "expo-audio";
 import { Stack } from "expo-router";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
-
-// Audio player component for playing voice notes
-const AudioPlayerComponent = ({ uri, isSender }) => {
-  const player = useAudioPlayer(uri);
-  
-  return (
-    <TouchableOpacity
-      onPress={() => {
-        if (player.playing) {
-          player.pause();
-        } else {
-          player.play();
-        }
-      }}
-      style={{ flexDirection: "row", alignItems: "center" }}
-    >
-      <Ionicons
-        name={player.playing ? "pause-circle-outline" : "play-circle-outline"}
-        size={24}
-        color={isSender ? "#fff" : "black"}
-      />
-      <Text
-        style={{
-          color: isSender ? "#fff" : "black",
-          marginLeft: 8,
-        }}
-      >
-        {player.playing ? "Pause" : "Play Voice Note"}
-      </Text>
-    </TouchableOpacity>
-  );
-};
 
 const ChatScreen = () => {
   const params = useLocalSearchParams();
@@ -94,10 +61,7 @@ const ChatScreen = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
 
-  // Audio recording hook
-  const audioRecorder = useAudioRecorder();
   const [selectedDocuments, setSelectedDocuments] = useState([]);
-
 
   const contextMessages = conversations[chatId] || [];
   const messages = [...contextMessages, ...localMessages];
@@ -110,11 +74,12 @@ const ChatScreen = () => {
 
   useEffect(() => {
     (async () => {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Permission Required",
-          "Sorry, we need media library permissions to make this work!"
+          "Sorry, we need media library permissions to make this work!",
         );
       }
     })();
@@ -123,15 +88,6 @@ const ChatScreen = () => {
   useEffect(() => {
     markMessagesAsRead(chatId, messages);
   }, [messages]);
-
-  // Cleanup audio recorder on unmount
-  useEffect(() => {
-    return () => {
-      if (audioRecorder.isRecording) {
-        audioRecorder.stop();
-      }
-    };
-  }, [audioRecorder]);
 
   // Add this useEffect to mark messages as read when the chat is opened
   useEffect(() => {
@@ -142,10 +98,12 @@ const ChatScreen = () => {
 
   const sendMessage = async () => {
     if (!messageText.trim()) return;
-    
+
     // Check if there's a story preview in the params
-    const storyPreview = params.storyPreview ? JSON.parse(params.storyPreview) : null;
-    
+    const storyPreview = params.storyPreview
+      ? JSON.parse(params.storyPreview)
+      : null;
+
     const tempMessage = {
       id: Date.now().toString(),
       sender: currentUser.uid,
@@ -203,7 +161,7 @@ const ChatScreen = () => {
         async () => {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
           resolve(downloadURL);
-        }
+        },
       );
     });
   };
@@ -226,8 +184,8 @@ const ChatScreen = () => {
   const pickDocuments = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', // Allow all file types
-        copyToCacheDirectory: true
+        type: "*/*", // Allow all file types
+        copyToCacheDirectory: true,
       });
 
       if (result.assets && result.assets.length > 0) {
@@ -236,8 +194,8 @@ const ChatScreen = () => {
         await sendDocument(file);
       }
     } catch (error) {
-      console.error('Error picking document:', error);
-      Alert.alert('Error', 'Failed to pick document');
+      console.error("Error picking document:", error);
+      Alert.alert("Error", "Failed to pick document");
     }
   };
 
@@ -286,7 +244,7 @@ const ChatScreen = () => {
       setLocalMessages([]);
     } catch (error) {
       console.error("Error sending document:", error);
-      Alert.alert('Error', 'Failed to send document');
+      Alert.alert("Error", "Failed to send document");
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -386,81 +344,6 @@ const ChatScreen = () => {
     }
   };
 
-  // Start recording a voice note
-  const startRecording = async () => {
-    try {
-      const permission = await audioRecorder.requestPermissions();
-      if (!permission.granted) {
-        Alert.alert("Permission Required", "Microphone permissions are required to record audio.");
-        return;
-      }
-
-      await audioRecorder.record();
-    } catch (err) {
-      console.error("Failed to start recording", err);
-      Alert.alert("Error", "Failed to start recording");
-    }
-  };
-
-  // Stop recording, upload the voice note, and send it as a message
-  const stopRecording = async () => {
-    try {
-      console.log("Stopping recording..");
-      await audioRecorder.stop();
-      const uri = audioRecorder.uri;
-      console.log("Recording stopped and stored at", uri);
-      
-      if (!uri) {
-        console.error("No recording URI available");
-        return;
-      }
-
-      // Create a temporary audio message with status "uploading"
-      const tempMessage = {
-        id: Date.now().toString(),
-        sender: currentUser.uid,
-        receiver: user.uid,
-        fileUrl: uri,
-        type: "audio",
-        timestamp: new Date(),
-        status: "uploading",
-      };
-      setLocalMessages((prev) => [...prev, tempMessage]);
-      flatListRef.current?.scrollToEnd({ animated: true });
-      setUploading(true);
-
-      const fileName = uri.split("/").pop();
-      const storagePath = `chatAttachments/${chatId}/${Date.now()}_${fileName}`;
-      const downloadURL = await uploadFile(uri, storagePath);
-
-      const message = {
-        sender: currentUser.uid,
-        receiver: user.uid,
-        fileUrl: downloadURL,
-        fileName,
-        type: "audio",
-        timestamp: serverTimestamp(),
-        status: "sent",
-      };
-
-      const chatDocRef = doc(db, "chats", chatId);
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (!chatDocSnap.exists()) {
-        await setDoc(chatDocRef, {
-          participants: [currentUser.uid, user.uid],
-          createdAt: serverTimestamp(),
-        });
-      }
-      await addDoc(collection(db, "chats", chatId, "messages"), message);
-      setLocalMessages([]);
-    } catch (error) {
-      console.error("Error recording audio:", error);
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
-    }
-  };
-
   const renderMessage = ({ item }) => {
     if (item.type === "story_reply") {
       return (
@@ -468,14 +351,15 @@ const ChatScreen = () => {
           style={[
             styles.messageBubble,
             {
-              alignSelf: item.sender === currentUser.uid ? "flex-end" : "flex-start",
+              alignSelf:
+                item.sender === currentUser.uid ? "flex-end" : "flex-start",
             },
           ]}
         >
           {item.storyPreview?.imageURL && (
             <View style={styles.storyPreviewContainer}>
-              <Image 
-                source={{ uri: item.storyPreview.imageURL }} 
+              <Image
+                source={{ uri: item.storyPreview.imageURL }}
                 style={styles.storyPreviewImage}
               />
               {item.storyPreview.caption && (
@@ -493,7 +377,8 @@ const ChatScreen = () => {
       return (
         <View
           style={{
-            alignSelf: item.sender === currentUser.uid ? "flex-end" : "flex-start",
+            alignSelf:
+              item.sender === currentUser.uid ? "flex-end" : "flex-start",
             marginVertical: 5,
             marginHorizontal: 10,
           }}
@@ -531,11 +416,14 @@ const ChatScreen = () => {
                   <Ionicons
                     name="download-outline"
                     size={16}
-                    color={item.sender === currentUser.uid ? "#cce6ff" : "#007AFF"}
+                    color={
+                      item.sender === currentUser.uid ? "#cce6ff" : "#007AFF"
+                    }
                   />
                   <Text
                     style={{
-                      color: item.sender === currentUser.uid ? "#cce6ff" : "#007AFF",
+                      color:
+                        item.sender === currentUser.uid ? "#cce6ff" : "#007AFF",
                       marginLeft: 5,
                       fontSize: 12,
                     }}
@@ -545,11 +433,10 @@ const ChatScreen = () => {
                 </TouchableOpacity>
               )}
               <Text style={styles.timestamp}>
-                {item.timestamp &&
-                  typeof item.timestamp.toDate === "function"
+                {item.timestamp && typeof item.timestamp.toDate === "function"
                   ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
-                    addSuffix: true,
-                  })
+                      addSuffix: true,
+                    })
                   : "Sending..."}
               </Text>
             </View>
@@ -600,45 +487,63 @@ const ChatScreen = () => {
               </Text>
             </TouchableOpacity>
             <Text style={styles.timestamp}>
-              {item.timestamp &&
-                typeof item.timestamp.toDate === "function"
+              {item.timestamp && typeof item.timestamp.toDate === "function"
                 ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
-                  addSuffix: true,
-                })
+                    addSuffix: true,
+                  })
                 : "Sending..."}
             </Text>
           </View>
         </LinearGradient>
       );
     }
+    // Treat audio messages as downloadable files (recording disabled)
     if (item.type === "audio") {
       return (
-        <View
-          style={{
-            alignSelf: item.sender === currentUser.uid ? "flex-end" : "flex-start",
-            marginVertical: 5,
-            marginHorizontal: 10,
-          }}
+        <LinearGradient
+          colors={
+            item.sender === currentUser.uid
+              ? ["#4c669f", "#3b5998"]
+              : ["#e0e0e0", "#cfcfcf"]
+          }
+          style={[
+            styles.messageBubble,
+            {
+              alignSelf:
+                item.sender === currentUser.uid ? "flex-end" : "flex-start",
+              flexDirection: "row",
+              alignItems: "center",
+            },
+          ]}
         >
-          <LinearGradient
-            colors={
-              item.sender === currentUser.uid
-                ? ["#4c669f", "#3b5998"]
-                : ["#e0e0e0", "#cfcfcf"]
-            }
-            style={styles.messageBubble}
-          >
-            <AudioPlayerComponent uri={item.fileUrl} isSender={item.sender === currentUser.uid} />
+          <Ionicons
+            name="musical-notes-outline"
+            size={24}
+            color={item.sender === currentUser.uid ? "white" : "black"}
+          />
+          <View style={{ marginLeft: 8 }}>
+            <TouchableOpacity
+              onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
+            >
+              <Text
+                style={{
+                  color:
+                    item.sender === currentUser.uid ? "#cce6ff" : "#007AFF",
+                  fontWeight: "bold",
+                }}
+              >
+                Voice note
+              </Text>
+            </TouchableOpacity>
             <Text style={styles.timestamp}>
-              {item.timestamp &&
-                typeof item.timestamp.toDate === "function"
+              {item.timestamp && typeof item.timestamp.toDate === "function"
                 ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
-                  addSuffix: true,
-                })
+                    addSuffix: true,
+                  })
                 : "Sending..."}
             </Text>
-          </LinearGradient>
-        </View>
+          </View>
+        </LinearGradient>
       );
     }
     return (
@@ -664,11 +569,10 @@ const ChatScreen = () => {
           {item.text}
         </Text>
         <Text style={styles.timestamp}>
-          {item.timestamp &&
-            typeof item.timestamp.toDate === "function"
+          {item.timestamp && typeof item.timestamp.toDate === "function"
             ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
-              addSuffix: true,
-            })
+                addSuffix: true,
+              })
             : "Sending..."}
         </Text>
       </LinearGradient>
@@ -677,14 +581,22 @@ const ChatScreen = () => {
 
   return (
     <>
-      <Stack.Screen 
-        options={{ 
-          headerShown: false 
-        }} 
+      <Stack.Screen
+        options={{
+          headerShown: false,
+        }}
       />
-      <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: colors.background, flex: 1 },
+        ]}
+      >
         <View style={[styles.header, { marginTop: 35 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           <Image
@@ -722,29 +634,24 @@ const ChatScreen = () => {
             <Ionicons name="image-outline" size={24} color="#007AFF" />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={pickDocuments} style={styles.attachmentButton}>
-            <Ionicons name="attach-outline" size={24} color="#007AFF" />
-          </TouchableOpacity>
-
           <TouchableOpacity
-            onPress={audioRecorder.isRecording ? stopRecording : startRecording}
+            onPress={pickDocuments}
             style={styles.attachmentButton}
           >
-            <Ionicons
-              name={audioRecorder.isRecording ? "stop-circle" : "mic-outline"}
-              size={24}
-              color={audioRecorder.isRecording ? "red" : "#007AFF"}
-            />
+            <Ionicons name="attach-outline" size={24} color="#007AFF" />
           </TouchableOpacity>
 
           <TextInput
             placeholder="Type a message..."
             value={messageText}
             onChangeText={setMessageText}
-            style={[styles.input, { 
-              borderColor: colors.error,
-              color: colors.error
-            }]}
+            style={[
+              styles.input,
+              {
+                borderColor: colors.error,
+                color: colors.error,
+              },
+            ]}
             placeholderTextColor={colors.error}
           />
           <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
@@ -856,7 +763,7 @@ const styles = StyleSheet.create({
   storyPreviewContainer: {
     marginBottom: 8,
     borderRadius: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   storyPreviewImage: {
     width: 200,
@@ -864,12 +771,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   storyPreviewCaption: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     padding: 8,
-    color: 'white',
+    color: "white",
   },
 });

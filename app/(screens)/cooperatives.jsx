@@ -76,11 +76,11 @@ const CooperativeUsersScreen = () => {
   useEffect(() => {
     // If we have a highlightId, scroll to that cooperative
     if (highlightId) {
-      const index = users.findIndex(user => user.id === highlightId);
+      const index = users.findIndex((user) => user.id === highlightId);
       if (index !== -1) {
         // Set the region to match the highlighted cooperative
         const user = users[index];
-        setSelectedRegion(user.region || 'All');
+        setSelectedRegion(user.region || "All");
       }
     }
   }, [highlightId]);
@@ -93,31 +93,47 @@ const CooperativeUsersScreen = () => {
   const startChat = (user) => {
     if (!currentUser) {
       // Encode the return path with the highlight parameter
-      const returnTo = encodeURIComponent(`/cooperatives?highlightId=${user.id}`);
+      const returnTo = encodeURIComponent(
+        `/cooperatives?highlightId=${user.id}`,
+      );
       router.push(`/(auth)/sign-in?returnTo=${returnTo}`);
       return;
     }
 
-    const predefinedMessage = "Hello 👋 there , can you share more about your cooperative 🥰";
-    router.push({
-      pathname: `/(screens)/chatConversations/${user.uid}`,
-      params: {
-        user: JSON.stringify(user),
-        predefinedMessage,
-      },
-    });
+    const predefinedMessage =
+      "Hello 👋 there , can you share more about your cooperative 🥰";
+    const userId = user.uid || user.id;
+    if (!userId) {
+      console.warn("Cannot start chat without a valid user id");
+      return;
+    }
+    console.log("startChat userId:", userId, "user:", user);
+    try {
+      router.push({
+        pathname: `/(screens)/chatConversations/${userId}`,
+        params: {
+          user: JSON.stringify(user),
+          predefinedMessage,
+        },
+      });
+    } catch (error) {
+      console.error("Navigation failed:", error);
+    }
   };
+
   // Render a user card
   const renderUserCard = ({ item }) => (
-    <View style={[
-      styles.card,
-      { backgroundColor: colors.background },
-      highlightId === item.id && {
-        borderColor: colors.primary,
-        borderWidth: 2,
-        backgroundColor: `${colors.primary}10`, // Add slight highlight color
-      }
-    ]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.background },
+        highlightId === item.id && {
+          borderColor: colors.primary,
+          borderWidth: 2,
+          backgroundColor: `${colors.primary}10`, // Add slight highlight color
+        },
+      ]}
+    >
       <View style={styles.leftColumn}>
         <Image
           source={{ uri: item.profilePic || images.defaultAvatar }}
@@ -168,7 +184,12 @@ const CooperativeUsersScreen = () => {
               onPress={() => setMenuVisible(true)}
             >
               <Ionicons name="filter" size={20} color={colors.primary} />
-              <Text style={[styles.filterButtonText, { color: colors.primary }]}> Filter</Text>
+              <Text
+                style={[styles.filterButtonText, { color: colors.primary }]}
+              >
+                {" "}
+                Filter
+              </Text>
             </TouchableOpacity>
           }
         >
@@ -202,17 +223,20 @@ const CooperativeUsersScreen = () => {
           <View style={styles.drawerContentContainer}>
             <Text style={styles.drawerLabel}>Name:</Text>
             <Text style={styles.drawerText}>{selectedUser?.displayName}</Text>
-            
+
             <Text style={styles.drawerLabel}>Product/Service:</Text>
             <Text style={styles.drawerText}>
-              {selectedUser?.content || "No product/service information available"}
+              {selectedUser?.content ||
+                "No product/service information available"}
             </Text>
-            
+
             <Text style={styles.drawerLabel}>Contact:</Text>
             <Text style={styles.drawerText}>{selectedUser?.phoneNumber}</Text>
-            
+
             <Text style={styles.drawerLabel}>Location:</Text>
-            <Text style={styles.drawerText}>{selectedUser?.physicalAddress}</Text>
+            <Text style={styles.drawerText}>
+              {selectedUser?.physicalAddress}
+            </Text>
           </View>
         </Modal>
       </Portal>
@@ -337,13 +361,13 @@ const styles = StyleSheet.create({
   },
   contentLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: "600",
+    color: "#666",
     marginTop: 4,
   },
   content: {
     fontSize: 14,
-    color: '#333',
+    color: "#333",
     marginBottom: 4,
   },
   drawerContentContainer: {
@@ -351,13 +375,13 @@ const styles = StyleSheet.create({
   },
   drawerLabel: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginTop: 12,
   },
   drawerText: {
     fontSize: 15,
-    color: '#666',
+    color: "#666",
     marginTop: 4,
   },
 });
