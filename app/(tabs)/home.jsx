@@ -19,7 +19,7 @@ import { searchScreensAndDatabase } from "../../utils/searchScreen";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from "../../firebase/firebaseConfig";
-import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { collection, query, orderBy, limit, getDocs, Timestamp } from "firebase/firestore";
 
 const newsHeadlines = [
   "Innovation is key in every aspect of technology",
@@ -90,16 +90,32 @@ const Home = () => {
     const checkUnreadNews = async () => {
       try {
         const lastReadTime = await AsyncStorage.getItem('lastNewsReadTime') || '0';
+        // Query news ordered by createdAt, filter for published in JavaScript
+        // to avoid composite index requirement
         const newsQuery = query(
           collection(db, "news"),
-          orderBy("date", "desc"),
-          limit(1)
+          orderBy("createdAt", "desc"),
+          limit(10) // Get more items to ensure we find a published one
         );
         const newsSnapshot = await getDocs(newsQuery);
         
-        if (!newsSnapshot.empty) {
-          const latestNews = newsSnapshot.docs[0].data();
-          setHasUnreadNews(latestNews.date.seconds * 1000 > parseInt(lastReadTime));
+        // Find the first published news item
+        const publishedNews = newsSnapshot.docs
+          .map((doc) => doc.data())
+          .find((news) => news.published === true);
+        
+        if (publishedNews) {
+          const newsDate = publishedNews.createdAt;
+          
+          // Handle Firestore Timestamp properly
+          let newsTimestamp = 0;
+          if (newsDate instanceof Timestamp) {
+            newsTimestamp = newsDate.toMillis();
+          } else if (newsDate && newsDate.seconds) {
+            newsTimestamp = newsDate.seconds * 1000;
+          }
+          
+          setHasUnreadNews(newsTimestamp > parseInt(lastReadTime));
         }
       } catch (error) {
         console.error("Error checking unread news:", error);
