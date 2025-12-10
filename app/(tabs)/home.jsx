@@ -17,15 +17,16 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { searchScreensAndDatabase } from "../../utils/searchScreen";
 import { useLanguage } from "../../context/appstate/LanguageContext";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "../../firebase/firebaseConfig";
-import { collection, query, orderBy, limit, getDocs, Timestamp } from "firebase/firestore";
-
-const newsHeadlines = [
-  "Innovation is key in every aspect of technology",
-  "Breaking: New advancements in AI and automation",
-  "Tech industry sees major growth this year",
-];
+import {
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+  Timestamp,
+} from "firebase/firestore";
 
 const Home = () => {
   const { colors } = useTheme();
@@ -35,6 +36,11 @@ const Home = () => {
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
   const [searchQuery, setSearchQuery] = useState("");
   const [hasUnreadNews, setHasUnreadNews] = useState(false);
+  const [newsHeadlines, setNewsHeadlines] = useState([
+    "Welcome to ESNYCA",
+    "Stay updated with the latest news",
+    "Connecting cooperatives together",
+  ]); // Default headlines until news is loaded
 
   const [translations, setTranslations] = useState({
     services: "Services",
@@ -66,7 +72,10 @@ const Home = () => {
       duration: 500,
       useNativeDriver: true,
     }).start(() => {
-      setHeadlineIndex((prevIndex) => (prevIndex + 1) % newsHeadlines.length);
+      setHeadlineIndex((prevIndex) => {
+        if (newsHeadlines.length === 0) return 0;
+        return (prevIndex + 1) % newsHeadlines.length;
+      });
       fadeIn();
     });
   };
@@ -80,33 +89,48 @@ const Home = () => {
   };
 
   useEffect(() => {
+    // Only start animation if we have headlines
+    if (newsHeadlines.length === 0) return;
+
     const interval = setInterval(() => {
       fadeOut();
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [newsHeadlines.length]);
 
   useEffect(() => {
-    const checkUnreadNews = async () => {
+    const fetchNewsData = async () => {
       try {
-        const lastReadTime = await AsyncStorage.getItem('lastNewsReadTime') || '0';
+        const lastReadTime =
+          (await AsyncStorage.getItem("lastNewsReadTime")) || "0";
         // Query news ordered by createdAt, filter for published in JavaScript
         // to avoid composite index requirement
         const newsQuery = query(
           collection(db, "news"),
           orderBy("createdAt", "desc"),
-          limit(10) // Get more items to ensure we find a published one
+          limit(10), // Get more items to ensure we find a published one
         );
         const newsSnapshot = await getDocs(newsQuery);
-        
-        // Find the first published news item
+
+        // Get all published news items
         const publishedNews = newsSnapshot.docs
           .map((doc) => doc.data())
-          .find((news) => news.published === true);
-        
-        if (publishedNews) {
-          const newsDate = publishedNews.createdAt;
-          
+          .filter((news) => news.published === true);
+
+        if (publishedNews.length > 0) {
+          // Extract titles from published news
+          const headlines = publishedNews
+            .map((news) => news.title)
+            .filter((title) => title && title.trim() !== ""); // Filter out empty titles
+
+          if (headlines.length > 0) {
+            setNewsHeadlines(headlines);
+          }
+
+          // Check for unread news using the first published item
+          const latestNews = publishedNews[0];
+          const newsDate = latestNews.createdAt;
+
           // Handle Firestore Timestamp properly
           let newsTimestamp = 0;
           if (newsDate instanceof Timestamp) {
@@ -114,21 +138,21 @@ const Home = () => {
           } else if (newsDate && newsDate.seconds) {
             newsTimestamp = newsDate.seconds * 1000;
           }
-          
+
           setHasUnreadNews(newsTimestamp > parseInt(lastReadTime));
         }
       } catch (error) {
-        console.error("Error checking unread news:", error);
+        console.error("Error fetching news:", error);
       }
     };
 
-    checkUnreadNews();
+    fetchNewsData();
   }, []);
 
   const handleNewsPress = async () => {
-    await AsyncStorage.setItem('lastNewsReadTime', Date.now().toString());
+    await AsyncStorage.setItem("lastNewsReadTime", Date.now().toString());
     setHasUnreadNews(false);
-    router.push('/news');
+    router.push("/news");
   };
 
   const menuItems = [
@@ -144,12 +168,12 @@ const Home = () => {
       icon: "business",
       route: "/cooperatives",
     },
-    { 
-      name: translations.news, 
-      icon: "newspaper", 
+    {
+      name: translations.news,
+      icon: "newspaper",
       route: "/news",
       onPress: handleNewsPress,
-      hasNotification: hasUnreadNews 
+      hasNotification: hasUnreadNews,
     },
     {
       name: translations.partnerships,
@@ -171,7 +195,7 @@ const Home = () => {
         },
       });
     } catch (error) {
-      console.error('Search error:', error);
+      console.error("Search error:", error);
     }
   };
 
@@ -207,7 +231,9 @@ const Home = () => {
             { color: colors.primary, opacity: textOpacity },
           ]}
         >
-          {newsHeadlines[headlineIndex]}
+          {newsHeadlines[headlineIndex] ||
+            newsHeadlines[0] ||
+            "Welcome to ESNYCA"}
         </Animated.Text>
       </View>
       {/* Updated Search Box */}
@@ -244,7 +270,12 @@ const Home = () => {
                 color={colors.primary}
               />
               {item.hasNotification && (
-                <View style={[styles.notificationDot, { backgroundColor: colors.error }]}>
+                <View
+                  style={[
+                    styles.notificationDot,
+                    { backgroundColor: colors.error },
+                  ]}
+                >
                   <MaterialIcons name="notifications" size={16} color="white" />
                 </View>
               )}
@@ -332,13 +363,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   notificationDot: {
-    position: 'absolute',
+    position: "absolute",
     top: -5,
     right: -5,
     width: 24,
     height: 24,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
