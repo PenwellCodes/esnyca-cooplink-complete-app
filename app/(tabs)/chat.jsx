@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -29,9 +29,51 @@ const ChatList = () => {
   const { currentUser } = useAuth();
   const { stories: activeStories } = useStories();
   const { conversations, lastMessages, getSortedChats } = useChat(); // Add this line
-  const [chatList, setChatList] = useState([]);
+  const [baseUserList, setBaseUserList] = useState([]); // Store base user data
   const [loading, setLoading] = useState(true);
   const [groupMemberCount, setGroupMemberCount] = useState(0);
+  
+  // Use refs to store latest values without causing re-subscriptions
+  const conversationsRef = useRef(conversations);
+  const lastMessagesRef = useRef(lastMessages);
+  
+  // Update refs when values change
+  useEffect(() => {
+    conversationsRef.current = conversations;
+    lastMessagesRef.current = lastMessages;
+  }, [conversations, lastMessages]);
+  
+  // Compute chat list from base users and conversations/lastMessages using useMemo
+  const chatList = React.useMemo(() => {
+    if (!currentUser || baseUserList.length === 0) return [];
+    
+    const updatedUsers = baseUserList.map(user => {
+      const chatId = currentUser.uid > user.uid
+        ? `${currentUser.uid}_${user.uid}`
+        : `${user.uid}_${currentUser.uid}`;
+        
+      const chatData = conversations[chatId] || [];
+      const lastMessage = chatData[chatData.length - 1];
+      
+      const unreadCount = chatData.filter(
+        msg => !msg.read && msg.sender !== currentUser.uid
+      ).length;
+      
+      return {
+        ...user,
+        lastMessage: lastMessage?.text || 
+          (lastMessage?.fileUrl ? "📂 File sent" : "Start a conversation"),
+        lastMessageTimestamp: lastMessages[chatId],
+        unreadCount,
+      };
+    });
+
+    return updatedUsers.sort((a, b) => {
+      const timeA = a.lastMessageTimestamp?.toDate?.() || 0;
+      const timeB = b.lastMessageTimestamp?.toDate?.() || 0;
+      return timeB - timeA;
+    });
+  }, [baseUserList, conversations, lastMessages, currentUser]);
 
   // Listener for total group members (all users)
   useEffect(() => {
@@ -63,12 +105,16 @@ const ChatList = () => {
     const unsubscribe = onSnapshot(usersQuery, async (snapshot) => {
       const users = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       
+      // Use refs to get latest values without causing re-subscriptions
+      const currentConversations = conversationsRef.current;
+      const currentLastMessages = lastMessagesRef.current;
+      
       const updatedUsers = users.map(user => {
         const chatId = currentUser.uid > user.uid
           ? `${currentUser.uid}_${user.uid}`
           : `${user.uid}_${currentUser.uid}`;
           
-        const chatData = conversations[chatId] || [];
+        const chatData = currentConversations[chatId] || [];
         const lastMessage = chatData[chatData.length - 1];
         
         // Only count messages that are not read and not from current user
@@ -80,24 +126,18 @@ const ChatList = () => {
           ...user,
           lastMessage: lastMessage?.text || 
             (lastMessage?.fileUrl ? "📂 File sent" : "Start a conversation"),
-          lastMessageTimestamp: lastMessages[chatId],
+          lastMessageTimestamp: currentLastMessages[chatId],
           unreadCount,
         };
       });
 
-      // Sort users based on last message timestamp
-      const sortedUsers = updatedUsers.sort((a, b) => {
-        const timeA = a.lastMessageTimestamp?.toDate?.() || 0;
-        const timeB = b.lastMessageTimestamp?.toDate?.() || 0;
-        return timeB - timeA;
-      });
-
-      setChatList(sortedUsers);
+      // Store base user data (without chat-specific data)
+      setBaseUserList(users);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [currentUser, conversations, lastMessages]);
+  }, [currentUser]); // Removed conversations and lastMessages from dependencies
 
   // Group stories by user
   const groupedStories = React.useMemo(() => {
