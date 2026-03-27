@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }) => {
         await AsyncStorage.setItem("user", JSON.stringify(completeUser));
       } else {
         setCurrentUser(null);
-        console.log("No user is signed in.");masiko
+        console.log("No user is signed in.");
         await AsyncStorage.removeItem("user");
       }
       setLoadingAuth(false);
@@ -90,7 +90,7 @@ export const AuthProvider = ({ children }) => {
     login,
     loadingAuth,
     auth,
-    resetPassword, // Add this line
+    resetPassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
