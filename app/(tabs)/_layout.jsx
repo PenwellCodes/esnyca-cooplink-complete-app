@@ -1,11 +1,13 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { View, Text } from "react-native";
 import { useTheme } from "react-native-paper";
 import Feather from "@expo/vector-icons/Feather";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../context/appstate/AuthContext"; // Import AuthContext
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const TabIcon = ({ icon, color, label, isActive }) => (
   <View style={{ alignItems: "center", width: 70 }}>
@@ -22,9 +24,30 @@ const TabIcon = ({ icon, color, label, isActive }) => (
 
 const TabLayout = () => {
   const { colors, dark } = useTheme();
+  const insets = useSafeAreaInsets();
   const pathname = usePathname(); // Get current active route
   const { currentUser } = useAuth(); // Get user state from AuthContext
   const router = useRouter();
+  const { currentLanguage, t } = useLanguage();
+
+  const [tabLabels, setTabLabels] = useState({
+    home: "Home",
+    chat: "Chat",
+    settings: "Settings",
+    location: "Locations",
+  });
+
+  useEffect(() => {
+    const loadTabLabels = async () => {
+      setTabLabels({
+        home: await t("Home"),
+        chat: await t("Chat"),
+        settings: await t("Settings"),
+        location: await t("Locations"),
+      });
+    };
+    loadTabLabels();
+  }, [currentLanguage, t]);
 
   return (
     <>
@@ -34,7 +57,9 @@ const TabLayout = () => {
           tabBarInactiveTintColor: colors.tertiary,
           tabBarShowLabel: false,
           tabBarStyle: {
-            height: 60,
+            // Keep the tab bar above the phone's bottom nav / gesture bar
+            height: 60 + insets.bottom,
+            paddingBottom: insets.bottom || 8,
             borderTopWidth: 0,
             backgroundColor: colors.background,
           },
@@ -43,13 +68,13 @@ const TabLayout = () => {
         <Tabs.Screen
           name="home"
           options={{
-            title: "Home",
+            title: tabLabels.home,
             headerShown: false,
             tabBarIcon: ({ color }) => (
               <TabIcon
                 icon={() => <AntDesign name="home" size={24} color={color} />}
                 color={color}
-                label="Home"
+                label={tabLabels.home}
                 isActive={pathname === "/home"}
               />
             ),
@@ -58,7 +83,7 @@ const TabLayout = () => {
         <Tabs.Screen
           name="chat"
           options={{
-            title: "Chat",
+            title: tabLabels.chat,
             headerShown: false,
             tabBarIcon: ({ color }) => (
               <TabIcon
@@ -70,7 +95,7 @@ const TabLayout = () => {
                   />
                 )}
                 color={color}
-                label="Chat"
+                label={tabLabels.chat}
                 isActive={pathname === "/chat"}
               />
             ),
@@ -79,7 +104,10 @@ const TabLayout = () => {
             tabPress: (e) => {
               if (!currentUser) {
                 e.preventDefault(); // Prevent navigation to Chat
-                router.replace("/sign-in"); // Redirect to sign-in
+                // Push (not replace) so the sign-in screen can go "back" to the previous tab.
+                // Also pass returnTo so after successful login we can route to the tab the user intended.
+                const returnTo = encodeURIComponent("/(tabs)/chat");
+                router.push(`/(auth)/sign-in?returnTo=${returnTo}`);
               }
             },
           }}
@@ -87,7 +115,7 @@ const TabLayout = () => {
         <Tabs.Screen
           name="settings"
           options={{
-            title: "Settings",
+            title: tabLabels.settings,
             headerShown: false,
             tabBarIcon: ({ color }) => (
               <TabIcon
@@ -95,7 +123,7 @@ const TabLayout = () => {
                   <Ionicons name="settings-outline" size={24} color={color} />
                 )}
                 color={color}
-                label="Settings"
+                label={tabLabels.settings}
                 isActive={pathname === "/settings"}
               />
             ),
@@ -104,20 +132,21 @@ const TabLayout = () => {
         <Tabs.Screen
           name="location"
           options={{
-            title: "Location",
+            title: tabLabels.location,
             headerShown: false,
             tabBarIcon: ({ color }) => (
               <TabIcon
                 icon={() => <Feather name="map-pin" size={24} color={color} />}
                 color={color}
-                label="Locations"
+                label={tabLabels.location}
                 isActive={pathname === "/location"}
               />
             ),
           }}
         />
       </Tabs>
-      <StatusBar style="standard" />
+      {/* Status bar on tabs: use theme.dark to choose icon color */}
+      <StatusBar style={dark ? "light" : "dark"} backgroundColor={colors.background} />
     </>
   );
 };

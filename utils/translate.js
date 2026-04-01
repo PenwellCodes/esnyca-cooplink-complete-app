@@ -78,17 +78,26 @@ export const commonTranslations = {
 };
 
 export const translateText = async (text, targetLang) => {
+  if (text === null || text === undefined) return text;
+  const input = String(text);
+  if (!input.trim() || targetLang === 'en') return input;
+
   try {
     // First check if we have a predefined translation
-    if (commonTranslations[targetLang]?.[text]) {
-      return commonTranslations[targetLang][text];
+    if (commonTranslations[targetLang]?.[input]) {
+      return commonTranslations[targetLang][input];
     }
-    
-    // If not, use Google Translate
-    const result = await translate(text, { to: targetLang });
-    return result.text;
+
+    // Use single-translation mode to avoid partial batch failures.
+    const result = await translate(input, {
+      to: targetLang,
+      forceBatch: false,
+      rejectOnPartialFail: false,
+    });
+
+    return result?.text || input;
   } catch (error) {
-    console.error('Translation error:', error);
-    return text; // Return original text if translation fails
+    // Fallback to original text to keep UI stable.
+    return input;
   }
 };

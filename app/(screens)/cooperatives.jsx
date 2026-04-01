@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   FlatList,
+  TextInput,
 } from "react-native";
 import { collection, getDocs, query, where, doc } from "firebase/firestore";
 import { useTheme, Portal, Modal, Menu } from "react-native-paper";
@@ -15,6 +16,7 @@ import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { typography, images } from "../../constants"; // Add this import at the top
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
 
@@ -23,6 +25,7 @@ const CooperativeUsersScreen = () => {
   const { currentUser } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { currentLanguage, t } = useLanguage();
   const highlightId = params.highlightId;
   const [users, setUsers] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState("All");
@@ -30,6 +33,44 @@ const CooperativeUsersScreen = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [allUsers, setAllUsers] = useState([]);
+
+  const [translations, setTranslations] = useState({
+    searchPlaceholder: "Search cooperatives",
+    filter: "Filter",
+    startChat: "Start Chat",
+    drawerTitle: "Cooperative Details",
+    name: "Name",
+    productService: "Product/Service",
+    contact: "Contact",
+    location: "Location",
+    noProductService: "No product/service information available",
+    startChatPredefinedMessage:
+      "Hello 👋 there , can you share more about your cooperative 🥰",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        searchPlaceholder: await t("Search cooperatives"),
+        filter: await t("Filter"),
+        startChat: await t("Start Chat"),
+        drawerTitle: await t("Cooperative Details"),
+        name: await t("Name"),
+        productService: await t("Product/Service"),
+        contact: await t("Contact"),
+        location: await t("Location"),
+        noProductService: await t(
+          "No product/service information available"
+        ),
+        startChatPredefinedMessage: await t(
+          "Hello 👋 there , can you share more about your cooperative 🥰"
+        ),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   // Fetch users based on selected region filter
   const fetchUsers = async () => {
@@ -50,7 +91,17 @@ const CooperativeUsersScreen = () => {
         id: docSnap.id,
         ...docSnap.data(),
       }));
-      setUsers(data);
+      const localizedData = await Promise.all(
+        data.map(async (user) => ({
+          ...user,
+          displayName: await t(user.displayName || ""),
+          physicalAddress: await t(user.physicalAddress || ""),
+          content: await t(user.content || ""),
+          region: await t(user.region || ""),
+        }))
+      );
+      setAllUsers(localizedData);
+      setUsers(localizedData);
     } catch (error) {
       console.error("Error fetching users:", error);
     }
@@ -59,7 +110,7 @@ const CooperativeUsersScreen = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [selectedRegion]);
+  }, [selectedRegion, currentLanguage]);
 
   useEffect(() => {
     if (highlightId && users.length > 0) {
@@ -85,6 +136,32 @@ const CooperativeUsersScreen = () => {
     }
   }, [highlightId]);
 
+  useEffect(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (!term) {
+      setUsers(allUsers);
+      return;
+    }
+
+    const filtered = allUsers.filter((user) => {
+      const haystack = [
+        user.displayName,
+        user.email,
+        user.physicalAddress,
+        user.content,
+        user.phoneNumber,
+        user.region,
+        user.registrationNumber,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(term);
+    });
+    setUsers(filtered);
+  }, [searchQuery, allUsers]);
+
   // Open the bottom drawer to show the cooperative's bio
   const openDrawer = (user) => {
     setSelectedUser(user);
@@ -100,8 +177,7 @@ const CooperativeUsersScreen = () => {
       return;
     }
 
-    const predefinedMessage =
-      "Hello 👋 there , can you share more about your cooperative 🥰";
+    const predefinedMessage = translations.startChatPredefinedMessage;
     const userId = user.uid || user.id;
     if (!userId) {
       console.warn("Cannot start chat without a valid user id");
@@ -145,7 +221,7 @@ const CooperativeUsersScreen = () => {
           onPress={() => startChat(item)}
         >
           <Ionicons name="chatbubble-outline" size={16} color="white" />
-          <Text style={styles.chatButtonText}> Start Chat</Text>
+          <Text style={styles.chatButtonText}> {translations.startChat}</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.infoColumn}>
@@ -154,7 +230,9 @@ const CooperativeUsersScreen = () => {
         <Text style={styles.address}>{item.physicalAddress}</Text>
         {item.content && (
           <>
-            <Text style={styles.contentLabel}>Product/Service:</Text>
+            <Text style={styles.contentLabel}>
+              {translations.productService}:
+            </Text>
             <Text style={styles.content}>{item.content}</Text>
           </>
         )}
@@ -175,6 +253,16 @@ const CooperativeUsersScreen = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Top bar with filter button */}
       <View style={styles.topBar}>
+        <View style={[styles.searchContainer, { borderColor: colors.primary }]}>
+          <Ionicons name="search" size={18} color={colors.primary} />
+          <TextInput
+            placeholder={translations.searchPlaceholder}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+            placeholderTextColor="#777"
+          />
+        </View>
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
@@ -187,8 +275,7 @@ const CooperativeUsersScreen = () => {
               <Text
                 style={[styles.filterButtonText, { color: colors.primary }]}
               >
-                {" "}
-                Filter
+                {` ${translations.filter}`}
               </Text>
             </TouchableOpacity>
           }
@@ -219,21 +306,23 @@ const CooperativeUsersScreen = () => {
           onDismiss={() => setDrawerVisible(false)}
           contentContainerStyle={styles.drawerContainer}
         >
-          <Text style={styles.drawerTitle}>Cooperative Details</Text>
+          <Text style={styles.drawerTitle}>{translations.drawerTitle}</Text>
           <View style={styles.drawerContentContainer}>
-            <Text style={styles.drawerLabel}>Name:</Text>
+            <Text style={styles.drawerLabel}>{translations.name}:</Text>
             <Text style={styles.drawerText}>{selectedUser?.displayName}</Text>
 
-            <Text style={styles.drawerLabel}>Product/Service:</Text>
+            <Text style={styles.drawerLabel}>
+              {translations.productService}:
+            </Text>
             <Text style={styles.drawerText}>
               {selectedUser?.content ||
-                "No product/service information available"}
+                translations.noProductService}
             </Text>
 
-            <Text style={styles.drawerLabel}>Contact:</Text>
+            <Text style={styles.drawerLabel}>{translations.contact}:</Text>
             <Text style={styles.drawerText}>{selectedUser?.phoneNumber}</Text>
 
-            <Text style={styles.drawerLabel}>Location:</Text>
+            <Text style={styles.drawerLabel}>{translations.location}:</Text>
             <Text style={styles.drawerText}>
               {selectedUser?.physicalAddress}
             </Text>
@@ -251,8 +340,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topBar: {
-    alignItems: "flex-end",
+    alignItems: "stretch",
     padding: 16,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    height: 44,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    height: 40,
   },
   filterButton: {
     flexDirection: "row",

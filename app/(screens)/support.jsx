@@ -174,6 +174,7 @@ const ServiceScreen = () => {
         <Modal
           visible={isDrawerVisible}
           onDismiss={closeDrawer}
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
           contentContainerStyle={[
             styles.modalContainer,
             { backgroundColor: colors.background },

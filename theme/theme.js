@@ -16,6 +16,7 @@ export const lightTheme = {
     links: '#3590F3',
     secondaryContainer: '#00AAFF',
     surfaceVariant: '#000000',
+    backdrop: 'rgba(0,0,0,0.6)',
   },
 };
 
@@ -34,5 +35,6 @@ export const darkTheme = {
     links: '#8ab4f8',
     secondaryContainer: '#005F99',
     surfaceVariant: '#2A2A2A',
+    backdrop: 'rgba(0,0,0,0.7)',
   },
 };

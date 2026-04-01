@@ -32,6 +32,7 @@ const Home = () => {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
+  const { currentUser } = useAuth();
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
   const [searchQuery, setSearchQuery] = useState("");
@@ -152,7 +153,16 @@ const Home = () => {
   const handleNewsPress = async () => {
     await AsyncStorage.setItem("lastNewsReadTime", Date.now().toString());
     setHasUnreadNews(false);
-    router.push("/news");
+    router.push("/(screens)/news");
+  };
+
+  const handleProfilePress = () => {
+    if (!currentUser) {
+      const returnTo = encodeURIComponent("/(screens)/profile");
+      router.push(`/(auth)/sign-in?returnTo=${returnTo}`);
+      return;
+    }
+    router.push("/(screens)/profile");
   };
 
   const menuItems = [
@@ -161,7 +171,7 @@ const Home = () => {
     {
       name: translations.profileUpdates,
       icon: "assignment",
-      route: "/profile",
+      onPress: handleProfilePress,
     },
     {
       name: translations.cooperatives,
@@ -194,6 +204,8 @@ const Home = () => {
           results: JSON.stringify(results),
         },
       });
+      // Clear the search field after navigating
+      setSearchQuery("");
     } catch (error) {
       console.error("Search error:", error);
     }
@@ -202,14 +214,14 @@ const Home = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Status Bar */}
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
       {/* App Name */}
       <Text
         style={[
           styles.appName,
           typography.robotoBold,
-          { color: colors.tertiary, marginTop: 40 },
+          { color: colors.tertiary, marginTop: 16 },
         ]}
       >
         {translations.appName}
@@ -310,13 +322,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   bannerContainer: {
-    marginTop: 10,
-    borderRadius: 10,
+    marginTop: 12,
+    borderRadius: 12,
     overflow: "hidden",
   },
   bannerImage: {
     width: "100%",
-    height: 200,
+    height: 150,
   },
   bannerText: {
     position: "absolute",
@@ -333,10 +345,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 8,
     paddingHorizontal: 10,
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 14,
+    marginBottom: 14,
     borderWidth: 1,
-    height: 60,
+    height: 52,
   },
   searchInput: {
     flex: 1,
@@ -344,15 +356,17 @@ const styles = StyleSheet.create({
   },
   flatListContainer: {
     flexGrow: 1,
+    paddingBottom: 8,
   },
   menuItemContainer: {
     flex: 1,
     alignItems: "center",
-    margin: 10,
+    marginVertical: 8,
+    marginHorizontal: 6,
   },
   menuItem: {
-    width: 100,
-    height: 100,
+    width: 90,
+    height: 90,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,

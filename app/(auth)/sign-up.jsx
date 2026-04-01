@@ -15,22 +15,30 @@ import { Ionicons } from "@expo/vector-icons";
 import { CustomButton } from "./../../components";
 import { typography, images } from "../../constants";
 import { auth, db } from "../../firebase/firebaseConfig";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
-import { Redirect } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 // Import Firebase Storage methods
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
-const TOP_SECTION_HEIGHT = 250;
+const TOP_SECTION_HEIGHT = 180;
 
 const SignUp = () => {
   const { colors } = useTheme();
+  const router = useRouter();
+  const { currentLanguage, t } = useLanguage();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams();
+  const returnTo = params.returnTo;
 
   // Registration role: individual or cooperative
   const [role, setRole] = useState("individual");
-  const [redirect, setRedirect] = useState(false);
 
   const [formData, setFormData] = useState({
     displayName: "",
@@ -40,6 +48,9 @@ const SignUp = () => {
     physicalAddress: "",
     region: "", // For cooperatives
   });
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [hidePassword, setHidePassword] = useState(true);
+  const [hideConfirmPassword, setHideConfirmPassword] = useState(true);
 
   // New state for profile picture URI
   const [profilePic, setProfilePic] = useState(null);
@@ -51,6 +62,77 @@ const SignUp = () => {
 
   // Loading state for ActivityIndicator
   const [loading, setLoading] = useState(false);
+  const [translations, setTranslations] = useState({
+    fillEmailPassword: "Please fill in email and password",
+    emailMistyped: "Email looks mistyped (e.g. .comc). Please correct it.",
+    passwordsNotMatch: "Passwords do not match",
+    registrationExists: "Registration number already exists",
+    coopSuccess: "Cooperative successfully registered. Confirmation email sent.",
+    individualSuccess: "Individual successfully registered. Confirmation email sent.",
+    weakPassword: "At least password must be 6 characters",
+    registerAs: "Register as",
+    individual: "Individual",
+    cooperative: "Cooperative",
+    name: "Name",
+    email: "Email",
+    password: "Password",
+    confirmPassword: "Confirm Password",
+    cooperativeName: "Cooperative Name",
+    registrationNumber: "Registration Number",
+    physicalAddress: "Physical Address",
+    region: "Region",
+    selectRegion: "Select Region",
+    uploadProfile: "Upload Profile",
+    registerAsFmt: "Register as",
+    chatCorner: "CHAT CORNER",
+  });
+
+  React.useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        fillEmailPassword: await t("Please fill in email and password"),
+        emailMistyped: await t(
+          "Email looks mistyped (e.g. .comc). Please correct it."
+        ),
+        passwordsNotMatch: await t("Passwords do not match"),
+        registrationExists: await t("Registration number already exists"),
+        coopSuccess: await t(
+          "Cooperative successfully registered. Confirmation email sent."
+        ),
+        individualSuccess: await t(
+          "Individual successfully registered. Confirmation email sent."
+        ),
+        weakPassword: await t("At least password must be 6 characters"),
+        registerAs: await t("Register as"),
+        individual: await t("Individual"),
+        cooperative: await t("Cooperative"),
+        name: await t("Name"),
+        email: await t("Email"),
+        password: await t("Password"),
+        confirmPassword: await t("Confirm Password"),
+        cooperativeName: await t("Cooperative Name"),
+        registrationNumber: await t("Registration Number"),
+        physicalAddress: await t("Physical Address"),
+        region: await t("Region"),
+        selectRegion: await t("Select Region"),
+        uploadProfile: await t("Upload Profile"),
+        registerAsFmt: await t("Register as"),
+        chatCorner: await t("CHAT CORNER"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
+
+  const hasCommonEmailTypo = (value) => {
+    const email = value.toLowerCase();
+    return (
+      email.endsWith(".comc") ||
+      email.endsWith(".con") ||
+      email.includes("@gmal.com") ||
+      email.includes("@gmial.com") ||
+      email.includes("@gmail.con")
+    );
+  };
 
   const handleInputChange = (field, value) => {
     setFormData((prevState) => ({
@@ -113,13 +195,32 @@ const SignUp = () => {
   };
 
   const handleSubmit = async () => {
+    if (!formData.email.trim() || !formData.password.trim()) {
+      setSnackbarMessage(translations.fillEmailPassword);
+      setSnackbarStyle({ backgroundColor: "red" });
+      setSnackbarVisible(true);
+      return;
+    }
+    if (hasCommonEmailTypo(formData.email.trim())) {
+      setSnackbarMessage(translations.emailMistyped);
+      setSnackbarStyle({ backgroundColor: "red" });
+      setSnackbarVisible(true);
+      return;
+    }
+    if (formData.password !== confirmPassword) {
+      setSnackbarMessage(translations.passwordsNotMatch);
+      setSnackbarStyle({ backgroundColor: "red" });
+      setSnackbarVisible(true);
+      return;
+    }
+
     setLoading(true);
     try {
       // For cooperatives, check if registration number exists
       if (role === "cooperative") {
         const exists = await checkRegistrationNumberExists(formData.registrationNumber);
         if (exists) {
-          setSnackbarMessage("Registration number already exists");
+          setSnackbarMessage(translations.registrationExists);
           setSnackbarStyle({ backgroundColor: "red" });
           setSnackbarVisible(true);
           setLoading(false);
@@ -158,21 +259,29 @@ const SignUp = () => {
       }
 
       await addDoc(collection(db, "users"), userData);
+      // Send confirmation email after successful account creation.
+      // Firebase Auth sends this to the registered address.
+      await sendEmailVerification(userCredential.user);
 
       setSnackbarMessage(
         role === "cooperative"
-          ? "Cooperative successfully registered"
-          : "Individual successfully registered",
+          ? translations.coopSuccess
+          : translations.individualSuccess,
       );
       setSnackbarStyle({ backgroundColor: "green" });
       setSnackbarVisible(true);
 
       setTimeout(() => {
-        setRedirect(true);
+        if (returnTo) {
+          router.replace(decodeURIComponent(returnTo));
+        } else {
+          // User is already authenticated after createUserWithEmailAndPassword
+          router.replace("/(tabs)/home");
+        }
       }, 1500);
     } catch (error) {
       if (error.message.includes("auth/weak-password")) {
-        setSnackbarMessage("At least password must be 6 characters");
+        setSnackbarMessage(translations.weakPassword);
       } else {
         setSnackbarMessage(error.message);
       }
@@ -183,9 +292,13 @@ const SignUp = () => {
     }
   };
 
-  if (redirect) {
-    return <Redirect href="/(auth)/sign-in" />;
-  }
+  const handleBack = () => {
+    if (navigation?.canGoBack?.()) {
+      navigation.goBack();
+    } else {
+      router.replace("/(tabs)/home");
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -193,12 +306,17 @@ const SignUp = () => {
       style={{ flex: 1 }}
     >
       <View style={{ flex: 1 }}>
+        <TouchableOpacity onPress={handleBack} style={styles.backIcon}>
+          <Ionicons name="arrow-back" size={24} color={colors.background} />
+        </TouchableOpacity>
+
         <ScrollView
           style={{ flex: 1, backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.scrollContainer,
-            { paddingTop: TOP_SECTION_HEIGHT },
+            { paddingTop: TOP_SECTION_HEIGHT, paddingBottom: insets.bottom + 12 },
           ]}
+          scrollEnabled={role === "cooperative"}
           keyboardShouldPersistTaps="handled"
         >
           {/* Heading */}
@@ -211,7 +329,7 @@ const SignUp = () => {
                 { color: colors.tertiary },
               ]}
             >
-              Register as
+              {translations.registerAs}
             </Text>
           </View>
 
@@ -225,7 +343,7 @@ const SignUp = () => {
               onPress={() => setRole("individual")}
             >
               <Text style={[styles.toggleButtonText, typography.body]}>
-                Individual
+                {translations.individual}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -236,7 +354,7 @@ const SignUp = () => {
               onPress={() => setRole("cooperative")}
             >
               <Text style={[styles.toggleButtonText, typography.body]}>
-                Cooperative
+                {translations.cooperative}
               </Text>
             </TouchableOpacity>
           </View>
@@ -247,7 +365,7 @@ const SignUp = () => {
               <>
                 <TextInput
                   mode="outlined"
-                  label="Name"
+                  label={translations.name}
                   value={formData.displayName}
                   onChangeText={(value) =>
                     handleInputChange("displayName", value)
@@ -256,25 +374,45 @@ const SignUp = () => {
                 />
                 <TextInput
                   mode="outlined"
-                  label="Email"
+                  label={translations.email}
                   value={formData.email}
                   onChangeText={(value) => handleInputChange("email", value)}
                   style={styles.input}
                 />
                 <TextInput
                   mode="outlined"
-                  label="Password"
-                  secureTextEntry
+                  label={translations.password}
+                  secureTextEntry={hidePassword}
                   value={formData.password}
                   onChangeText={(value) => handleInputChange("password", value)}
                   style={styles.input}
+                  right={
+                    <TextInput.Icon
+                      icon={hidePassword ? "eye-off" : "eye"}
+                      onPress={() => setHidePassword((prev) => !prev)}
+                    />
+                  }
+                />
+                <TextInput
+                  mode="outlined"
+                  label={translations.confirmPassword}
+                  secureTextEntry={hideConfirmPassword}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  style={styles.input}
+                  right={
+                    <TextInput.Icon
+                      icon={hideConfirmPassword ? "eye-off" : "eye"}
+                      onPress={() => setHideConfirmPassword((prev) => !prev)}
+                    />
+                  }
                 />
               </>
             ) : (
               <>
                 <TextInput
                   mode="outlined"
-                  label="Cooperative Name"
+                  label={translations.cooperativeName}
                   value={formData.displayName}
                   onChangeText={(value) =>
                     handleInputChange("displayName", value)
@@ -283,7 +421,7 @@ const SignUp = () => {
                 />
                 <TextInput
                   mode="outlined"
-                  label="Registration Number"
+                  label={translations.registrationNumber}
                   value={formData.registrationNumber}
                   onChangeText={(value) =>
                     handleInputChange("registrationNumber", value)
@@ -292,7 +430,7 @@ const SignUp = () => {
                 />
                 <TextInput
                   mode="outlined"
-                  label="Physical Address"
+                  label={translations.physicalAddress}
                   value={formData.physicalAddress}
                   onChangeText={(value) =>
                     handleInputChange("physicalAddress", value)
@@ -301,7 +439,7 @@ const SignUp = () => {
                 />
                 <View style={styles.pickerContainer}>
                   <Text style={[styles.pickerLabel, { color: colors.text }]}>
-                    Region
+                    {translations.region}
                   </Text>
                   <Picker
                     selectedValue={formData.region}
@@ -310,7 +448,7 @@ const SignUp = () => {
                       handleInputChange("region", value)
                     }
                   >
-                    <Picker.Item label="Select Region" value="" />
+                    <Picker.Item label={translations.selectRegion} value="" />
                     <Picker.Item label="Hhohho" value="Hhohho" />
                     <Picker.Item label="Manzini" value="Manzini" />
                     <Picker.Item label="Shiselweni" value="Shiselweni" />
@@ -319,18 +457,38 @@ const SignUp = () => {
                 </View>
                 <TextInput
                   mode="outlined"
-                  label="Email"
+                  label={translations.email}
                   value={formData.email}
                   onChangeText={(value) => handleInputChange("email", value)}
                   style={styles.input}
                 />
                 <TextInput
                   mode="outlined"
-                  label="Password"
-                  secureTextEntry
+                  label={translations.password}
+                  secureTextEntry={hidePassword}
                   value={formData.password}
                   onChangeText={(value) => handleInputChange("password", value)}
                   style={styles.input}
+                  right={
+                    <TextInput.Icon
+                      icon={hidePassword ? "eye-off" : "eye"}
+                      onPress={() => setHidePassword((prev) => !prev)}
+                    />
+                  }
+                />
+                <TextInput
+                  mode="outlined"
+                  label={translations.confirmPassword}
+                  secureTextEntry={hideConfirmPassword}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  style={styles.input}
+                  right={
+                    <TextInput.Icon
+                      icon={hideConfirmPassword ? "eye-off" : "eye"}
+                      onPress={() => setHideConfirmPassword((prev) => !prev)}
+                    />
+                  }
                 />
               </>
             )}
@@ -350,7 +508,7 @@ const SignUp = () => {
                 <Text
                   style={[styles.uploadButtonText, { color: colors.primary }]}
                 >
-                  Upload Profile
+                  {translations.uploadProfile}
                 </Text>
               </TouchableOpacity>
               {profilePic && (
@@ -364,12 +522,15 @@ const SignUp = () => {
             <CustomButton
               disabled={loading}
               onPress={handleSubmit}
+              style={{ marginBottom: Math.max(insets.bottom, 8) }}
               title={
                 loading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  `Register as ${
-                    role === "individual" ? "Individual" : "Cooperative"
+                  `${translations.registerAsFmt} ${
+                    role === "individual"
+                      ? translations.individual
+                      : translations.cooperative
                   }`
                 )
               }
@@ -399,7 +560,7 @@ const SignUp = () => {
               { color: colors.background },
             ]}
           >
-            CHAT CORNER
+            {translations.chatCorner}
           </Text>
         </View>
 
@@ -418,28 +579,28 @@ const SignUp = () => {
 };
 
 const styles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1, paddingBottom: 20 },
+  scrollContainer: { flexGrow: 1 },
   topSection: {
     height: TOP_SECTION_HEIGHT,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 50,
+    paddingTop: 36,
   },
-  backIcon: { position: "absolute", top: 40, left: 20 },
+  backIcon: { position: "absolute", top: 40, left: 20, zIndex: 10 },
   logo: {
-    width: 100,
-    height: 100,
+    width: 86,
+    height: 86,
     resizeMode: "contain",
   },
   title: { marginTop: 10 },
-  headingContainer: { marginTop: 10, alignItems: "center", marginBottom: 10 },
+  headingContainer: { marginTop: 6, alignItems: "center", marginBottom: 8 },
   toggleContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: 6,
+    marginBottom: 12,
     paddingHorizontal: 20,
   },
   toggleButton: {
@@ -453,7 +614,7 @@ const styles = StyleSheet.create({
   activeButton: { backgroundColor: "#007BFF" },
   toggleButtonText: { color: "#fff", fontWeight: "bold" },
   formContainer: { paddingHorizontal: 20 },
-  input: { marginBottom: 15 },
+  input: { marginBottom: 10, height: 50 },
   pickerContainer: {
     marginBottom: 15,
     borderWidth: 1,
@@ -463,7 +624,7 @@ const styles = StyleSheet.create({
   },
   picker: { height: 50 },
   pickerLabel: { padding: 8, backgroundColor: "#f0f0f0" },
-  uploadContainer: { alignItems: "center", marginVertical: 10 },
+  uploadContainer: { alignItems: "center", marginVertical: 6 },
   uploadButton: {
     flexDirection: "row",
     alignItems: "center",

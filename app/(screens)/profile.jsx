@@ -9,12 +9,14 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { getAuth } from 'firebase/auth';
 import { useAuth } from '../../context/appstate/AuthContext';
+import { useLanguage } from '../../context/appstate/LanguageContext';
 import { useTheme, Snackbar } from "react-native-paper";  // Add this import
 
 const Profile = () => {
   const router = useRouter(); // Add this
   const { colors } = useTheme();  // Add theme hook
   const { currentUser } = useAuth();
+  const { currentLanguage, t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState(null);
   const [newPhotoUri, setNewPhotoUri] = useState(null);
@@ -27,10 +29,78 @@ const Profile = () => {
   const storage = getStorage();
   const auth = getAuth();
 
+  const [translations, setTranslations] = useState({
+    updateProfile: "Update Profile",
+    tapToChangePhoto: "Tap to change profile photo",
+    name: "Name",
+    cooperativeName: "Cooperative Name",
+    phoneNumber: "Phone Number",
+    productService: "Product/Service",
+    location: "Location",
+    satelliteView: "Satellite View",
+    standardView: "Standard View",
+    selected: "Selected",
+    loadingProfileData: "Loading profile data...",
+    updateProfileButton: "Update Profile",
+    enterYourName: "Enter your name",
+    enterCooperativeName: "Enter cooperative name",
+    enterPhoneNumber: "Enter phone number",
+    enterProductService: "Enter product/service",
+    permissionDeniedTitle: "Permission denied",
+    permissionDeniedBody: "Location permission is required",
+    error: "Error",
+    success: "Success",
+    failedGetLocationDetails: "Failed to get location details",
+    failedLoadProfileData: "Failed to load profile data",
+    failedPickImage: "There was an issue picking the image. Please try again.",
+    failedUploadProfilePhoto: "Failed to upload profile photo",
+    profileUpdatedSuccessfully: "Profile updated successfully",
+    failedUpdateProfile: "Failed to update profile. Please check your input data.",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        updateProfile: await t("Update Profile"),
+        tapToChangePhoto: await t("Tap to change profile photo"),
+        name: await t("Name"),
+        cooperativeName: await t("Cooperative Name"),
+        phoneNumber: await t("Phone Number"),
+        productService: await t("Product/Service"),
+        location: await t("Location"),
+        satelliteView: await t("Satellite View"),
+        standardView: await t("Standard View"),
+        selected: await t("Selected"),
+        loadingProfileData: await t("Loading profile data..."),
+        updateProfileButton: await t("Update Profile"),
+        enterYourName: await t("Enter your name"),
+        enterCooperativeName: await t("Enter cooperative name"),
+        enterPhoneNumber: await t("Enter phone number"),
+        enterProductService: await t("Enter product/service"),
+        permissionDeniedTitle: await t("Permission denied"),
+        permissionDeniedBody: await t("Location permission is required"),
+        error: await t("Error"),
+        success: await t("Success"),
+        failedGetLocationDetails: await t("Failed to get location details"),
+        failedLoadProfileData: await t("Failed to load profile data"),
+        failedPickImage: await t(
+          "There was an issue picking the image. Please try again."
+        ),
+        failedUploadProfilePhoto: await t("Failed to upload profile photo"),
+        profileUpdatedSuccessfully: await t("Profile updated successfully"),
+        failedUpdateProfile: await t(
+          "Failed to update profile. Please check your input data."
+        ),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
+
   // Add this useEffect for authentication check
   useEffect(() => {
     if (!currentUser) {
-      router.replace('/(auth)/sign-in');
+      const returnTo = encodeURIComponent("/(screens)/profile");
+      router.replace(`/(auth)/sign-in?returnTo=${returnTo}`);
     }
   }, [currentUser]);
 
@@ -41,7 +111,10 @@ const Profile = () => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required');
+        Alert.alert(
+          translations.permissionDeniedTitle,
+          translations.permissionDeniedBody
+        );
         return;
       }
 
@@ -66,7 +139,9 @@ const Profile = () => {
       const locationDetails = {
         latitude,
         longitude,
-        name: address ? `${address.street || ''} ${address.city || ''} ${address.region || ''}` : 'Selected Location',
+        name: address
+          ? `${address.street || ""} ${address.city || ""} ${address.region || ""}`
+          : `${translations.selected} Location`,
       };
       
       setSelectedLocation(locationDetails);
@@ -78,7 +153,7 @@ const Profile = () => {
       }));
     } catch (error) {
       console.error('Error getting location details:', error);
-      Alert.alert('Error', 'Failed to get location details');
+      Alert.alert(translations.error, translations.failedGetLocationDetails);
     }
   };
 
@@ -99,7 +174,7 @@ const Profile = () => {
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
-        Alert.alert("Error", "Failed to load profile data");
+        Alert.alert(translations.error, translations.failedLoadProfileData);
       } finally {
         setIsLoading(false);
       }
@@ -126,7 +201,7 @@ const Profile = () => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "There was an issue picking the image. Please try again.");
+      Alert.alert(translations.error, translations.failedPickImage);
     }
   };
 
@@ -144,7 +219,7 @@ const Profile = () => {
       return await getDownloadURL(photoRef);
     } catch (error) {
       console.error("Error uploading photo:", error);
-      Alert.alert("Error", "Failed to upload profile photo");
+      Alert.alert(translations.error, translations.failedUploadProfilePhoto);
       return null;
     }
   };
@@ -199,11 +274,11 @@ const Profile = () => {
         }
       }
 
-      Alert.alert("Success", "Profile updated successfully");
+      Alert.alert(translations.success, translations.profileUpdatedSuccessfully);
       navigation.goBack();
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert("Error", "Failed to update profile. Please check your input data.");
+      Alert.alert(translations.error, translations.failedUpdateProfile);
     } finally {
       setIsLoading(false);
     }
@@ -213,7 +288,7 @@ const Profile = () => {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#191970" />
-        <Text style={styles.loadingText}>Loading profile data...</Text>
+        <Text style={styles.loadingText}>{translations.loadingProfileData}</Text>
       </View>
     );
   }
@@ -221,7 +296,9 @@ const Profile = () => {
   return (
     <ScrollView style={[styles.scrollContainer, { backgroundColor: colors.background }]}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.header, { color: colors.primary }]}>Update Profile</Text>
+        <Text style={[styles.header, { color: colors.primary }]}>
+          {translations.updateProfile}
+        </Text>
 
         <TouchableOpacity onPress={pickImage}>
           <Image 
@@ -235,15 +312,19 @@ const Profile = () => {
             style={styles.profileImage} 
           />
         </TouchableOpacity>
-        <Text style={[styles.photoText, { color: colors.primary }]}>Tap to change profile photo</Text>
+        <Text style={[styles.photoText, { color: colors.primary }]}>
+          {translations.tapToChangePhoto}
+        </Text>
 
         {currentUser?.role === 'individual' ? (
           <>
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>
+                {translations.name}
+              </Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter your name"
+                placeholder={translations.enterYourName}
                 value={userData?.displayName || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
@@ -252,36 +333,44 @@ const Profile = () => {
         ) : (
           <>
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Cooperative Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>
+                {translations.cooperativeName}
+              </Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter cooperative name"
+                placeholder={translations.enterCooperativeName}
                 value={userData?.displayName || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Phone Number</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>
+                {translations.phoneNumber}
+              </Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter phone number"
+                placeholder={translations.enterPhoneNumber}
                 value={userData?.phoneNumber || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, phoneNumber: text }))}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>Product/Service</Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>
+                {translations.productService}
+              </Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary }]}
-                placeholder="Enter product/service"
+                placeholder={translations.enterProductService}
                 value={userData?.content || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
               />
             </View>
 
-            <Text style={[styles.sectionTitle, { color: colors.primary }]}>Location</Text>
+            <Text style={[styles.sectionTitle, { color: colors.primary }]}>
+              {translations.location}
+            </Text>
             {location && (
               <View style={styles.mapContainer}>
                 <TouchableOpacity 
@@ -289,7 +378,9 @@ const Profile = () => {
                   onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
                 >
                   <Text style={styles.mapTypeButtonText}>
-                    {mapType === 'standard' ? 'Satellite View' : 'Standard View'}
+                    {mapType === 'standard'
+                      ? translations.satelliteView
+                      : translations.standardView}
                   </Text>
                 </TouchableOpacity>
 
@@ -311,7 +402,7 @@ const Profile = () => {
                 </MapView>
                 {selectedLocation && (
                   <Text style={styles.locationText}>
-                    Selected: {locationName}
+                    {translations.selected}: {locationName}
                   </Text>
                 )}
               </View>
@@ -327,7 +418,9 @@ const Profile = () => {
           {isLoading ? (
             <ActivityIndicator size="small" color="#FFF" />
           ) : (
-            <Text style={styles.updateButtonText}>Update Profile</Text>
+            <Text style={styles.updateButtonText}>
+              {translations.updateProfileButton}
+            </Text>
           )}
         </TouchableOpacity>
       </View>

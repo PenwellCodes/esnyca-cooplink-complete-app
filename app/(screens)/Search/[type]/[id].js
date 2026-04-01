@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../../firebase/firebaseConfig";
+import { useLanguage } from "../../../../context/appstate/LanguageContext";
 
 // Map the type from the URL to the Firebase collection name
 const typeToCollectionMap = {
@@ -17,8 +18,25 @@ const typeToCollectionMap = {
 const SearchDetail = () => {
     // Get route parameters using useLocalSearchParams
     const { type, id } = useLocalSearchParams();
+    const { currentLanguage, t } = useLanguage();
     const [itemData, setItemData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [translations, setTranslations] = useState({
+        loadingDetails: "Loading details...",
+        itemNotFound: "Item not found",
+        details: "Details",
+    });
+
+    useEffect(() => {
+        const loadTranslations = async () => {
+            setTranslations({
+                loadingDetails: await t("Loading details..."),
+                itemNotFound: await t("Item not found"),
+                details: await t("Details"),
+            });
+        };
+        loadTranslations();
+    }, [currentLanguage, t]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -49,7 +67,7 @@ const SearchDetail = () => {
     if (loading) {
         return (
             <View style={styles.container}>
-                <Text>Loading details...</Text>
+                <Text>{translations.loadingDetails}</Text>
             </View>
         );
     }
@@ -57,7 +75,7 @@ const SearchDetail = () => {
     if (!itemData) {
         return (
             <View style={styles.container}>
-                <Text>Item not found</Text>
+                <Text>{translations.itemNotFound}</Text>
             </View>
         );
     }
@@ -65,7 +83,7 @@ const SearchDetail = () => {
     return (
         <ScrollView style={styles.container}>
             <Text style={styles.title}>
-                {itemData.name || itemData.title || itemData.headline || "Details"}
+                {itemData.name || itemData.title || itemData.headline || translations.details}
             </Text>
             <Text style={styles.content}>{JSON.stringify(itemData, null, 2)}</Text>
         </ScrollView>

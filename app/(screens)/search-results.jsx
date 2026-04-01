@@ -3,14 +3,34 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Linking } fr
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from 'react-native-paper';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLanguage } from '../../context/appstate/LanguageContext';
 
 const SearchResults = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { currentLanguage, t } = useLanguage();
   
   const searchQuery = params.searchQuery;
   const results = JSON.parse(params.results || '[]');
+  const [translations, setTranslations] = React.useState({
+    error: 'Error',
+    couldNotNavigate: 'Could not navigate to the selected screen',
+    noResultsPrefix: 'No results found for',
+  });
+
+  React.useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        error: await t('Error'),
+        couldNotNavigate: await t(
+          'Could not navigate to the selected screen'
+        ),
+        noResultsPrefix: await t('No results found for'),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   const handleResultPress = (item) => {
     if (!item?.screen) return;
@@ -38,7 +58,7 @@ const SearchResults = () => {
       }
     } catch (error) {
       console.error('Navigation error:', error);
-      Alert.alert('Error', 'Could not navigate to the selected screen');
+      Alert.alert(translations.error, translations.couldNotNavigate);
     }
   };
 
@@ -48,7 +68,7 @@ const SearchResults = () => {
       onPress={() => handleResultPress(item)}
     >
       <View style={styles.resultContent}>
-        <Ionicons name={item.icon || 'document-text'} size={24} color={colors.primary} />
+        <Ionicons name={item.icon || 'document-text'} size={24} color={colors.tertiary} />
         <View style={styles.textContainer}>
           <Text style={[styles.resultTitle, { color: colors.text }]}>
             {item.title || item.name}
@@ -70,7 +90,7 @@ const SearchResults = () => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {results.length === 0 ? (
         <Text style={[styles.noResultsText, { color: colors.text }]}>
-          No results found for "{searchQuery}"
+          {translations.noResultsPrefix} "{searchQuery}"
         </Text>
       ) : (
         <FlatList

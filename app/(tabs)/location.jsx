@@ -12,13 +12,15 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import haversine from 'haversine';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import { useLanguage } from '../../context/appstate/LanguageContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,8 +34,51 @@ const LocationsScreen = () => {
   const [loading, setLoading] = useState(false);
   const [mapType, setMapType] = useState('standard');
   const [userLocations, setUserLocations] = useState([]);
+  const [routeCoords, setRouteCoords] = useState(null);
 
   const mapRef = useRef(null);
+
+  const { t } = useLanguage();
+  const [translations, setTranslations] = useState({
+    searchPlaceholder: 'Search for a location',
+    permissionDenied: 'Permission to access location was denied.',
+    errorFetching: 'Error fetching current location.',
+    errorLoadingLocations: 'Error loading user locations',
+    radiusLabel: 'Radius',
+    clear: 'Clear',
+    switchView: 'Switch View',
+    recenter: 'Re-center',
+    distanceLabel: 'Distance',
+    routeUnavailableTitle: 'Location unavailable',
+    routeUnavailableBody: 'Your current location is required for routing.',
+    quickestRoute: 'Quickest Route',
+    close: 'Close',
+    address: 'Address',
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        searchPlaceholder: await t('Search for a location'),
+        permissionDenied: await t('Permission to access location was denied.'),
+        errorFetching: await t('Error fetching current location.'),
+        errorLoadingLocations: await t('Error loading user locations'),
+        radiusLabel: await t('Radius'),
+        clear: await t('Clear'),
+        switchView: await t('Switch View'),
+        recenter: await t('Re-center'),
+        distanceLabel: await t('Distance'),
+        routeUnavailableTitle: await t('Location unavailable'),
+        routeUnavailableBody: await t(
+          'Your current location is required for routing.'
+        ),
+        quickestRoute: await t('Quickest Route'),
+        close: await t('Close'),
+        address: await t('Address'),
+      });
+    };
+    loadTranslations();
+  }, [t]);
 
   // Get current location
   useEffect(() => {
@@ -42,7 +87,7 @@ const LocationsScreen = () => {
       try {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          setErrorMessage('Permission to access location was denied.');
+          setErrorMessage(await t('Permission to access location was denied.'));
           setLoading(false);
           return;
         }
@@ -52,7 +97,7 @@ const LocationsScreen = () => {
           longitude: location.coords.longitude,
         });
       } catch (error) {
-        setErrorMessage('Error fetching current location.');
+        setErrorMessage(await t('Error fetching current location.'));
       } finally {
         setLoading(false);
       }
@@ -82,18 +127,27 @@ const LocationsScreen = () => {
           })
           .filter(location => location.latitude && location.longitude);
 
-        setUserLocations(locations);
-        setSearchResults(locations);
+        const localizedLocations = await Promise.all(
+          locations.map(async (location) => ({
+            ...location,
+            title: await t(location.title || ""),
+            description: await t(location.description || ""),
+            companyAddress: await t(location.companyAddress || ""),
+          }))
+        );
+
+        setUserLocations(localizedLocations);
+        setSearchResults(localizedLocations);
       } catch (error) {
         console.error('Error fetching user locations:', error);
-        setErrorMessage('Error loading user locations');
+        setErrorMessage(await t('Error loading user locations'));
       } finally {
         setLoading(false);
       }
     };
 
     fetchUserLocations();
-  }, []);
+  }, [currentLanguage, t]);
 
   const handleSearch = () => {
     if (!searchQuery.trim()) {
@@ -126,6 +180,34 @@ const LocationsScreen = () => {
     }
   };
 
+  // Draw the route INSIDE the current map screen (no external maps).
+  const drawQuickestRouteOnMap = (location) => {
+    if (!currentLocation) {
+      Alert.alert(translations.routeUnavailableTitle, translations.routeUnavailableBody);
+      return;
+    }
+
+    const origin = {
+      latitude: currentLocation.latitude,
+      longitude: currentLocation.longitude,
+    };
+    const destination = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    };
+
+    const coords = [origin, destination];
+    setRouteCoords(coords);
+
+    // Zoom to show the full route.
+    if (mapRef.current && typeof mapRef.current.fitToCoordinates === 'function') {
+      mapRef.current.fitToCoordinates(coords, {
+        edgePadding: { top: 60, right: 60, bottom: 160, left: 60 },
+        animated: true,
+      });
+    }
+  };
+
   const renderMarker = (location) => (
     <Marker
       key={location.id}
@@ -135,6 +217,10 @@ const LocationsScreen = () => {
       }}
       title={location.title}
       description={location.description}
+      onPress={() => {
+        setRouteCoords(null);
+        setSelectedLocation(location);
+      }}
     >
       {location.photoUrl ? (
         <View style={styles.customMarker}>
@@ -157,9 +243,10 @@ const LocationsScreen = () => {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="dark" backgroundColor="#F5F5F5" />
       <TextInput
         style={styles.searchInput}
-        placeholder="Search for a location"
+        placeholder={translations.searchPlaceholder}
         value={searchQuery}
         onChangeText={(text) => setSearchQuery(text)}
         onSubmitEditing={handleSearch}
@@ -169,7 +256,9 @@ const LocationsScreen = () => {
       {loading && <ActivityIndicator size="large" color="#007AFF" style={styles.loadingIndicator} />}
 
       <View style={styles.controlContainer}>
-        <Text style={styles.controlLabel}>Radius: {radius / 1000} km</Text>
+        <Text style={styles.controlLabel}>
+          {translations.radiusLabel}: {radius / 1000} km
+        </Text>
         <Slider
           style={styles.slider}
           minimumValue={1000}
@@ -186,18 +275,18 @@ const LocationsScreen = () => {
           onPress={() => setSearchResults(userLocations)}
         >
           <Icon name="times-circle" size={20} color="#FFF" />
-          <Text style={styles.buttonText}>Clear</Text>
+          <Text style={styles.buttonText}>{translations.clear}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.button}
           onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
         >
           <Icon name="map" size={20} color="#FFF" />
-          <Text style={styles.buttonText}>Switch View</Text>
+          <Text style={styles.buttonText}>{translations.switchView}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={recenterMap}>
           <Icon name="location-arrow" size={20} color="#FFF" />
-          <Text style={styles.buttonText}>Re-center</Text>
+          <Text style={styles.buttonText}>{translations.recenter}</Text>
         </TouchableOpacity>
       </View>
 
@@ -207,7 +296,10 @@ const LocationsScreen = () => {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.resultItem}
-            onPress={() => setSelectedLocation(item)}
+            onPress={() => {
+              setRouteCoords(null);
+              setSelectedLocation(item);
+            }}
           >
             <Text style={styles.resultText}>
               {item.title} - {calculateDistance(item.latitude, item.longitude)} km
@@ -241,6 +333,13 @@ const LocationsScreen = () => {
       >
         {searchResults.map(renderMarker)}
         {userLocations.map(renderMarker)}
+        {routeCoords && routeCoords.length >= 2 && (
+          <Polyline
+            coordinates={routeCoords}
+            strokeColor="#00AAFF"
+            strokeWidth={4}
+          />
+        )}
         {currentLocation && (
           <Circle
             center={currentLocation}
@@ -265,17 +364,29 @@ const LocationsScreen = () => {
             </Text>
             {selectedLocation.companyAddress && (
               <Text style={styles.modalAddress}>
-                Address: {selectedLocation.companyAddress}
+                {translations.address}: {selectedLocation.companyAddress}
               </Text>
             )}
             <Text style={styles.modalDistance}>
-              Distance: {calculateDistance(selectedLocation.latitude, selectedLocation.longitude)} km
+              {translations.distanceLabel}: {calculateDistance(
+                selectedLocation.latitude,
+                selectedLocation.longitude
+              )} km
             </Text>
             <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setSelectedLocation(null)}
+              style={[styles.closeButton, { marginTop: 10 }]}
+              onPress={() => drawQuickestRouteOnMap(selectedLocation)}
             >
-              <Text style={styles.closeButtonText}>Close</Text>
+              <Text style={styles.closeButtonText}>{translations.quickestRoute}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                setRouteCoords(null);
+                setSelectedLocation(null);
+              }}
+            >
+              <Text style={styles.closeButtonText}>{translations.close}</Text>
             </TouchableOpacity>
           </View>
         </Modal>

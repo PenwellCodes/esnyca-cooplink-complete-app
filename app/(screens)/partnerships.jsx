@@ -16,22 +16,30 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { db } from "../../firebase/firebaseConfig";
 import { collection, getDocs } from "firebase/firestore";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const Partnerships = () => {
   const { colors } = useTheme();
-  const router = useRouter();
-  const { currentUser, loadingAuth } = useAuth();
+  const { currentLanguage, t } = useLanguage();
 
   const [partners, setPartners] = useState([]);
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
-  // Redirect if not authenticated
+  const [translations, setTranslations] = useState({
+    moreInformation: "More Information",
+    facebook: "Facebook",
+  });
+
   useEffect(() => {
-    if (!loadingAuth && !currentUser) {
-      router.replace("/(auth)/sign-in");
-    }
-  }, [loadingAuth, currentUser, router]);
+    const loadTranslations = async () => {
+      setTranslations({
+        moreInformation: await t("More Information"),
+        facebook: await t("Facebook"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   // Fetch partners data from Firestore
   useEffect(() => {
@@ -42,14 +50,21 @@ const Partnerships = () => {
           id: doc.id,
           ...doc.data(),
         }));
-        setPartners(partnersData);
+        const localizedPartners = await Promise.all(
+          partnersData.map(async (partner) => ({
+            ...partner,
+            title: await t(partner.title || ""),
+            description: await t(partner.description || ""),
+          }))
+        );
+        setPartners(localizedPartners);
       } catch (error) {
         console.error("Error fetching partners: ", error);
       }
     };
 
     fetchPartners();
-  }, []);
+  }, [currentLanguage, t]);
 
   const openDrawer = (partner) => {
     setSelectedPartner(partner);
@@ -108,13 +123,14 @@ const Partnerships = () => {
         <Modal
           visible={isDrawerVisible}
           onDismiss={closeDrawer}
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
           contentContainerStyle={[
             styles.modalContainer, 
             { backgroundColor: colors.background }
           ]}
         >
           <Text style={[styles.drawerHeading, { color: colors.error }]}>
-            More Information
+            {translations.moreInformation}
           </Text>
           {selectedPartner && (
             <>
@@ -129,9 +145,9 @@ const Partnerships = () => {
                   style={styles.facebookButton}
                   onPress={() => openFacebook(selectedPartner.facebookUrl)}
                 >
-                  <FontAwesome name="facebook" size={24} color={colors.primary} />
-                  <Text style={[styles.facebookText, { color: colors.primary }]}>
-                    Facebook
+                  <FontAwesome name="facebook" size={24} color={colors.tertiary} />
+                  <Text style={[styles.facebookText, { color: colors.tertiary }]}>
+                    {translations.facebook}
                   </Text>
                 </TouchableOpacity>
               )}

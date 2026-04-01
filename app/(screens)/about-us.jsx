@@ -16,20 +16,11 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { db } from "../../firebase/firebaseConfig";
 import { collection, getDocs } from "firebase/firestore";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const aboutus = () => {
   const { colors } = useTheme();
-  const router = useRouter();
-  const { currentUser } = useAuth();
-
-  // Remove direct navigation and use useEffect instead
-  useEffect(() => {
-    if (!currentUser) {
-      setTimeout(() => {
-        router.replace("/(auth)/sign-in");
-      }, 0);
-    }
-  }, [currentUser]);
+  const { currentLanguage, t } = useLanguage();
 
   const [team, setTeam] = useState([]);
   const [mission, setMission] = useState("");
@@ -37,6 +28,27 @@ const aboutus = () => {
   const [ourStory, setOurStory] = useState("");
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+
+  const [translations, setTranslations] = useState({
+    missionVision: "Mission & Vision",
+    ourStory: "Our Story",
+    meetTeam: "Meet the Team",
+    moreInformation: "More Information",
+    socialLink: "Social Link",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        missionVision: await t("Mission & Vision"),
+        ourStory: await t("Our Story"),
+        meetTeam: await t("Meet the Team"),
+        moreInformation: await t("More Information"),
+        socialLink: await t("Social Link"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   // Fetch meet our team + mission/vision/story from Firestore
   useEffect(() => {
@@ -52,27 +64,36 @@ const aboutus = () => {
           id: doc.id,
           ...doc.data(),
         }));
-        setTeam(teamData);
+        const localizedTeam = await Promise.all(
+          teamData.map(async (member) => ({
+            ...member,
+            name: await t(member.name || ""),
+            title: await t(member.title || ""),
+            description: await t(member.description || ""),
+            bio: await t(member.bio || ""),
+          }))
+        );
+        setTeam(localizedTeam);
 
         const missionDoc = missionSnap.docs[0]?.data() || {};
         // Support various key casings that might come from Firestore
-        setMission(
+        const rawMission =
           missionDoc.mission ||
             missionDoc.Mission ||
             missionDoc.missionText ||
             missionDoc.description ||
-            "",
-        );
-        setVision(
+            "";
+        const rawVision =
           missionDoc.vision ||
             missionDoc.Vision ||
             missionDoc.visionText ||
             missionDoc.descriptionVision ||
-            "",
-        );
+            "";
+        setMission(await t(rawMission));
+        setVision(await t(rawVision));
 
         const storyDoc = storySnap.docs[0]?.data() || {};
-        setOurStory(
+        const rawStory =
           storyDoc.story ||
             storyDoc.Story ||
             storyDoc["Our Story"] ||
@@ -80,15 +101,15 @@ const aboutus = () => {
             storyDoc.ourstory ||
             storyDoc.description ||
             storyDoc.text ||
-            "",
-        );
+            "";
+        setOurStory(await t(rawStory));
       } catch (error) {
         console.error("Error fetching meetourteam/mission/ourstory: ", error);
       }
     };
 
     fetchData();
-  }, []);
+  }, [currentLanguage, t]);
 
   const openDrawer = (partner) => {
     setSelectedPartner(partner);
@@ -105,16 +126,11 @@ const aboutus = () => {
     }
   };
 
-  // If still loading auth state, you can optionally show a loading indicator
-  if (!currentUser) {
-    return null; // Or return a loading spinner
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.error }]}>
-          Mission & Vision
+          {translations.missionVision}
         </Text>
         {mission ? (
           <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
@@ -130,7 +146,7 @@ const aboutus = () => {
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.error }]}>
-          Our Story
+          {translations.ourStory}
         </Text>
         {ourStory ? (
           <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
@@ -147,7 +163,7 @@ const aboutus = () => {
           { color: colors.error },
         ]}
       >
-        Meet the Team
+        {translations.meetTeam}
       </Text>
       <FlatList
         data={team}
@@ -185,17 +201,18 @@ const aboutus = () => {
         <Modal
           visible={isDrawerVisible}
           onDismiss={closeDrawer}
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
           contentContainerStyle={[
             styles.modalContainer,
             {
               backgroundColor: colors.background,
-              borderTopColor: colors.primary,
+              borderTopColor: colors.tertiary,
               borderTopWidth: 3,
             },
           ]}
         >
           <Text style={[styles.drawerHeading, { color: colors.error }]}>
-            More Information
+            {translations.moreInformation}
           </Text>
           {selectedPartner && (
             <>
@@ -218,12 +235,12 @@ const aboutus = () => {
                     <FontAwesome
                       name="facebook"
                       size={24}
-                      color={colors.primary}
+                      color={colors.tertiary}
                     />
                     <Text
-                      style={[styles.facebookText, { color: colors.primary }]}
+                      style={[styles.facebookText, { color: colors.tertiary }]}
                     >
-                      Social Link
+                      {translations.socialLink}
                     </Text>
                   </TouchableOpacity>
                 ))}

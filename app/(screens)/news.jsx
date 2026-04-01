@@ -6,12 +6,14 @@ import {
   Image,
   FlatList,
   TouchableOpacity,
+  ImageBackground,
 } from "react-native";
 import { useTheme, Card, Appbar, Chip } from "react-native-paper";
 import { db } from "../../firebase/firebaseConfig";
 import { collection, getDocs, query, orderBy, Timestamp } from "firebase/firestore";
 import { useRouter } from "expo-router";
 import { images, typography } from "../../constants";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 // Helper function to convert Firestore Timestamp to Date
 const getDateFromTimestamp = (date) => {
@@ -37,79 +39,99 @@ const getDateFromTimestamp = (date) => {
 };
 
 // NewsItem component to handle individual card rendering and state
-const NewsItem = ({ item }) => {
+const NewsItem = ({ item, translations }) => {
   const [expanded, setExpanded] = useState(false);
   const { colors } = useTheme();
 
   const formattedDate = getDateFromTimestamp(item.createdAt);
 
   return (
-    <Card style={[styles.card, { backgroundColor: colors.surface }]}>
-      {/* Image container with overlay chip */}
-      <View style={styles.imageContainer}>
-        <Card.Cover source={{ uri: item.imageUrl || "https://via.placeholder.com/400" }} />
-        <Chip style={styles.chip}>
-          {formattedDate.toLocaleDateString()}
-        </Chip>
-      </View>
-      <Card.Content>
-        <Text
-          style={[
-            styles.title,
-            typography.robotoBold,
-            { color: colors.tertiary },
-          ]}
-        >
-          {item.title}
-        </Text>
-        {item.author && (
+    <View style={styles.card}>
+      <ImageBackground
+        source={{ uri: item.imageUrl || "https://via.placeholder.com/400" }}
+        style={styles.cardBackground}
+        imageStyle={styles.cardBackgroundImage}
+      >
+        <View style={styles.cardOverlay} />
+        <View style={styles.cardContent}>
+          <Chip style={styles.chip}>
+            {formattedDate.toLocaleDateString()}
+          </Chip>
           <Text
             style={[
-              styles.author,
-              typography.robotoLight,
-              { color: colors.primary },
+              styles.title,
+              typography.robotoBold,
+              { color: "#ffffff" },
             ]}
           >
-            By {item.author}
+            {item.title}
           </Text>
-        )}
-        {item.summary && (
+          {item.author && (
+            <Text
+              style={[
+                styles.author,
+                typography.robotoLight,
+                { color: "#cde4ff" },
+              ]}
+            >
+              {translations.byPrefix} {item.author}
+            </Text>
+          )}
+          {item.summary && (
+            <Text
+              style={[
+                styles.summary,
+                typography.robotoLight,
+                { color: "#f2f6ff" },
+              ]}
+            >
+              {item.summary}
+            </Text>
+          )}
           <Text
+            numberOfLines={expanded ? undefined : 3}
+            ellipsizeMode="tail"
             style={[
-              styles.summary,
+              styles.content,
               typography.robotoLight,
-              { color: colors.tertiary },
+              { color: "#f9fbff" },
             ]}
           >
-            {item.summary}
+            {item.content}
           </Text>
-        )}
-        <Text
-          numberOfLines={expanded ? undefined : 3}
-          ellipsizeMode="tail"
-          style={[
-            styles.content,
-            typography.robotoLight,
-            { color: colors.tertiary },
-          ]}
-        >
-          {item.content}
-        </Text>
-        <TouchableOpacity onPress={() => setExpanded(!expanded)}>
-          <Text style={[styles.readMore, { color: colors.primary }]}>
-            {expanded ? "Show Less" : "Read More"}
-          </Text>
-        </TouchableOpacity>
-      </Card.Content>
-    </Card>
+          <TouchableOpacity onPress={() => setExpanded(!expanded)}>
+            <Text style={[styles.readMore, { color: "#00AAFF" }]}>
+              {expanded ? translations.showLess : translations.readMore}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ImageBackground>
+    </View>
   );
 };
 
 const News = () => {
   const { colors } = useTheme();
   const router = useRouter();
+  const { currentLanguage, t } = useLanguage();
   const [newsData, setNewsData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [translations, setTranslations] = useState({
+    readMore: "Read More",
+    showLess: "Show Less",
+    byPrefix: "By",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        readMore: await t("Read More"),
+        showLess: await t("Show Less"),
+        byPrefix: await t("By"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   useEffect(() => {
     const fetchNews = async () => {
@@ -145,7 +167,18 @@ const News = () => {
           return dateB.getTime() - dateA.getTime();
         });
         
-        setNewsData(sortedNews);
+        // Translate dynamic news body fields so cards fully follow language changes.
+        const localizedNews = await Promise.all(
+          sortedNews.map(async (item) => ({
+            ...item,
+            title: await t(item.title || ""),
+            content: await t(item.content || ""),
+            summary: await t(item.summary || ""),
+            author: await t(item.author || ""),
+          }))
+        );
+
+        setNewsData(localizedNews);
       } catch (error) {
         console.error("Error fetching news:", error);
         setNewsData([]);
@@ -155,7 +188,7 @@ const News = () => {
     };
 
     fetchNews();
-  }, []);
+  }, [currentLanguage, t]);
 
   if (loading) {
     return (
@@ -175,7 +208,9 @@ const News = () => {
       
       <FlatList
         data={newsData}
-        renderItem={({ item }) => <NewsItem item={item} />}
+        renderItem={({ item }) => (
+          <NewsItem item={item} translations={translations} />
+        )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
       />
@@ -202,15 +237,28 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   card: {
-    marginBottom: 20, // Increased spacing below each card
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: "hidden",
   },
-  imageContainer: {
-    position: "relative", // Allows absolute positioning of chip
+  cardBackground: {
+    width: "100%",
+    minHeight: 220,
+    justifyContent: "flex-end",
+  },
+  cardBackgroundImage: {
+    borderRadius: 16,
+  },
+  cardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  cardContent: {
+    padding: 16,
   },
   chip: {
-    position: "absolute",
-    top: 10,
-      left: 10,
+    alignSelf: "flex-start",
+    marginBottom: 8,
   },
   title: {
     fontSize: 18,

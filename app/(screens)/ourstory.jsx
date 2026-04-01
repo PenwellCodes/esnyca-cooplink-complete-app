@@ -16,11 +16,13 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { db } from "../../firebase/firebaseConfig";
 import { collection, getDocs } from "firebase/firestore";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const aboutus = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { currentLanguage, t } = useLanguage();
 
   // Redirect if not authenticated
   if (!loadingAuth && !currentUser) {
@@ -31,6 +33,21 @@ const aboutus = () => {
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
+  const [translations, setTranslations] = useState({
+    moreInformation: "More Information",
+    facebook: "Facebook",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        moreInformation: await t("More Information"),
+        facebook: await t("Facebook"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
+
   // Fetch aboutus data from Firestore
   useEffect(() => {
     const fetchaboutus = async () => {
@@ -40,14 +57,21 @@ const aboutus = () => {
           id: doc.id,
           ...doc.data(),
         }));
-        setaboutus(aboutusData);
+        const localized = await Promise.all(
+          aboutusData.map(async (entry) => ({
+            ...entry,
+            title: await t(entry.title || ""),
+            description: await t(entry.description || ""),
+          }))
+        );
+        setaboutus(localized);
       } catch (error) {
         console.error("Error fetching aboutus: ", error);
       }
     };
 
     fetchaboutus();
-  }, []);
+  }, [currentLanguage, t]);
 
   const openDrawer = (partner) => {
     setSelectedPartner(partner);
@@ -107,7 +131,7 @@ const aboutus = () => {
           onDismiss={closeDrawer}
           contentContainerStyle={styles.modalContainer}
         >
-          <Text style={styles.drawerHeading}>More Information</Text>
+          <Text style={styles.drawerHeading}>{translations.moreInformation}</Text>
           {selectedPartner && (
             <>
               <Text style={styles.drawerTitle}>{selectedPartner.title}</Text>
@@ -124,7 +148,7 @@ const aboutus = () => {
                     size={24}
                     color={colors.primary}
                   />
-                  <Text style={styles.facebookText}>Facebook</Text>
+                  <Text style={styles.facebookText}>{translations.facebook}</Text>
                 </TouchableOpacity>
               )}
             </>

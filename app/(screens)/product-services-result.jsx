@@ -2,12 +2,45 @@ import React from 'react';
 import { StyleSheet, Text, View, FlatList, Image, TouchableOpacity } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLanguage } from '../../context/appstate/LanguageContext';
 
 const ProductServicesResult = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
   const results = JSON.parse(params.results || '[]');
+
+  const { currentLanguage, t } = useLanguage();
+  const [translations, setTranslations] = React.useState({
+    productsServices: "Products & Services",
+    productService: "Product/Service",
+  });
+  const [localizedResults, setLocalizedResults] = React.useState([]);
+
+  React.useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        productsServices: await t("Products & Services"),
+        productService: await t("Product/Service"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
+
+  React.useEffect(() => {
+    const localizeResults = async () => {
+      const translated = await Promise.all(
+        results.map(async (item) => ({
+          ...item,
+          name: await t(item.name || ""),
+          content: await t(item.content || ""),
+          region: await t(item.region || ""),
+        }))
+      );
+      setLocalizedResults(translated);
+    };
+    localizeResults();
+  }, [results, currentLanguage, t]);
   
   const renderItem = ({ item }) => (
     <TouchableOpacity 
@@ -23,7 +56,9 @@ const ProductServicesResult = () => {
       />
       <View style={styles.content}>
         <Text style={[styles.name, { color: colors.primary }]}>{item.name}</Text>
-        <Text style={styles.serviceLabel}>Product/Service:</Text>
+        <Text style={styles.serviceLabel}>
+          {translations.productService}:
+        </Text>
         <Text style={styles.service}>{item.content}</Text>
         <Text style={styles.region}>{item.region}</Text>
         <Text style={styles.contact}>{item.phoneNumber}</Text>
@@ -34,10 +69,10 @@ const ProductServicesResult = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Text style={[styles.header, { color: colors.primary }]}>
-        Products & Services ({results.length})
+        {translations.productsServices} ({results.length})
       </Text>
       <FlatList
-        data={results}
+        data={localizedResults}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}

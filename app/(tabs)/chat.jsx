@@ -19,6 +19,8 @@ import { useAuth } from "../../context/appstate/AuthContext";
 import { useStories } from "../../context/appstate/StoriesContext";
 import { useChat } from "../../context/appstate/ChatContext"; // Add this import
 import StoryViewer from "../../components/StoryViewer"; // Add this import
+import { useNavigation } from "@react-navigation/native";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -26,12 +28,40 @@ const placeholderAvatar =
 const ChatList = () => {
   const { colors } = useTheme();
   const router = useRouter();
+  const navigation = useNavigation();
   const { currentUser } = useAuth();
   const { stories: activeStories } = useStories();
   const { conversations, lastMessages, getSortedChats } = useChat(); // Add this line
+  const { currentLanguage, t } = useLanguage();
   const [baseUserList, setBaseUserList] = useState([]); // Store base user data
   const [loading, setLoading] = useState(true);
   const [groupMemberCount, setGroupMemberCount] = useState(0);
+  const [translations, setTranslations] = useState({
+    chat: "Chat",
+    addStory: "Add Story",
+    unknownUser: "Unknown User",
+    unknown: "Unknown",
+    members: "members",
+    groupName: "Swazi Cooparators",
+    startConversation: "Start a conversation",
+    fileSent: "📂 File sent",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        chat: await t("Chat"),
+        addStory: await t("Add Story"),
+        unknownUser: await t("Unknown User"),
+        unknown: await t("Unknown"),
+        members: await t("members"),
+        groupName: await t("Swazi Cooparators"),
+        startConversation: await t("Start a conversation"),
+        fileSent: await t("📂 File sent"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
   
   // Use refs to store latest values without causing re-subscriptions
   const conversationsRef = useRef(conversations);
@@ -62,7 +92,9 @@ const ChatList = () => {
       return {
         ...user,
         lastMessage: lastMessage?.text || 
-          (lastMessage?.fileUrl ? "📂 File sent" : "Start a conversation"),
+          (lastMessage?.fileUrl
+            ? translations.fileSent
+            : translations.startConversation),
         lastMessageTimestamp: lastMessages[chatId],
         unreadCount,
       };
@@ -73,7 +105,14 @@ const ChatList = () => {
       const timeB = b.lastMessageTimestamp?.toDate?.() || 0;
       return timeB - timeA;
     });
-  }, [baseUserList, conversations, lastMessages, currentUser]);
+  }, [
+    baseUserList,
+    conversations,
+    lastMessages,
+    currentUser,
+    translations.fileSent,
+    translations.startConversation,
+  ]);
 
   // Listener for total group members (all users)
   useEffect(() => {
@@ -125,7 +164,9 @@ const ChatList = () => {
         return {
           ...user,
           lastMessage: lastMessage?.text || 
-            (lastMessage?.fileUrl ? "📂 File sent" : "Start a conversation"),
+            (lastMessage?.fileUrl
+              ? translations.fileSent
+              : translations.startConversation),
           lastMessageTimestamp: currentLastMessages[chatId],
           unreadCount,
         };
@@ -163,7 +204,7 @@ const ChatList = () => {
       const storyUser = chatList.find(user => user.uid === userId);
       setSelectedUserStories({
         stories: groupedStories[userId],
-        userName: storyUser?.displayName || 'Unknown User'
+        userName: storyUser?.displayName || translations.unknownUser,
       });
       setIsStoryViewerVisible(true);
     }
@@ -187,7 +228,7 @@ const ChatList = () => {
   if (currentUser?.role === "cooperative") {
     storiesForDisplay.push({
       id: "add-story",
-      name: "Add Story",
+      name: translations.addStory,
       addStory: true,
       avatar: currentUser.profilePic || placeholderAvatar,
     });
@@ -204,7 +245,7 @@ const ChatList = () => {
   // Define the group chat object
   const groupChat = {
     uid: "group_swazi_cooperators",
-    displayName: "Swazi Cooparators",
+    displayName: translations.groupName,
     profilePicture:
       "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
     memberCount: groupMemberCount,
@@ -214,7 +255,23 @@ const ChatList = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}></View>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation?.canGoBack?.()) {
+              navigation.goBack();
+            } else {
+              router.replace("/(tabs)/home");
+            }
+          }}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.tertiary }]}>
+          {translations.chat}
+        </Text>
+      </View>
 
       {/* Stories Section */}
       <View style={styles.statusListContainer}>
@@ -232,14 +289,16 @@ const ChatList = () => {
                   <Ionicons name="add-circle" size={24} color="#007AFF" />
                 </View>
               </LinearGradient>
-              <Text style={[styles.menuText, typography.small]}>Add Story</Text>
+              <Text style={[styles.menuText, typography.small]}>
+                {translations.addStory}
+              </Text>
             </TouchableOpacity>
           )}
           
           {/* Render user story containers with usernames */}
           {Object.entries(groupedStories).map(([userId, stories]) => {
             const storyUser = chatList.find(user => user.uid === userId);
-            const displayName = storyUser?.displayName || 'Unknown';
+            const displayName = storyUser?.displayName || translations.unknown;
             const shortName = displayName.length > 8 
               ? `${displayName.substring(0, 8)}...` 
               : displayName;
@@ -314,7 +373,7 @@ const ChatList = () => {
             {groupChat.displayName}
           </Text>
           <Text style={styles.lastMessage}>
-            {groupChat.memberCount} members
+            {groupChat.memberCount} {translations.members}
           </Text>
         </View>
       </TouchableOpacity>
@@ -367,8 +426,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  backButton: {
+    padding: 4,
+    marginRight: 4,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
   },
   appName: {
     fontSize: 20,

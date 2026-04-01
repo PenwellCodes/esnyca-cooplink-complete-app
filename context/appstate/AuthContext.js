@@ -1,5 +1,9 @@
 import React, { useState, createContext, useContext, useEffect } from "react";
-import { onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { auth, db } from "../../firebase/firebaseConfig";
@@ -78,7 +82,19 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async (email) => {
     try {
-      await sendPasswordResetEmail(auth, email);
+      const normalizedEmail = email.trim().toLowerCase();
+
+      // Validate format first to avoid false "sent" feedback.
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        return { success: false, error: "Please enter a valid email address." };
+      }
+
+      // Explicit action settings make reset links more predictable across clients.
+      await sendPasswordResetEmail(auth, normalizedEmail, {
+        url: "https://app-esnyca.firebaseapp.com",
+        handleCodeInApp: false,
+      });
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };

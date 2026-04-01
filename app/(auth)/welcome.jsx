@@ -7,15 +7,44 @@ import { CustomButton } from "../../components";
 import { onboardingText, typography } from "../../constants";
 import { useTheme } from "react-native-paper";
 import { useOnboarding } from "../../hooks/useOnboarding";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 import React from "react";
 
 const Onboarding = () => {
   const { colors } = useTheme();
+  const { currentLanguage, t } = useLanguage();
   const { isFirstLaunch, completeOnboarding } = useOnboarding();
   const swiperRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const isLastSlide = activeIndex === onboardingText.length - 1;
+  const [translations, setTranslations] = useState({
+    skip: "Skip",
+    getStarted: "Get Started",
+    next: "Next",
+  });
+  const [slides, setSlides] = useState(onboardingText);
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        skip: await t("Skip"),
+        getStarted: await t("Get Started"),
+        next: await t("Next"),
+      });
+
+      const localizedSlides = await Promise.all(
+        onboardingText.map(async (item) => ({
+          ...item,
+          title: await t(item.title || ""),
+          description: await t(item.description || ""),
+        }))
+      );
+      setSlides(localizedSlides);
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
+
+  const isLastSlide = activeIndex === slides.length - 1;
 
   useEffect(() => {
     if (isFirstLaunch === false) {
@@ -47,7 +76,7 @@ const Onboarding = () => {
             { color: colors.tertiary },
           ]}
         >
-          Skip
+          {translations.skip}
         </Text>
       </TouchableOpacity>
       <Swiper
@@ -63,7 +92,7 @@ const Onboarding = () => {
         }
         onIndexChanged={(index) => setActiveIndex(index)}
       >
-        {onboardingText.map((item) => (
+        {slides.map((item) => (
           <View key={item.id} style={styles.slide}>
             <Image
               source={item.image}
@@ -94,7 +123,7 @@ const Onboarding = () => {
         ))}
       </Swiper>
       <CustomButton
-        title={isLastSlide ? "Get Started" : "Next"}
+        title={isLastSlide ? translations.getStarted : translations.next}
         onPress={() =>
           isLastSlide
             ? handleComplete()

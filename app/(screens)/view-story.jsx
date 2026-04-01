@@ -24,6 +24,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebase/firebaseConfig";
 import { useChat } from "../../context/appstate/ChatContext";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const { width } = Dimensions.get("window");
 const TOTAL_DURATION = 10000; // total duration in ms (10 seconds)
@@ -34,6 +35,7 @@ const ViewStoryScreen = () => {
   const { stories, recordView, deleteStory } = useStories();
   const { currentUser } = useAuth();
   const { setActiveChatId } = useChat();
+  const { currentLanguage, t } = useLanguage();
 
   // Find the story
   const story = stories.find((s) => s.id === storyId);
@@ -42,6 +44,55 @@ const ViewStoryScreen = () => {
   const [remainingDuration, setRemainingDuration] = useState(TOTAL_DURATION);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const animationStartRef = useRef(Date.now());
+
+  const [translations, setTranslations] = useState({
+    storyNotFound: "Story not found",
+    storyMayExpired: "This story may have expired or been deleted.",
+    replyPlaceholder: "Reply...",
+    send: "Send",
+    replySentTitle: "Reply Sent",
+    replySentBody: "Your reply has been sent to the story owner.",
+    error: "Error",
+    failedToSendReply: "Failed to send reply.",
+    deleteStoryTitle: "Delete Story",
+    deleteStoryBody: "Are you sure you want to delete this story?",
+    cancel: "Cancel",
+    delete: "Delete",
+    success: "Success",
+    storyDeletedSuccessfully: "Story deleted successfully",
+    failedToDeleteStory: "Failed to delete story",
+    views: "Views",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        storyNotFound: await t("Story not found"),
+        storyMayExpired: await t(
+          "This story may have expired or been deleted."
+        ),
+        replyPlaceholder: await t("Reply..."),
+        send: await t("Send"),
+        replySentTitle: await t("Reply Sent"),
+        replySentBody: await t(
+          "Your reply has been sent to the story owner."
+        ),
+        error: await t("Error"),
+        failedToSendReply: await t("Failed to send reply."),
+        deleteStoryTitle: await t("Delete Story"),
+        deleteStoryBody: await t(
+          "Are you sure you want to delete this story?"
+        ),
+        cancel: await t("Cancel"),
+        delete: await t("Delete"),
+        success: await t("Success"),
+        storyDeletedSuccessfully: await t("Story deleted successfully"),
+        failedToDeleteStory: await t("Failed to delete story"),
+        views: await t("Views"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   // Listener for keyboard focus on reply field to auto-pause
   useEffect(() => {
@@ -65,14 +116,17 @@ const ViewStoryScreen = () => {
 
   useEffect(() => {
     if (!story) {
-      Alert.alert("Story not found", "This story may have expired or been deleted.");
+      Alert.alert(
+        translations.storyNotFound,
+        translations.storyMayExpired
+      );
       router.back();
     }
   }, [story, router]);
 
   useEffect(() => {
     if (!story) {
-      Alert.alert("Story not found");
+      Alert.alert(translations.storyNotFound);
       router.back();
       return;
     }
@@ -147,11 +201,11 @@ const ViewStoryScreen = () => {
         timestamp: serverTimestamp(),
         status: "sent",
       });
-      Alert.alert("Reply Sent", "Your reply has been sent to the story owner.");
+      Alert.alert(translations.replySentTitle, translations.replySentBody);
       setReplyText("");
     } catch (error) {
       console.error("Error sending reply:", error);
-      Alert.alert("Error", "Failed to send reply.");
+      Alert.alert(translations.error, translations.failedToSendReply);
     }
   };
 
@@ -159,23 +213,23 @@ const ViewStoryScreen = () => {
     if (currentUser.uid !== story.userId) return;
     
     Alert.alert(
-        "Delete Story",
-        "Are you sure you want to delete this story?",
+        translations.deleteStoryTitle,
+        translations.deleteStoryBody,
         [
             {
-                text: "Cancel",
+                text: translations.cancel,
                 style: "cancel"
             },
             {
-                text: "Delete",
+                text: translations.delete,
                 style: "destructive",
                 onPress: async () => {
                     try {
                         await deleteStory(storyId, story.imageURL);
-                        Alert.alert("Success", "Story deleted successfully");
+                        Alert.alert(translations.success, translations.storyDeletedSuccessfully);
                         router.push("/(tabs)/chat"); // Changed from router.back() to explicitly navigate to chat
                     } catch (error) {
-                        Alert.alert("Error", "Failed to delete story");
+                        Alert.alert(translations.error, translations.failedToDeleteStory);
                     }
                 }
             }
@@ -219,7 +273,7 @@ const ViewStoryScreen = () => {
       {currentUser.uid === story.userId ? (
         <View style={styles.viewCountContainer}>
           <Text style={styles.viewCountText}>
-            {story.views ? story.views.length : 0} Views
+            {story.views ? story.views.length : 0} {translations.views}
           </Text>
         </View>
       ) : (
@@ -227,7 +281,7 @@ const ViewStoryScreen = () => {
         <View style={styles.replyContainer}>
           <TextInput
             style={styles.replyInput}
-            placeholder="Reply..."
+            placeholder={translations.replyPlaceholder}
             placeholderTextColor="#ccc"
             value={replyText}
             onChangeText={setReplyText}
@@ -235,7 +289,7 @@ const ViewStoryScreen = () => {
             onBlur={resumeAnimation}
           />
           <TouchableOpacity style={styles.sendButton} onPress={handleReply}>
-            <Text style={styles.sendButtonText}>Send</Text>
+            <Text style={styles.sendButtonText}>{translations.send}</Text>
           </TouchableOpacity>
         </View>
       )}

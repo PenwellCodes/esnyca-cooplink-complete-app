@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { View, ScrollView, StyleSheet, Modal, TouchableOpacity, Linking, Share } from "react-native";
 import { Text, List, Divider, Switch, Button, useTheme, TextInput, Dialog, Portal } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
@@ -28,7 +28,59 @@ const SettingsScreen = () => {
     inviteFriends: "Invite Friends",
     selectLanguage: "Select Language",
     close: "Close",
+    signOut: "Sign Out",
+    deleteAccount: "Delete Account",
+    confirmSignOutTitle: "Confirm Sign Out",
+    confirmSignOutBody: "Are you sure you want to sign out?",
+    cancel: "Cancel",
+    signOutConfirm: "Sign Out",
+    confirmDeleteTitle: "Delete Account",
+    confirmDeleteBody: "This action cannot be undone. Please enter your credentials to confirm.",
+    email: "Email",
+    password: "Password",
+    confirmDelete: "Confirm Delete",
+    deleteDialogCancel: "Cancel",
+    inviteMessage: "Check out this amazing app: ESNICA - Connect with cooperatives!",
+    pleaseSignInFirst: "Please sign in first",
+    userDoesNotExist: "User does not exist",
+    wrongPasswordOrEmail: "Wrong password or email",
   });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        settings: await t("Settings"),
+        profile: await t("Profile"),
+        privacy: await t("Privacy"),
+        darkMode: await t("Dark Mode"),
+        language: await t("Language"),
+        inviteFriends: await t("Invite Friends"),
+        selectLanguage: await t("Select Language"),
+        close: await t("Close"),
+        signOut: await t("Sign Out"),
+        deleteAccount: await t("Delete Account"),
+        confirmSignOutTitle: await t("Confirm Sign Out"),
+        confirmSignOutBody: await t("Are you sure you want to sign out?"),
+        cancel: await t("Cancel"),
+        signOutConfirm: await t("Sign Out"),
+        confirmDeleteTitle: await t("Delete Account"),
+        confirmDeleteBody: await t(
+          "This action cannot be undone. Please enter your credentials to confirm."
+        ),
+        email: await t("Email"),
+        password: await t("Password"),
+        confirmDelete: await t("Confirm Delete"),
+        deleteDialogCancel: await t("Cancel"),
+        inviteMessage: await t(
+          "Check out this amazing app: ESNICA - Connect with cooperatives!"
+        ),
+        pleaseSignInFirst: await t("Please sign in first"),
+        userDoesNotExist: await t("User does not exist"),
+        wrongPasswordOrEmail: await t("Wrong password or email"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   const [faqVisible, setFaqVisible] = useState(false);
   const [languageVisible, setLanguageVisible] = useState(false);
@@ -57,8 +109,7 @@ const SettingsScreen = () => {
 
   const handleInviteFriends = async () => {
     try {
-      const message =
-        "Check out this amazing app: ESNICA - Connect with cooperatives!";
+      const message = translations.inviteMessage;
       const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
       await Linking.openURL(whatsappUrl);
     } catch (error) {
@@ -96,7 +147,7 @@ const SettingsScreen = () => {
     try {
       // If no user is logged in, show error
       if (!currentUser) {
-        setError('Please sign in first');
+        setError(translations.pleaseSignInFirst);
         setLoading(false);
         return;
       }
@@ -139,9 +190,9 @@ const SettingsScreen = () => {
       }, 0);
     } catch (error) {
       if (error.code === 'auth/user-not-found') {
-        setError('User does not exist');
+        setError(translations.userDoesNotExist);
       } else if (error.code === 'auth/wrong-password') {
-        setError('Wrong password or email');
+        setError(translations.wrongPasswordOrEmail);
       } else {
         setError(error.message);
       }
@@ -152,7 +203,10 @@ const SettingsScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar backgroundColor={colors.primary} style={"light"} />
+      <StatusBar
+        backgroundColor={colors.background}
+        style={isDarkTheme ? "light" : "dark"}
+      />
       <ScrollView>
         <Text style={[styles.appName, { color: colors.tertiary }]}>
           {translations.settings}
@@ -200,7 +254,7 @@ const SettingsScreen = () => {
 
           {/* Always show sign out and delete account */}
           <List.Item 
-            title="Sign Out"
+            title={translations.signOut}
             left={(props) => <List.Icon {...props} icon="logout" color="orange" />} 
             onPress={() => {
               if (!currentUser) {
@@ -216,7 +270,7 @@ const SettingsScreen = () => {
           <Divider />
 
           <List.Item 
-            title="Delete Account"
+            title={translations.deleteAccount}
             left={(props) => <List.Icon {...props} icon="delete" color="red" />} 
             onPress={() => {
               if (!currentUser) {
@@ -259,13 +313,15 @@ const SettingsScreen = () => {
       <Modal visible={deleteModalVisible} animationType="slide" transparent>
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-            <Text style={[styles.modalTitle, { color: colors.error }]}>Delete Account</Text>
+            <Text style={[styles.modalTitle, { color: colors.error }]}>
+              {translations.confirmDeleteTitle}
+            </Text>
             <Text style={{ marginBottom: 20, color: colors.text }}>
-              This action cannot be undone. Please enter your credentials to confirm. 
+              {translations.confirmDeleteBody}
             </Text>
 
             <TextInput
-              label="Email"
+              label={translations.email}
               value={email}
               onChangeText={setEmail}
               mode="outlined"
@@ -273,7 +329,7 @@ const SettingsScreen = () => {
             />
 
             <TextInput
-              label="Password"
+              label={translations.password}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -291,7 +347,7 @@ const SettingsScreen = () => {
               disabled={loading || !email || !password}
               style={[styles.deleteButton, { backgroundColor: colors.success }]}
             >
-              Confirm Delete
+              {translations.confirmDelete}
             </Button>
 
             <Button 
@@ -304,7 +360,7 @@ const SettingsScreen = () => {
               }}
               style={styles.cancelButton}
             >
-              Cancel
+              {translations.deleteDialogCancel}
             </Button>
           </View>
         </View>
@@ -312,16 +368,18 @@ const SettingsScreen = () => {
 
       <Portal>
         <Dialog visible={signOutDialogVisible} onDismiss={() => setSignOutDialogVisible(false)}>
-          <Dialog.Title>Confirm Sign Out</Dialog.Title>
+          <Dialog.Title>{translations.confirmSignOutTitle}</Dialog.Title>
           <Dialog.Content>
-            <Text>Are you sure you want to sign out?</Text>
+            <Text>{translations.confirmSignOutBody}</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setSignOutDialogVisible(false)}>Cancel</Button>
+            <Button onPress={() => setSignOutDialogVisible(false)}>
+              {translations.cancel}
+            </Button>
             <Button onPress={() => {
               setSignOutDialogVisible(false);
               handleSignOut();
-            }}>Sign Out</Button>
+            }}>{translations.signOutConfirm}</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

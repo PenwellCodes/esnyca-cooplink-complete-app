@@ -12,29 +12,82 @@ import { CustomButton } from "../../components";
 import { typography } from "../../constants";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useRouter } from "expo-router";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const ResetPassword = () => {
   const { colors } = useTheme();
   const { resetPassword } = useAuth();
+  const { currentLanguage, t } = useLanguage();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarStyle, setSnackbarStyle] = useState({});
+  const [translations, setTranslations] = useState({
+    enterEmail: "Please enter your email",
+    emailMistyped:
+      "Email looks mistyped (e.g. .comc). Please correct it and try again.",
+    successMessage:
+      "Reset link sent. Check Inbox/Spam/Promotions. Sender: no-reply@firebaseapp.com",
+    resetPassword: "Reset Password",
+    instructions:
+      "Enter your email address and we'll send you instructions to reset your password.",
+    email: "Email",
+    sendResetLink: "Send Reset Link",
+  });
+
+  React.useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        enterEmail: await t("Please enter your email"),
+        emailMistyped: await t(
+          "Email looks mistyped (e.g. .comc). Please correct it and try again."
+        ),
+        successMessage: await t(
+          "Reset link sent. Check Inbox/Spam/Promotions. Sender: no-reply@firebaseapp.com"
+        ),
+        resetPassword: await t("Reset Password"),
+        instructions: await t(
+          "Enter your email address and we'll send you instructions to reset your password."
+        ),
+        email: await t("Email"),
+        sendResetLink: await t("Send Reset Link"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
+
+  const hasCommonEmailTypo = (value) => {
+    const email = value.toLowerCase();
+    return (
+      email.endsWith(".comc") ||
+      email.endsWith(".con") ||
+      email.includes("@gmal.com") ||
+      email.includes("@gmial.com") ||
+      email.includes("@gmail.con")
+    );
+  };
 
   const handleResetPassword = async () => {
     if (!email.trim()) {
-      setSnackbarMessage("Please enter your email");
+      setSnackbarMessage(translations.enterEmail);
+      setSnackbarStyle({ backgroundColor: "red" });
+      setSnackbarVisible(true);
+      return;
+    }
+
+    if (hasCommonEmailTypo(email.trim())) {
+      setSnackbarMessage(translations.emailMistyped);
       setSnackbarStyle({ backgroundColor: "red" });
       setSnackbarVisible(true);
       return;
     }
 
     setLoading(true);
-    const result = await resetPassword(email.trim());
+    const result = await resetPassword(email.trim().toLowerCase());
     if (result.success) {
-      setSnackbarMessage("Password reset email sent! Check your inbox.");
+      setSnackbarMessage(translations.successMessage);
       setSnackbarStyle({ backgroundColor: "green" });
       setSnackbarVisible(true);
       setTimeout(() => {
@@ -59,19 +112,19 @@ const ResetPassword = () => {
           onPress={() => router.back()}
         />
         <Text style={[styles.title, typography.title, { color: colors.primary }]}>
-          Reset Password
+          {translations.resetPassword}
         </Text>
       </View>
 
       <View style={styles.formContainer}>
         <Text style={[typography.body, styles.instructions]}>
-          Enter your email address and we'll send you instructions to reset your password.
+          {translations.instructions}
         </Text>
 
         <View style={styles.inputContainer}>
           <Ionicons name="mail-outline" size={20} color={colors.primary} />
           <TextInput
-            placeholder="Email"
+            placeholder={translations.email}
             style={[styles.input, typography.body]}
             value={email}
             onChangeText={setEmail}
@@ -81,7 +134,13 @@ const ResetPassword = () => {
         </View>
 
         <CustomButton
-          title={loading ? <ActivityIndicator size="small" color="#fff" /> : "Send Reset Link"}
+          title={
+            loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              translations.sendResetLink
+            )
+          }
           onPress={handleResetPassword}
           disabled={loading}
         />

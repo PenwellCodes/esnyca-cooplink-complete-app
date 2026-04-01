@@ -10,6 +10,8 @@ import {
   Linking,
   ActivityIndicator,
   Alert,
+  Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../context/appstate/ChatContext";
@@ -36,6 +38,8 @@ import {
   getDownloadURL,
 } from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -89,6 +93,36 @@ const ChatScreen = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
+  const insets = useSafeAreaInsets();
+  const { currentLanguage, t } = useLanguage();
+
+  const [translations, setTranslations] = useState({
+    permissionRequiredTitle: "Permission Required",
+    permissionRequiredBody:
+      "Sorry, we need media library permissions to make this work!",
+    startConversation: "Start a conversation",
+    typeMessage: "Type a message...",
+    download: "Download",
+    sending: "Sending...",
+    voiceNote: "Voice note",
+  });
+
+  useEffect(() => {
+    const loadTranslations = async () => {
+      setTranslations({
+        permissionRequiredTitle: await t("Permission Required"),
+        permissionRequiredBody: await t(
+          "Sorry, we need media library permissions to make this work!"
+        ),
+        startConversation: await t("Start a conversation"),
+        typeMessage: await t("Type a message..."),
+        download: await t("Download"),
+        sending: await t("Sending..."),
+        voiceNote: await t("Voice note"),
+      });
+    };
+    loadTranslations();
+  }, [currentLanguage, t]);
 
   const contextMessages = conversations[chatId] || [];
   const messages = [...contextMessages, ...localMessages];
@@ -106,8 +140,8 @@ const ChatScreen = () => {
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
-          "Permission Required",
-          "Sorry, we need media library permissions to make this work!",
+          translations.permissionRequiredTitle,
+          translations.permissionRequiredBody
         );
       }
     })();
@@ -363,7 +397,7 @@ const ChatScreen = () => {
                     fontSize: 12,
                   }}
                 >
-                  Download
+                  {translations.download}
                 </Text>
               </TouchableOpacity>
             )}
@@ -372,7 +406,7 @@ const ChatScreen = () => {
                 ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
                     addSuffix: true,
                   })
-                : "Sending..."}
+                : translations.sending}
             </Text>
           </View>
         </TouchableOpacity>
@@ -397,7 +431,7 @@ const ChatScreen = () => {
             </Text>
             <TouchableOpacity onPress={() => Linking.openURL(item.fileUrl)}>
               <Text style={{ color: getGradientForUser(item.sender)[0] }}>
-                Download
+                {translations.download}
               </Text>
             </TouchableOpacity>
             <Text style={styles.timestamp}>
@@ -405,7 +439,7 @@ const ChatScreen = () => {
                 ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
                     addSuffix: true,
                   })
-                : "Sending..."}
+                : translations.sending}
             </Text>
           </View>
         </View>
@@ -469,14 +503,18 @@ const ChatScreen = () => {
             ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
                 addSuffix: true,
               })
-            : "Sending..."}
+            : translations.sending}
         </Text>
       </LinearGradient>
     );
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+    >
       {/* Header */}
       <View style={styles.header}>
         <Image
@@ -488,7 +526,7 @@ const ChatScreen = () => {
 
       {messages.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Start a conversation</Text>
+          <Text style={styles.emptyText}>{translations.startConversation}</Text>
         </View>
       ) : (
         <FlatList
@@ -496,7 +534,10 @@ const ChatScreen = () => {
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
-          contentContainerStyle={{ padding: 10 }}
+          contentContainerStyle={{
+            padding: 10,
+            paddingBottom: 8 + Math.max(insets.bottom, 4) + 40,
+          }}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
         />
       )}
@@ -510,13 +551,13 @@ const ChatScreen = () => {
       )}
 
       {/* Input Section */}
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 4) }]}>
         <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
           <Ionicons name="image-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
 
         <TextInput
-          placeholder="Type a message..."
+          placeholder={translations.typeMessage}
           value={messageText}
           onChangeText={setMessageText}
           style={styles.input}
@@ -525,7 +566,7 @@ const ChatScreen = () => {
           <Ionicons name="send" size={24} color="#007AFF" />
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
