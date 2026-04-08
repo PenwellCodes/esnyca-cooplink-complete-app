@@ -8,12 +8,37 @@ import { signToken, requireAuth } from "./auth.js";
 import { uploadToImgBB } from "./imgbb.js";
 
 const app = express();
+
+// ================== MIDDLEWARE ==================
 app.use(cors());
 app.use(express.json({ limit: "20mb" }));
 
+// ================== HEALTH CHECKS ==================
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// ---- Auth ----
+app.get("/health/db", async (_req, res) => {
+  try {
+    const pool = await getPool();
+    await pool.request().query("SELECT 1 AS ok");
+
+    return res.json({
+      ok: true,
+      db: "connected",
+      server: process.env.MSSQL_SERVER || null,
+      database: process.env.MSSQL_DATABASE || null,
+      port: process.env.MSSQL_PORT ? Number(process.env.MSSQL_PORT) : null,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      db: "disconnected",
+      error: error?.message || "Database connection failed",
+      code: error?.code || null,
+    });
+  }
+});
+
+// ================== AUTHENTICATION ==================
 app.post("/auth/register", async (req, res) => {
   const schema = z.object({
     email: z.string().email(),
@@ -26,7 +51,6 @@ app.post("/auth/register", async (req, res) => {
     physicalAddress: z.string().optional(),
     content: z.string().optional(),
     companyAddress: z.string().optional(),
-    // Optional image upload (base64 without data: prefix)
     profilePicBase64: z.string().optional(),
     profilePicName: z.string().optional(),
   });
@@ -43,6 +67,7 @@ app.post("/auth/register", async (req, res) => {
       .request()
       .input("Email", sql.NVarChar(320), data.email.toLowerCase())
       .query("SELECT TOP 1 Id FROM dbo.Users WHERE Email = @Email");
+    
     if (existing.recordset.length) {
       return res.status(409).json({ error: "Email already in use" });
     }
@@ -117,7 +142,7 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// ---- Upload (ImgBB) ----
+// ================== UPLOADS & DATA ==================
 app.post("/upload/image", requireAuth, async (req, res) => {
   const schema = z.object({
     base64: z.string().min(1),
@@ -133,7 +158,6 @@ app.post("/upload/image", requireAuth, async (req, res) => {
   }
 });
 
-// ---- Example data endpoints (start small; expand as we migrate screens) ----
 app.get("/news", async (_req, res) => {
   try {
     const pool = await getPool();
@@ -144,9 +168,13 @@ app.get("/news", async (_req, res) => {
   }
 });
 
-const port = Number(process.env.PORT || 4000);
-app.listen(port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`API listening on http://localhost:${port}`);
-});
+// ================== SERVER START ==================
+const PORT = Number(process.env.PORT || 4001);
 
+// We use "0.0.0.0" to allow the server to accept connections from 
+// any device (phone, laptop, etc.) targeting this server's IP.
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server is running!`);
+  console.log(`Local Access:   http://localhost:${PORT}`);
+  console.log(`Network Access: http://207.180.254.163:${PORT}`);
+});
