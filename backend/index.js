@@ -46,8 +46,10 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 4000;
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
   // eslint-disable-next-line no-console
-  console.log(`server running on port ${PORT}`);
+  console.log(`server running on http://${HOST}:${PORT}`);
 });
