@@ -1,59 +1,53 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
-const sql = require('./db');
-const bcrypt = require('bcrypt');
 const multer = require('multer');
-const path = require('path');
+const { uploadBufferToImageBB } = require('./services/imagebb');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads',
-express.static(path.join(__dirname,
-'uploads')));
-
-const storage = multer.diskStorage({
-     destination: function (req, file,
-cb){
-         cb(null, 'uploads/');
-    },
-      filename: function (req, file, cb) {
-           cb(null, Date.now() + '_' +
-    file.originalname);
-        }
-});
-const upload = multer({ storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.get('/', (req, res) => {
-   res.send('server is running');
+  res.json({ ok: true, message: 'server is running' });
 });
 
-app.listen(4000, () => {
-     console.log('server running on port 4000');
+// Auth (SQL-backed Users)
+app.use('/api/auth', require('./routes/authRoutes'));
+
+// Schema-based endpoints
+app.use('/api/users', require('./routes/usersRoutes'));
+app.use('/api/news', require('./routes/newsRoutes'));
+app.use('/api/partners', require('./routes/partnersRoutes'));
+app.use('/api/team-members', require('./routes/teamMembersRoutes'));
+app.use('/api/mission-vision', require('./routes/missionVisionRoutes'));
+app.use('/api/our-story', require('./routes/ourStoryRoutes'));
+app.use('/api/about-us-cards', require('./routes/aboutUsCardsRoutes'));
+app.use('/api/chats', require('./routes/chatsRoutes'));
+app.use('/api/stories', require('./routes/storiesRoutes'));
+
+// Upload image (ImageBB)
+app.post('/api/upload', upload.single('image'), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const imageUrl = await uploadBufferToImageBB(file.buffer, file.originalname);
+
+    return res.json({ success: true, imageUrl });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return res.status(500).json({ error: 'Upload failed' });
+  }
 });
 
-//upload image replacing firebase storage
-app.post('/api/upload',
-upload.single('image'), (req, res) => {
-      try {
-          const file = req.file;
-
-           if (!file) {
-             
-return res.status(400).json({ error: 'No file uploaded' });
-     }
-
-   const imageUrl = 'http://207.180.254.163:4000/uploads /${file.filename}';
-
-      res.json({
-           success: true,
-           imageUrl: imageUrl
-        });
-  
-    } catch (err) {
-       console.error(err);
-       res.status(500).json({ error:
-     'Upload failed' });
-                  }
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  // eslint-disable-next-line no-console
+  console.log(`server running on port ${PORT}`);
 });

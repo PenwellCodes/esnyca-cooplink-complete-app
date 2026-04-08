@@ -2,21 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { registerUser, loginUser } = require('../controllers/authController');
 const multer = require('multer');
-const path = require('path');
-
-// Configure how images are saved in the 'uploads' folder
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        // Saves to C:\inetpub\wwwroot\apk\uploads
-        cb(null, '../uploads/');
-    },
-    filename: (req, file, cb) => {
-        // Gives each image a unique name using the current timestamp
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
-
-const upload = multer({ storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
 // --- THE ENDPOINTS ---
 
