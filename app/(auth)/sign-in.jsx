@@ -85,7 +85,10 @@ const SignIn = () => {
         }
       }, 1500);
     } else {
-      if (result.error.includes("auth/invalid-credential") || result.error.includes("auth/user-not-found")) {
+      if (
+        result.error.toLowerCase().includes("invalid") ||
+        result.error.toLowerCase().includes("not found")
+      ) {
         setSnackbarMessage(translations.wrongPasswordOrEmail);
       } else {
         setSnackbarMessage(result.error);

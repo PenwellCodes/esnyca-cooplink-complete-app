@@ -2,15 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router'; // Add this import
 import * as ImagePicker from 'expo-image-picker';
-import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigation } from '@react-navigation/native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { getAuth } from 'firebase/auth';
 import { useAuth } from '../../context/appstate/AuthContext';
 import { useLanguage } from '../../context/appstate/LanguageContext';
 import { useTheme, Snackbar } from "react-native-paper";  // Add this import
+import { apiRequest } from "../../utils/api";
 
 const Profile = () => {
   const router = useRouter(); // Add this
@@ -25,9 +23,6 @@ const Profile = () => {
   const [locationName, setLocationName] = useState('');
   const [mapType, setMapType] = useState('standard');
   const navigation = useNavigation();
-  const db = getFirestore();
-  const storage = getStorage();
-  const auth = getAuth();
 
   const [translations, setTranslations] = useState({
     updateProfile: "Update Profile",
@@ -159,19 +154,21 @@ const Profile = () => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!auth.currentUser) return;
-      
       setIsLoading(true);
       try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('email', '==', auth.currentUser.email));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-          const userDoc = querySnapshot.docs[0];
-          const userData = userDoc.data();
-          setUserData({ id: userDoc.id, ...userData });
-        }
+        if (!currentUser?.id) return;
+        const profile = await apiRequest(`/users/${currentUser.id}`);
+        setUserData({
+          id: profile.Id || profile.id,
+          displayName: profile.DisplayName || profile.displayName || "",
+          email: profile.Email || profile.email || currentUser.email || "",
+          role: profile.Role || profile.role || currentUser.role || "individual",
+          phoneNumber: profile.PhoneNumber || profile.phoneNumber || "",
+          content: profile.Content || profile.content || "",
+          profilePic: profile.ProfilePicUrl || profile.profilePic || "",
+          locationLat: profile.LocationLat ?? profile.locationLat ?? null,
+          locationLng: profile.LocationLng ?? profile.locationLng ?? null,
+        });
       } catch (error) {
         console.error("Error fetching user data:", error);
         Alert.alert(translations.error, translations.failedLoadProfileData);
@@ -181,7 +178,7 @@ const Profile = () => {
     };
 
     fetchUserData();
-  }, []);
+  }, [currentUser?.id]);
 
   const pickImage = async () => {
     try {
@@ -209,14 +206,18 @@ const Profile = () => {
     if (!newPhotoUri || !userData?.displayName) return null;
 
     try {
-      const response = await fetch(newPhotoUri);
-      const blob = await response.blob();
-      
       const fileName = `${userData.displayName}_${Date.now()}.jpg`;
-      const photoRef = ref(storage, `profilePhotos/${fileName}`);
-
-      await uploadBytes(photoRef, blob);
-      return await getDownloadURL(photoRef);
+      const formData = new FormData();
+      formData.append("image", {
+        uri: newPhotoUri,
+        name: fileName,
+        type: "image/jpeg",
+      });
+      const uploadResult = await apiRequest("/upload", {
+        method: "POST",
+        body: formData,
+      });
+      return uploadResult?.imageUrl || null;
     } catch (error) {
       console.error("Error uploading photo:", error);
       Alert.alert(translations.error, translations.failedUploadProfilePhoto);
@@ -234,45 +235,24 @@ const Profile = () => {
       if (userData.displayName) updatedFields.displayName = userData.displayName;
       if (userData.phoneNumber) updatedFields.phoneNumber = userData.phoneNumber;
       if (userData.content) updatedFields.content = userData.content; // Add content field
-      if (userData.location) updatedFields.location = userData.location;
+      if (userData.location?.latitude) {
+        updatedFields.locationLat = userData.location.latitude;
+      }
+      if (userData.location?.longitude) {
+        updatedFields.locationLng = userData.location.longitude;
+      }
       
       if (newPhotoUri) {
         const profilePic = await uploadProfilePhoto();
         if (profilePic) {
-          updatedFields.profilePic = profilePic;
+          updatedFields.profilePicUrl = profilePic;
         }
       }
 
-      const userDocRef = doc(db, 'users', userData.id);
-      await updateDoc(userDocRef, updatedFields);
-
-      if (currentUser?.role === 'cooperative') {
-        try {
-          const registrationQuery = query(
-            collection(db, 'registration'),
-            where('email', '==', userData.email)
-          );
-          const registrationDocs = await getDocs(registrationQuery);
-
-          if (!registrationDocs.empty) {
-            const registrationDoc = registrationDocs.docs[0];
-            const registrationFields = {
-              ...updatedFields,
-              content: userData.content, // Ensure content is included in registration update
-              status: 'approved'
-            };
-            
-            if (userData.region) {
-              registrationFields.region = userData.region;
-            }
-
-            await updateDoc(doc(db, 'registration', registrationDoc.id), registrationFields);
-            console.log('Updated cooperative profile in both collections');
-          }
-        } catch (regError) {
-          console.error('Error updating registration:', regError);
-        }
-      }
+      await apiRequest(`/users/${userData.id}`, {
+        method: "PUT",
+        body: updatedFields,
+      });
 
       Alert.alert(translations.success, translations.profileUpdatedSuccessfully);
       navigation.goBack();

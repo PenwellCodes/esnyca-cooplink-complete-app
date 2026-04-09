@@ -1,6 +1,5 @@
 // utils/searchScreens.js
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase/firebaseConfig';
+import { apiRequest } from './api';
 
 // Static screens data
 export const screens = [
@@ -257,10 +256,20 @@ const searchDatabase = async (searchTerm) => {
   const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
   try {
-    const usersSnapshot = await getDocs(collection(db, 'users'));
+    const users = await apiRequest('/users');
     
-    usersSnapshot.forEach(doc => {
-      const data = doc.data();
+    (users || []).forEach((raw) => {
+      const data = {
+        id: raw.Id || raw.id,
+        role: raw.Role || raw.role,
+        displayName: raw.DisplayName || raw.displayName || "",
+        email: raw.Email || raw.email || "",
+        physicalAddress: raw.PhysicalAddress || raw.physicalAddress || "",
+        registrationNumber: raw.RegistrationNumber || raw.registrationNumber || "",
+        content: raw.Content || raw.content || "",
+        region: raw.Region || raw.region || "",
+      };
+      const id = data.id;
       if (data.role === 'cooperative') {
         const isMatch = 
           (data.displayName?.toLowerCase().includes(lowerSearchTerm)) ||
@@ -272,7 +281,7 @@ const searchDatabase = async (searchTerm) => {
         
         if (isMatch) {
           results.push({
-            id: doc.id,
+            id,
             name: data.displayName || 'Unnamed Cooperative',
             title: data.displayName || 'Unnamed Cooperative',
             screen: 'cooperatives',
@@ -282,8 +291,8 @@ const searchDatabase = async (searchTerm) => {
             region: data.region || 'Unknown Region',
             params: { 
               selectedRegion: data.region || 'All',
-              cooperativeId: doc.id,
-              highlightId: doc.id
+              cooperativeId: id,
+              highlightId: id
             }
           });
         }
@@ -304,16 +313,27 @@ export const searchProductsAndServices = async (searchTerm) => {
   const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
   try {
-    const usersSnapshot = await getDocs(collection(db, 'users'));
+    const users = await apiRequest('/users');
     
-    usersSnapshot.forEach(doc => {
-      const data = doc.data();
+    (users || []).forEach((raw) => {
+      const data = {
+        id: raw.Id || raw.id,
+        role: raw.Role || raw.role,
+        displayName: raw.DisplayName || raw.displayName || "",
+        content: raw.Content || raw.content || "",
+        region: raw.Region || raw.region || "",
+        profilePic: raw.ProfilePicUrl || raw.profilePic || "",
+        email: raw.Email || raw.email || "",
+        phoneNumber: raw.PhoneNumber || raw.phoneNumber || "",
+        physicalAddress: raw.PhysicalAddress || raw.physicalAddress || "",
+      };
+      const id = data.id;
       if (data.role === 'cooperative' && data.content) {
         const contentMatch = data.content.toLowerCase().includes(lowerSearchTerm);
         
         if (contentMatch) {
           results.push({
-            id: doc.id,
+            id,
             name: data.displayName || 'Unnamed Cooperative',
             content: data.content,
             region: data.region || 'Unknown Region',

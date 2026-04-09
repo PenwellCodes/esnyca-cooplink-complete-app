@@ -14,9 +14,8 @@ import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
-import { db } from "../../firebase/firebaseConfig";
-import { collection, getDocs } from "firebase/firestore";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { apiRequest } from "../../utils/api";
 
 const aboutus = () => {
   const { colors } = useTheme();
@@ -50,19 +49,24 @@ const aboutus = () => {
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Fetch meet our team + mission/vision/story from Firestore
+  // Fetch team + mission/vision + story from backend
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [teamSnap, missionSnap, storySnap] = await Promise.all([
-          getDocs(collection(db, "meetourteam")),
-          getDocs(collection(db, "missionandvision")),
-          getDocs(collection(db, "ourstory")),
+        const [teamRaw, missionDoc, storyDoc] = await Promise.all([
+          apiRequest("/team-members"),
+          apiRequest("/mission-vision"),
+          apiRequest("/our-story"),
         ]);
 
-        const teamData = teamSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        const teamData = (teamRaw || []).map((item) => ({
+          id: item.Id || item.id,
+          name: item.Name || "",
+          title: item.Title || "",
+          description: item.Description || "",
+          bio: item.Bio || "",
+          image: item.ImageUrl || "",
+          socialmedia: [],
         }));
         const localizedTeam = await Promise.all(
           teamData.map(async (member) => ({
@@ -75,8 +79,6 @@ const aboutus = () => {
         );
         setTeam(localizedTeam);
 
-        const missionDoc = missionSnap.docs[0]?.data() || {};
-        // Support various key casings that might come from Firestore
         const rawMission =
           missionDoc.mission ||
             missionDoc.Mission ||
@@ -92,7 +94,6 @@ const aboutus = () => {
         setMission(await t(rawMission));
         setVision(await t(rawVision));
 
-        const storyDoc = storySnap.docs[0]?.data() || {};
         const rawStory =
           storyDoc.story ||
             storyDoc.Story ||

@@ -6,17 +6,13 @@ import { useRouter } from "expo-router";
 import { useLanguage } from '../../context/appstate/LanguageContext';
 import { languages } from '../../utils/translate';
 import { useAuth } from '../../context/appstate/AuthContext';
-import { auth } from '../../firebase/firebaseConfig';
-import { signOut, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { useCustomTheme } from "../../context/appstate/CustomThemeProvider";
-import { collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
-import { db } from "../../firebase/firebaseConfig";
 
 const SettingsScreen = () => {
   const { toggleTheme, isDarkTheme } = useCustomTheme();
   const { colors } = useTheme();
   const { currentLanguage, changeLanguage, t } = useLanguage();
-  const { currentUser } = useAuth();
+  const { currentUser, logout, deleteAccount } = useAuth();
   const router = useRouter();
 
   const [translations, setTranslations] = useState({
@@ -131,7 +127,7 @@ const SettingsScreen = () => {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await logout();
       // Use setTimeout to avoid state updates during render
       setTimeout(() => {
         router.replace('/(auth)/sign-in');
@@ -152,46 +148,19 @@ const SettingsScreen = () => {
         return;
       }
 
-      const credential = EmailAuthProvider.credential(email, password);
-      await reauthenticateWithCredential(auth.currentUser, credential);
-
-      const uid = auth.currentUser.uid; // Auth UID
-
-      // 🔹 Find the correct Firestore document based on UID
-      const usersCollection = collection(db, "users");
-      const userQuery = query(usersCollection, where("uid", "==", uid));
-      const querySnapshot = await getDocs(userQuery);
-
-      if (!querySnapshot.empty) {
-        querySnapshot.forEach(async (docSnapshot) => {
-          await deleteDoc(docSnapshot.ref); // ✅ Correctly deletes Firestore user
-        });
-      } else {
-        console.log("No user document found for UID:", uid);
+      const result = await deleteAccount(email, password);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete account");
       }
-
-      // 🔹 Delete user-related data (stories, posts, etc.)
-      const collectionsToDelete = ["stories", "posts", "comments"];
-      for (const collectionName of collectionsToDelete) {
-        const querySnapshot = await getDocs(query(collection(db, collectionName), where("userId", "==", uid)));
-        const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
-        await Promise.all(deletePromises);
-      }
-
-      // 🔹 Delete user from Firebase Authentication
-      await deleteUser(auth.currentUser);
-
-      // 🔹 Logout user to prevent issues
-      await signOut(auth);
 
       // Use setTimeout for navigation
       setTimeout(() => {
         router.replace('/(auth)/sign-in');
       }, 0);
     } catch (error) {
-      if (error.code === 'auth/user-not-found') {
+      if (error.message.toLowerCase().includes("not found")) {
         setError(translations.userDoesNotExist);
-      } else if (error.code === 'auth/wrong-password') {
+      } else if (error.message.toLowerCase().includes("invalid")) {
         setError(translations.wrongPasswordOrEmail);
       } else {
         setError(error.message);

@@ -25,6 +25,7 @@
     },
     "android": {
       "versionCode": 18,
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
@@ -62,9 +63,7 @@
           "android": {
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0",
-            "kotlinVersion": "2.0.0",
-            "composeCompilerVersion": "1.5.15"
+            "buildToolsVersion": "35.0.0"
           }
         }
       ],
@@ -91,9 +90,7 @@
       "expo-asset",
       "expo-font"
     ],
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "5.3.0",
     "updates": {
       "url": "https://u.expo.dev/3b2807cf-6a12-461b-abc3-cf7338f0ce72"
     }

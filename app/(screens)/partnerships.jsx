@@ -14,9 +14,8 @@ import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
-import { db } from "../../firebase/firebaseConfig";
-import { collection, getDocs } from "firebase/firestore";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { apiRequest } from "../../utils/api";
 
 const Partnerships = () => {
   const { colors } = useTheme();
@@ -41,14 +40,16 @@ const Partnerships = () => {
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Fetch partners data from Firestore
   useEffect(() => {
     const fetchPartners = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "partners"));
-        const partnersData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        const partnersRaw = await apiRequest("/partners");
+        const partnersData = (partnersRaw || []).map((item) => ({
+          id: item.Id || item.id,
+          title: item.Title || "",
+          description: item.Description || "",
+          imageUrl: item.ImageUrl || "",
+          facebookUrl: item.FacebookUrl || "",
         }));
         const localizedPartners = await Promise.all(
           partnersData.map(async (partner) => ({

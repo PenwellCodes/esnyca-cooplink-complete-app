@@ -1,13 +1,6 @@
 import React, { useState, createContext, useContext, useEffect } from "react";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-} from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { auth, db } from "../../firebase/firebaseConfig";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { apiRequest } from "../../utils/api";
 
 const AuthContext = createContext();
 
@@ -18,95 +11,156 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const router = useRouter();
-
-  // Helper function to fetch additional user data from Firestore
-  const fetchUserDetails = async (uid) => {
-    try {
-      const q = query(
-        collection(db, "users"),
-        where("uid", "==", uid)
-      );
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        // Assuming only one document per user uid
-        return querySnapshot.docs[0].data();
-      }
-    } catch (error) {
-      console.error("Error fetching user details:", error);
-    }
-    return null;
-  };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (userFromAuth) => {
-      if (userFromAuth) {
-        // Fetch additional details from Firestore
-        const additionalData = await fetchUserDetails(userFromAuth.uid);
-        // Merge Firebase Auth data with additional Firestore data
-        const completeUser = additionalData
-          ? { ...userFromAuth, ...additionalData }
-          : userFromAuth;
-        setCurrentUser(completeUser);
-        console.log("Current user:", completeUser);
-        await AsyncStorage.setItem("user", JSON.stringify(completeUser));
+    const hydrate = async () => {
+      const savedUser = await AsyncStorage.getItem("user");
+      if (savedUser) {
+        setCurrentUser(JSON.parse(savedUser));
       } else {
         setCurrentUser(null);
-        console.log("No user is signed in.");
-        await AsyncStorage.removeItem("user");
       }
       setLoadingAuth(false);
-    });
-    return () => unsubscribe();
+    };
+    hydrate();
   }, []);
+
+  const normalizeUser = (rawUser) => {
+    if (!rawUser) return null;
+    return {
+      ...rawUser,
+      uid: rawUser.uid || rawUser.Id || rawUser.id,
+      id: rawUser.id || rawUser.Id || rawUser.uid,
+      displayName: rawUser.displayName || rawUser.DisplayName || "",
+      email: rawUser.email || rawUser.Email || "",
+      role: rawUser.role || rawUser.Role || "individual",
+      phoneNumber: rawUser.phoneNumber || rawUser.PhoneNumber || "",
+      region: rawUser.region || rawUser.Region || "",
+      registrationNumber:
+        rawUser.registrationNumber || rawUser.RegistrationNumber || "",
+      physicalAddress: rawUser.physicalAddress || rawUser.PhysicalAddress || "",
+      content: rawUser.content || rawUser.Content || "",
+      profilePic:
+        rawUser.profilePic ||
+        rawUser.profilePicUrl ||
+        rawUser.ProfilePicUrl ||
+        null,
+      companyAddress: rawUser.companyAddress || rawUser.CompanyAddress || "",
+      locationLat: rawUser.locationLat || rawUser.LocationLat || null,
+      locationLng: rawUser.locationLng || rawUser.LocationLng || null,
+    };
+  };
+
+  const saveSession = async ({ token, user }) => {
+    const normalizedUser = normalizeUser(user);
+    setCurrentUser(normalizedUser);
+    if (token) {
+      await AsyncStorage.setItem("authToken", token);
+    }
+    await AsyncStorage.setItem("user", JSON.stringify(normalizedUser));
+  };
 
   const login = async (email, password) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      const userFromAuth = userCredential.user;
-      const additionalData = await fetchUserDetails(userFromAuth.uid);
-      const completeUser = additionalData
-        ? { ...userFromAuth, ...additionalData }
-        : userFromAuth;
-      setCurrentUser(completeUser);
-      await AsyncStorage.setItem("user", JSON.stringify(completeUser));
+      const data = await apiRequest("/auth/login", {
+        method: "POST",
+        includeAuth: false,
+        body: { email: email.trim().toLowerCase(), password },
+      });
+      await saveSession({ token: data?.token, user: data?.user });
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
   };
 
-  const resetPassword = async (email) => {
+  const register = async (registrationPayload) => {
     try {
-      const normalizedEmail = email.trim().toLowerCase();
+      const hasProfilePic = !!registrationPayload?.profilePic;
+      let body;
 
-      // Validate format first to avoid false "sent" feedback.
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(normalizedEmail)) {
-        return { success: false, error: "Please enter a valid email address." };
+      if (hasProfilePic) {
+        const formData = new FormData();
+        Object.entries(registrationPayload || {}).forEach(([key, value]) => {
+          if (key === "profilePic") return;
+          if (value !== undefined && value !== null && value !== "") {
+            formData.append(key, value);
+          }
+        });
+        formData.append("profilePic", registrationPayload.profilePic);
+        body = formData;
+      } else {
+        body = {
+          email: registrationPayload?.email,
+          password: registrationPayload?.password,
+          role: registrationPayload?.role,
+          displayName: registrationPayload?.displayName,
+          phoneNumber: registrationPayload?.phoneNumber,
+          region: registrationPayload?.region,
+          registrationNumber: registrationPayload?.registrationNumber,
+          physicalAddress: registrationPayload?.physicalAddress,
+          content: registrationPayload?.content,
+          companyAddress: registrationPayload?.companyAddress,
+          locationLat: registrationPayload?.locationLat,
+          locationLng: registrationPayload?.locationLng,
+        };
       }
 
-      // Explicit action settings make reset links more predictable across clients.
-      await sendPasswordResetEmail(auth, normalizedEmail, {
-        url: "https://app-esnyca.firebaseapp.com",
-        handleCodeInApp: false,
+      const data = await apiRequest("/auth/register", {
+        method: "POST",
+        includeAuth: false,
+        body,
       });
+      await saveSession({ token: data?.token, user: data?.user });
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
+  };
+
+  const logout = async () => {
+    await AsyncStorage.removeItem("authToken");
+    await AsyncStorage.removeItem("user");
+    setCurrentUser(null);
+  };
+
+  const deleteAccount = async (email, password) => {
+    try {
+      const verify = await apiRequest("/auth/login", {
+        method: "POST",
+        includeAuth: false,
+        body: { email: email.trim().toLowerCase(), password },
+      });
+
+      const userId = verify?.user?.Id || verify?.user?.id || currentUser?.id;
+      if (!userId) {
+        return { success: false, error: "Unable to resolve user account." };
+      }
+
+      await apiRequest(`/users/${userId}`, { method: "DELETE" });
+      await logout();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  const resetPassword = async () => {
+    return {
+      success: false,
+      error:
+        "Password reset by email is not configured on the SQL backend yet. Please contact support.",
+    };
   };
 
   const value = {
     currentUser,
     login,
-    loadingAuth,
-    auth,
+    register,
+    logout,
+    deleteAccount,
     resetPassword,
+    loadingAuth,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

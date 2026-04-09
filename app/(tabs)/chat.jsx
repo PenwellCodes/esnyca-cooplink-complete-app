@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,8 +13,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { typography, images } from "../../constants";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useStories } from "../../context/appstate/StoriesContext";
 import { useChat } from "../../context/appstate/ChatContext"; // Add this import
@@ -31,10 +29,9 @@ const ChatList = () => {
   const navigation = useNavigation();
   const { currentUser } = useAuth();
   const { stories: activeStories } = useStories();
-  const { conversations, lastMessages, getSortedChats } = useChat(); // Add this line
+  const { chatList: baseUserList, conversations, lastMessages, loadingChats } =
+    useChat();
   const { currentLanguage, t } = useLanguage();
-  const [baseUserList, setBaseUserList] = useState([]); // Store base user data
-  const [loading, setLoading] = useState(true);
   const [groupMemberCount, setGroupMemberCount] = useState(0);
   const [translations, setTranslations] = useState({
     chat: "Chat",
@@ -62,16 +59,6 @@ const ChatList = () => {
     };
     loadTranslations();
   }, [currentLanguage, t]);
-  
-  // Use refs to store latest values without causing re-subscriptions
-  const conversationsRef = useRef(conversations);
-  const lastMessagesRef = useRef(lastMessages);
-  
-  // Update refs when values change
-  useEffect(() => {
-    conversationsRef.current = conversations;
-    lastMessagesRef.current = lastMessages;
-  }, [conversations, lastMessages]);
   
   // Compute chat list from base users and conversations/lastMessages using useMemo
   const chatList = React.useMemo(() => {
@@ -114,71 +101,9 @@ const ChatList = () => {
     translations.startConversation,
   ]);
 
-  // Listener for total group members (all users)
   useEffect(() => {
-    const groupQuery = query(collection(db, "users"));
-    const unsubscribe = onSnapshot(groupQuery, (snapshot) => {
-      setGroupMemberCount(snapshot.docs.length);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Fetch individual chats
-  useEffect(() => {
-    if (!currentUser) return;
-
-    let usersQuery;
-    if (currentUser.role === "cooperative") {
-      usersQuery = query(
-        collection(db, "users"),
-        where("uid", "!=", currentUser.uid)
-      );
-    } else {
-      usersQuery = query(
-        collection(db, "users"),
-        where("role", "==", "cooperative"),
-        where("uid", "!=", currentUser.uid)
-      );
-    }
-
-    const unsubscribe = onSnapshot(usersQuery, async (snapshot) => {
-      const users = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      
-      // Use refs to get latest values without causing re-subscriptions
-      const currentConversations = conversationsRef.current;
-      const currentLastMessages = lastMessagesRef.current;
-      
-      const updatedUsers = users.map(user => {
-        const chatId = currentUser.uid > user.uid
-          ? `${currentUser.uid}_${user.uid}`
-          : `${user.uid}_${currentUser.uid}`;
-          
-        const chatData = currentConversations[chatId] || [];
-        const lastMessage = chatData[chatData.length - 1];
-        
-        // Only count messages that are not read and not from current user
-        const unreadCount = chatData.filter(
-          msg => !msg.read && msg.sender !== currentUser.uid
-        ).length;
-        
-        return {
-          ...user,
-          lastMessage: lastMessage?.text || 
-            (lastMessage?.fileUrl
-              ? translations.fileSent
-              : translations.startConversation),
-          lastMessageTimestamp: currentLastMessages[chatId],
-          unreadCount,
-        };
-      });
-
-      // Store base user data (without chat-specific data)
-      setBaseUserList(users);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [currentUser]); // Removed conversations and lastMessages from dependencies
+    setGroupMemberCount(baseUserList.length + 1);
+  }, [baseUserList.length]);
 
   // Group stories by user
   const groupedStories = React.useMemo(() => {
@@ -210,7 +135,7 @@ const ChatList = () => {
     }
   };
 
-  if (loading) {
+  if (loadingChats) {
     return (
       <View
         style={[

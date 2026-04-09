@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { collection, addDoc, onSnapshot, query, where, serverTimestamp, Timestamp, deleteDoc, doc } from "firebase/firestore";
-import { db, storage } from "../../firebase/firebaseConfig";
-import { ref, uploadBytesResumable, getDownloadURL, ref as storageRef, deleteObject } from "firebase/storage";
+import { apiRequest } from "../../utils/api";
 
 const StoriesContext = createContext();
 export const useStories = () => useContext(StoriesContext);
@@ -9,75 +7,88 @@ export const useStories = () => useContext(StoriesContext);
 export const StoriesProvider = ({ children }) => {
     const [stories, setStories] = useState([]);
 
+    const normalizeStory = (item) => ({
+        id: item.Id || item.id,
+        userId: item.UserId || item.userId,
+        imageURL: item.ImageUrl || item.imageUrl,
+        caption: item.Caption || item.caption || "",
+        createdAt: item.CreatedAt || item.createdAt,
+        expiresAt: item.ExpiresAt || item.expiresAt,
+        views: item.views || [],
+    });
+
+    const loadStories = async () => {
+        const activeStories = await apiRequest("/stories/active");
+        setStories((activeStories || []).map(normalizeStory));
+    };
+
     useEffect(() => {
-        // Create a cutoff timestamp for stories less than 3 minutes old
-        const now = new Date();
-        const cutoff = Timestamp.fromDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-        const q = query(collection(db, "stories"), where("createdAt", ">", cutoff));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedStories = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-            setStories(fetchedStories);
+        loadStories().catch((error) => {
+            console.error("Error loading stories:", error);
         });
-        return () => unsubscribe();
+        const interval = setInterval(() => {
+            loadStories().catch(() => {});
+        }, 5000);
+        return () => clearInterval(interval);
     }, []);
 
     // Function to post a story with image upload and Firestore document creation
     const postStory = async ({ imageURI, caption, userId }) => {
         try {
-            let downloadURL = null;
-            
-            if (imageURI) {
-                const response = await fetch(imageURI);
-                const blob = await response.blob();
-                const storageRef = ref(storage, `stories/${userId}_${Date.now()}`);
-                const uploadTask = uploadBytesResumable(storageRef, blob);
-
-                downloadURL = await new Promise((resolve, reject) => {
-                    uploadTask.on(
-                        "state_changed",
-                        (snapshot) => {},
-                        (error) => reject(error),
-                        async () => {
-                            const url = await getDownloadURL(uploadTask.snapshot.ref);
-                            resolve(url);
-                        }
-                    );
-                });
+            if (!imageURI) {
+                throw new Error("Story image is required.");
             }
+            const formData = new FormData();
+            formData.append("image", {
+                uri: imageURI,
+                name: `story-${Date.now()}.jpg`,
+                type: "image/jpeg",
+            });
+            const uploadResult = await apiRequest("/upload", {
+                method: "POST",
+                body: formData,
+            });
 
-            const storyData = {
-                userId,
-                caption,
-                createdAt: serverTimestamp(),
-                views: [],
-            };
+            const created = await apiRequest("/stories", {
+                method: "POST",
+                body: {
+                    userId,
+                    imageUrl: uploadResult?.imageUrl,
+                    caption: caption || "",
+                },
+            });
 
-            if (downloadURL) {
-                storyData.imageURL = downloadURL;
-            }
-
-            const storyDoc = await addDoc(collection(db, "stories"), storyData);
-            return storyDoc.id;
+            await loadStories();
+            return created?.Id || created?.id;
         } catch (error) {
             console.error("Error posting story:", error);
             throw error;
         }
     };
 
-    // Placeholder for recording a view
     const recordView = async (storyId, viewerId) => {
-        // Add logic here to add the viewerId to the story’s 'views' array if not already present
+        try {
+            await apiRequest(`/stories/${storyId}/views`, {
+                method: "POST",
+                body: { viewerUserId: viewerId },
+            });
+            setStories((prev) =>
+                prev.map((story) => {
+                    if (story.id !== storyId) return story;
+                    const nextViews = Array.isArray(story.views) ? [...story.views] : [];
+                    if (!nextViews.includes(viewerId)) nextViews.push(viewerId);
+                    return { ...story, views: nextViews };
+                }),
+            );
+        } catch (error) {
+            console.error("Error recording story view:", error);
+        }
     };
 
-    const deleteStory = async (storyId, imageURL) => {
+    const deleteStory = async (storyId) => {
         try {
-            // Delete from Firestore
-            await deleteDoc(doc(db, "stories", storyId));
-            
-            // Delete the image from Storage
-            const imageRef = storageRef(storage, imageURL);
-            await deleteObject(imageRef);
-            
+            await apiRequest(`/stories/${storyId}`, { method: "DELETE" });
+            setStories((prev) => prev.filter((story) => story.id !== storyId));
             return true;
         } catch (error) {
             console.error("Error deleting story:", error);

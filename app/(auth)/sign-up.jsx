@@ -14,17 +14,13 @@ import { useTheme, Snackbar, TextInput } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import { CustomButton } from "./../../components";
 import { typography, images } from "../../constants";
-import { auth, db } from "../../firebase/firebaseConfig";
-import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
-import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
-// Import Firebase Storage methods
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { useAuth } from "../../context/appstate/AuthContext";
 
 const TOP_SECTION_HEIGHT = 180;
 
@@ -32,6 +28,7 @@ const SignUp = () => {
   const { colors } = useTheme();
   const router = useRouter();
   const { currentLanguage, t } = useLanguage();
+  const { register } = useAuth();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
@@ -160,40 +157,6 @@ const SignUp = () => {
   // Helper to extract file name from URI
   const getFileName = (uri) => uri.split("/").pop();
 
-  // Helper function to upload image to Firebase Storage
-  const uploadImageAsync = async (uri) => {
-    // Convert local URI to a blob
-    const blob = await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.onload = () => resolve(xhr.response);
-      xhr.onerror = () => reject(new Error("Network request failed"));
-      xhr.responseType = "blob";
-      xhr.open("GET", uri, true);
-      xhr.send(null);
-    });
-
-    // Get a reference to Firebase Storage
-    const storage = getStorage();
-    const fileRef = ref(storage, `profilePics/${getFileName(uri)}`);
-
-    // Upload the blob to Firebase Storage
-    await uploadBytes(fileRef, blob);
-    // Close the blob to free up memory
-    if (blob.close) blob.close();
-
-    // Retrieve the download URL
-    const downloadURL = await getDownloadURL(fileRef);
-    return downloadURL;
-  };
-
-  // Add this function before handleSubmit
-  const checkRegistrationNumberExists = async (regNumber) => {
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("registrationNumber", "==", regNumber));
-    const querySnapshot = await getDocs(q);
-    return !querySnapshot.empty;
-  };
-
   const handleSubmit = async () => {
     if (!formData.email.trim() || !formData.password.trim()) {
       setSnackbarMessage(translations.fillEmailPassword);
@@ -216,52 +179,34 @@ const SignUp = () => {
 
     setLoading(true);
     try {
-      // For cooperatives, check if registration number exists
-      if (role === "cooperative") {
-        const exists = await checkRegistrationNumberExists(formData.registrationNumber);
-        if (exists) {
-          setSnackbarMessage(translations.registrationExists);
-          setSnackbarStyle({ backgroundColor: "red" });
-          setSnackbarVisible(true);
-          setLoading(false);
-          return;
-        }
-      }
-
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password,
-      );
-      console.log("User registered with uid:", userCredential.user.uid);
-
-      // Set default avatar for both individual and cooperative if no profile picture
-      let profilePicUrl = images.defaultAvatar;
-      if (profilePic) {
-        profilePicUrl = await uploadImageAsync(profilePic);
-      }
-
-      // Prepare common user data
-      const userData = {
-        uid: userCredential.user.uid,
+      const payload = {
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
         role: role,
         displayName: formData.displayName,
-        email: formData.email,
-        profilePic: profilePicUrl,
+        phoneNumber: "",
       };
 
       if (role === "cooperative") {
-        Object.assign(userData, {
+        Object.assign(payload, {
           registrationNumber: formData.registrationNumber,
           physicalAddress: formData.physicalAddress,
           region: formData.region,
         });
       }
 
-      await addDoc(collection(db, "users"), userData);
-      // Send confirmation email after successful account creation.
-      // Firebase Auth sends this to the registered address.
-      await sendEmailVerification(userCredential.user);
+      if (profilePic) {
+        payload.profilePic = {
+          uri: profilePic,
+          name: getFileName(profilePic) || `profile-${Date.now()}.jpg`,
+          type: "image/jpeg",
+        };
+      }
+
+      const result = await register(payload);
+      if (!result.success) {
+        throw new Error(result.error || "Registration failed");
+      }
 
       setSnackbarMessage(
         role === "cooperative"
@@ -275,13 +220,20 @@ const SignUp = () => {
         if (returnTo) {
           router.replace(decodeURIComponent(returnTo));
         } else {
-          // User is already authenticated after createUserWithEmailAndPassword
           router.replace("/(tabs)/home");
         }
       }, 1500);
     } catch (error) {
-      if (error.message.includes("auth/weak-password")) {
+      if (
+        error.message.toLowerCase().includes("password") &&
+        error.message.toLowerCase().includes("short")
+      ) {
         setSnackbarMessage(translations.weakPassword);
+      } else if (
+        error.message.toLowerCase().includes("already exists") ||
+        error.message.toLowerCase().includes("duplicate")
+      ) {
+        setSnackbarMessage(translations.registrationExists);
       } else {
         setSnackbarMessage(error.message);
       }

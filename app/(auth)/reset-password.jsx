@@ -29,7 +29,7 @@ const ResetPassword = () => {
     emailMistyped:
       "Email looks mistyped (e.g. .comc). Please correct it and try again.",
     successMessage:
-      "Reset link sent. Check Inbox/Spam/Promotions. Sender: no-reply@firebaseapp.com",
+      "If password reset is configured, reset instructions will be sent to your email.",
     resetPassword: "Reset Password",
     instructions:
       "Enter your email address and we'll send you instructions to reset your password.",
@@ -45,7 +45,7 @@ const ResetPassword = () => {
           "Email looks mistyped (e.g. .comc). Please correct it and try again."
         ),
         successMessage: await t(
-          "Reset link sent. Check Inbox/Spam/Promotions. Sender: no-reply@firebaseapp.com"
+          "If password reset is configured, reset instructions will be sent to your email."
         ),
         resetPassword: await t("Reset Password"),
         instructions: await t(

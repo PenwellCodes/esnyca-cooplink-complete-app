@@ -14,9 +14,8 @@ import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
 import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
-import { db } from "../../firebase/firebaseConfig";
-import { collection, getDocs } from "firebase/firestore";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { apiRequest } from "../../utils/api";
 
 const aboutus = () => {
   const { colors } = useTheme();
@@ -48,14 +47,17 @@ const aboutus = () => {
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Fetch aboutus data from Firestore
+  // Fetch about-us cards from backend
   useEffect(() => {
     const fetchaboutus = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "aboutus"));
-        const aboutusData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        const aboutRaw = await apiRequest("/about-us-cards");
+        const aboutusData = (aboutRaw || []).map((item) => ({
+          id: item.Id || item.id,
+          title: item.Title || "",
+          description: item.Description || "",
+          imageUrl: item.ImageUrl || "",
+          facebookUrl: item.FacebookUrl || "",
         }));
         const localized = await Promise.all(
           aboutusData.map(async (entry) => ({
