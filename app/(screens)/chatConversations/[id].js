@@ -16,30 +16,16 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../../context/appstate/ChatContext";
 import { useAuth } from "../../../context/appstate/AuthContext";
-import { db } from "../../../firebase/firebaseConfig";
 import { useTheme } from "react-native-paper";
-import {
-  addDoc,
-  collection,
-  serverTimestamp,
-  doc,
-  setDoc,
-  getDoc,
-} from "firebase/firestore";
 import { formatDistanceToNow } from "date-fns";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../../context/appstate/LanguageContext";
+import { apiRequest } from "../../../utils/api";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -50,7 +36,8 @@ const ChatScreen = () => {
   const user = params.user ? JSON.parse(params.user) : null;
   const predefinedMessage = params.predefinedMessage;
   const { currentUser } = useAuth();
-  const { conversations, markMessagesAsRead, setActiveChatId } = useChat();
+  const { conversations, markMessagesAsRead, setActiveChatId, sendMessage: sendChatMessage } =
+    useChat();
   const chatId =
     currentUser.uid > user.uid
       ? `${currentUser.uid}_${user.uid}`
@@ -133,7 +120,7 @@ const ChatScreen = () => {
     }
   }, [messages, chatId]);
 
-  const sendMessage = async () => {
+  const handleSendMessage = async () => {
     if (!messageText.trim()) return;
 
     // Check if there's a story preview in the params
@@ -155,22 +142,11 @@ const ChatScreen = () => {
     flatListRef.current?.scrollToEnd({ animated: true });
 
     try {
-      const chatDocRef = doc(db, "chats", chatId);
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (!chatDocSnap.exists()) {
-        await setDoc(chatDocRef, {
-          participants: [currentUser.uid, user.uid],
-          createdAt: serverTimestamp(),
-        });
-      }
-      await addDoc(collection(db, "chats", chatId, "messages"), {
-        sender: currentUser.uid,
-        receiver: user.uid,
+      await sendChatMessage({
+        chatKey: chatId,
+        receiverUserId: user.uid,
         text: messageText,
         type: storyPreview ? "story_reply" : "text",
-        storyPreview,
-        timestamp: serverTimestamp(),
-        status: "sent",
       });
     } catch (error) {
       console.error("Error sending message:", error);
@@ -180,27 +156,18 @@ const ChatScreen = () => {
     }
   };
 
-  const uploadFile = async (uri, storagePath) => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const storage = getStorage();
-    const storageRef = ref(storage, storagePath);
-    return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(storageRef, blob);
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress =
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-        },
-        (error) => reject(error),
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadURL);
-        },
-      );
+  const uploadFile = async (uri, fileName = `file-${Date.now()}.jpg`) => {
+    const formData = new FormData();
+    formData.append("image", {
+      uri,
+      name: fileName,
+      type: "image/jpeg",
     });
+    const uploadResult = await apiRequest("/upload", {
+      method: "POST",
+      body: formData,
+    });
+    return uploadResult?.imageUrl;
   };
 
   const pickImage = async () => {
@@ -255,29 +222,14 @@ const ChatScreen = () => {
     setUploading(true);
 
     try {
-      const storagePath = `chatAttachments/${chatId}/${Date.now()}_${file.name}`;
-      const downloadURL = await uploadFile(file.uri, storagePath);
-
-      const message = {
-        sender: currentUser.uid,
-        receiver: user.uid,
+      const downloadURL = await uploadFile(file.uri, file.name);
+      await sendChatMessage({
+        chatKey: chatId,
+        receiverUserId: user.uid,
+        type: "file",
         fileUrl: downloadURL,
         fileName: file.name,
-        type: "file",
-        timestamp: serverTimestamp(),
-        status: "sent",
-      };
-
-      const chatDocRef = doc(db, "chats", chatId);
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (!chatDocSnap.exists()) {
-        await setDoc(chatDocRef, {
-          participants: [currentUser.uid, user.uid],
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      await addDoc(collection(db, "chats", chatId, "messages"), message);
+      });
       setLocalMessages([]);
     } catch (error) {
       console.error("Error sending document:", error);
@@ -308,29 +260,14 @@ const ChatScreen = () => {
 
     try {
       const fileName = uri.split("/").pop();
-      const storagePath = `chatAttachments/${chatId}/${Date.now()}_${fileName}`;
-      const downloadURL = await uploadFile(uri, storagePath);
-
-      const message = {
-        sender: currentUser.uid,
-        receiver: user.uid,
+      const downloadURL = await uploadFile(uri, fileName);
+      await sendChatMessage({
+        chatKey: chatId,
+        receiverUserId: user.uid,
+        type: "image",
         fileUrl: downloadURL,
         fileName,
-        type: "image",
-        timestamp: serverTimestamp(),
-        status: "sent",
-      };
-
-      const chatDocRef = doc(db, "chats", chatId);
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (!chatDocSnap.exists()) {
-        await setDoc(chatDocRef, {
-          participants: [currentUser.uid, user.uid],
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      await addDoc(collection(db, "chats", chatId, "messages"), message);
+      });
       setLocalMessages([]);
       setSelectedImage(null);
     } catch (error) {
@@ -350,29 +287,14 @@ const ChatScreen = () => {
     try {
       const { uri, name } = result;
       const fileName = name || uri.split("/").pop();
-      const storagePath = `chatAttachments/${chatId}/${Date.now()}_${fileName}`;
-      const downloadURL = await uploadFile(uri, storagePath);
-
-      const message = {
-        sender: currentUser.uid,
-        receiver: user.uid,
+      const downloadURL = await uploadFile(uri, fileName);
+      await sendChatMessage({
+        chatKey: chatId,
+        receiverUserId: user.uid,
+        type: "file",
         fileUrl: downloadURL,
         fileName,
-        type: "file",
-        timestamp: serverTimestamp(),
-        status: "sent",
-      };
-
-      const chatDocRef = doc(db, "chats", chatId);
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (!chatDocSnap.exists()) {
-        await setDoc(chatDocRef, {
-          participants: [currentUser.uid, user.uid],
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      await addDoc(collection(db, "chats", chatId, "messages"), message);
+      });
     } catch (error) {
       console.error("Error sending file:", error);
     } finally {
@@ -698,7 +620,7 @@ const ChatScreen = () => {
             ]}
             placeholderTextColor={colors.error}
           />
-          <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
+          <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
             <Ionicons name="send" size={24} color="#007AFF" />
           </TouchableOpacity>
         </View>

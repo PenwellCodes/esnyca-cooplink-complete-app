@@ -9,25 +9,14 @@ import {
   ImageBackground,
 } from "react-native";
 import { useTheme, Card, Appbar, Chip } from "react-native-paper";
-import { db } from "../../firebase/firebaseConfig";
-import { collection, getDocs, query, orderBy, Timestamp } from "firebase/firestore";
 import { useRouter } from "expo-router";
 import { images, typography } from "../../constants";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { apiRequest } from "../../utils/api";
 
 // Helper function to convert Firestore Timestamp to Date
 const getDateFromTimestamp = (date) => {
   if (!date) return new Date();
-  
-  // If it's a Firestore Timestamp object
-  if (date instanceof Timestamp) {
-    return date.toDate();
-  }
-  
-  // If it has seconds property (Timestamp-like object)
-  if (date.seconds) {
-    return new Date(date.seconds * 1000);
-  }
   
   // If it's already a Date object
   if (date instanceof Date) {
@@ -136,29 +125,17 @@ const News = () => {
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        // Query news collection ordered by createdAt (newest first)
-        // Filter for published items in JavaScript to avoid composite index requirement
-        const newsQuery = query(
-          collection(db, "news"),
-          orderBy("createdAt", "desc")
-        );
-        const newsSnapshot = await getDocs(newsQuery);
-        
-        const newsList = newsSnapshot.docs
-          .map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              title: data.title || "",
-              content: data.content || "",
-              summary: data.summary || "",
-              imageUrl: data.imageUrl || "",
-              author: data.author || "",
-              createdAt: data.createdAt || null,
-              published: data.published || false,
-            };
-          })
-          .filter((item) => item.published === true); // Filter only published news
+        const newsListRaw = await apiRequest("/news?published=true");
+        const newsList = (newsListRaw || []).map((item) => ({
+          id: item.Id || item.id,
+          title: item.Title || "",
+          content: item.Content || "",
+          summary: item.Summary || "",
+          imageUrl: item.ImageUrl || "",
+          author: item.Author || "",
+          createdAt: item.CreatedAt || null,
+          published: item.Published || false,
+        }));
         
         // Additional sort as fallback (in case orderBy didn't work)
         const sortedNews = newsList.sort((a, b) => {

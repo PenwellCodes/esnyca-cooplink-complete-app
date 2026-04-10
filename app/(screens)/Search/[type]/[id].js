@@ -2,17 +2,14 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../firebase/firebaseConfig";
 import { useLanguage } from "../../../../context/appstate/LanguageContext";
+import { apiRequest } from "../../../../utils/api";
 
-// Map the type from the URL to the Firebase collection name
-const typeToCollectionMap = {
+const typeToEndpointMap = {
     user: "users",
+    cooperative: "users",
     news: "news",
-    service: "services",
-    cooperative: "cooperatives",
-    partnership: "partnerships",
+    partnership: "partners",
 };
 
 const SearchDetail = () => {
@@ -40,18 +37,15 @@ const SearchDetail = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            const collectionName = typeToCollectionMap[type];
-            if (!collectionName) {
+            const endpoint = typeToEndpointMap[type];
+            if (!endpoint) {
                 console.error("Unknown type:", type);
                 setLoading(false);
                 return;
             }
             try {
-                const docRef = doc(db, collectionName, id);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setItemData(docSnap.data());
-                }
+                const data = await apiRequest(`/${endpoint}/${id}`);
+                setItemData(data);
             } catch (error) {
                 console.error("Error fetching data:", error);
             } finally {

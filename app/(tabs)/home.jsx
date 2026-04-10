@@ -18,15 +18,7 @@ import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { searchScreensAndDatabase } from "../../utils/searchScreen";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { db } from "../../firebase/firebaseConfig";
-import {
-  collection,
-  query,
-  orderBy,
-  limit,
-  getDocs,
-  Timestamp,
-} from "firebase/firestore";
+import { apiRequest } from "../../utils/api";
 
 const Home = () => {
   const { colors } = useTheme();
@@ -104,24 +96,12 @@ const Home = () => {
       try {
         const lastReadTime =
           (await AsyncStorage.getItem("lastNewsReadTime")) || "0";
-        // Query news ordered by createdAt, filter for published in JavaScript
-        // to avoid composite index requirement
-        const newsQuery = query(
-          collection(db, "news"),
-          orderBy("createdAt", "desc"),
-          limit(10), // Get more items to ensure we find a published one
-        );
-        const newsSnapshot = await getDocs(newsQuery);
-
-        // Get all published news items
-        const publishedNews = newsSnapshot.docs
-          .map((doc) => doc.data())
-          .filter((news) => news.published === true);
+        const publishedNews = await apiRequest("/news?published=true");
 
         if (publishedNews.length > 0) {
           // Extract titles from published news
           const headlines = publishedNews
-            .map((news) => news.title)
+            .map((news) => news.Title || news.title)
             .filter((title) => title && title.trim() !== ""); // Filter out empty titles
 
           if (headlines.length > 0) {
@@ -130,14 +110,11 @@ const Home = () => {
 
           // Check for unread news using the first published item
           const latestNews = publishedNews[0];
-          const newsDate = latestNews.createdAt;
+          const newsDate = latestNews.CreatedAt || latestNews.createdAt;
 
-          // Handle Firestore Timestamp properly
           let newsTimestamp = 0;
-          if (newsDate instanceof Timestamp) {
-            newsTimestamp = newsDate.toMillis();
-          } else if (newsDate && newsDate.seconds) {
-            newsTimestamp = newsDate.seconds * 1000;
+          if (newsDate) {
+            newsTimestamp = new Date(newsDate).getTime();
           }
 
           setHasUnreadNews(newsTimestamp > parseInt(lastReadTime));

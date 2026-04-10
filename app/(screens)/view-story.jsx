@@ -14,15 +14,6 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useStories } from "../../context/appstate/StoriesContext";
 import { useAuth } from "../../context/appstate/AuthContext";
-import {
-  addDoc,
-  collection,
-  serverTimestamp,
-  doc,
-  setDoc,
-  getDoc,
-} from "firebase/firestore";
-import { db } from "../../firebase/firebaseConfig";
 import { useChat } from "../../context/appstate/ChatContext";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 
@@ -34,7 +25,7 @@ const ViewStoryScreen = () => {
   const router = useRouter();
   const { stories, recordView, deleteStory } = useStories();
   const { currentUser } = useAuth();
-  const { setActiveChatId } = useChat();
+  const { setActiveChatId, sendMessage } = useChat();
   const { currentLanguage, t } = useLanguage();
 
   // Find the story
@@ -185,21 +176,11 @@ const ViewStoryScreen = () => {
         currentUser.uid > userId
           ? `${currentUser.uid}_${userId}`
           : `${userId}_${currentUser.uid}`;
-      const chatDocRef = doc(db, "chats", chatId);
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (!chatDocSnap.exists()) {
-        await setDoc(chatDocRef, {
-          participants: [currentUser.uid, userId],
-          createdAt: serverTimestamp(),
-        });
-      }
-      await addDoc(collection(db, "chats", chatId, "messages"), {
-        sender: currentUser.uid,
-        receiver: userId,
-        text: replyText,
+      await sendMessage({
+        chatKey: chatId,
+        receiverUserId: userId,
         type: "text",
-        timestamp: serverTimestamp(),
-        status: "sent",
+        text: replyText,
       });
       Alert.alert(translations.replySentTitle, translations.replySentBody);
       setReplyText("");

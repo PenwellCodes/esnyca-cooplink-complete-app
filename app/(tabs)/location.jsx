@@ -17,10 +17,10 @@ import * as Location from 'expo-location';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import haversine from 'haversine';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useLanguage } from '../../context/appstate/LanguageContext';
+import { apiRequest } from "../../utils/api";
 
 const { width, height } = Dimensions.get('window');
 
@@ -109,19 +109,26 @@ const LocationsScreen = () => {
     const fetchUserLocations = async () => {
       setLoading(true);
       try {
-        const db = getFirestore();
-        const usersRef = collection(db, 'users');
-        const querySnapshot = await getDocs(usersRef);
+        const usersRaw = await apiRequest("/users");
         
-        const locations = querySnapshot.docs
-          .map(doc => {
-            const data = doc.data();
+        const locations = (usersRaw || [])
+          .map(item => {
+            const data = {
+              id: item.Id || item.id,
+              title: item.DisplayName || 'Unknown Company',
+              description: item.Content || 'No description available',
+              photoUrl: item.ProfilePicUrl,
+              companyAddress: item.CompanyAddress,
+              latitude: item.LocationLat,
+              longitude: item.LocationLng,
+            };
             return {
-              id: doc.id,
-              ...data.location,
-              title: data.displayName || 'Unknown Company',
-              description: data.content || 'No description available',
-              photoUrl: data.profilePic,
+              id: data.id,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              title: data.title,
+              description: data.description,
+              photoUrl: data.photoUrl,
               companyAddress: data.companyAddress,
             };
           })
@@ -147,7 +154,7 @@ const LocationsScreen = () => {
     };
 
     fetchUserLocations();
-  }, [currentLanguage, t]);
+  }, [t]);
 
   const handleSearch = () => {
     if (!searchQuery.trim()) {

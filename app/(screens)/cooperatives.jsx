@@ -8,15 +8,14 @@ import {
   FlatList,
   TextInput,
 } from "react-native";
-import { collection, getDocs, query, where, doc } from "firebase/firestore";
 import { useTheme, Portal, Modal, Menu } from "react-native-paper";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { MaterialIcons } from "@expo/vector-icons";
-import { db } from "../../firebase/firebaseConfig";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { typography, images } from "../../constants"; // Add this import at the top
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { apiRequest } from "../../utils/api";
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
 
@@ -76,21 +75,23 @@ const CooperativeUsersScreen = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      let q;
-      if (selectedRegion === "All") {
-        q = query(collection(db, "users"), where("role", "==", "cooperative"));
-      } else {
-        q = query(
-          collection(db, "users"),
-          where("role", "==", "cooperative"),
-          where("region", "==", selectedRegion),
-        );
-      }
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
+      const usersRaw = await apiRequest("/users");
+      const data = (usersRaw || [])
+        .map((item) => ({
+          id: item.Id || item.id,
+          uid: item.Id || item.id,
+          role: item.Role || item.role,
+          displayName: item.DisplayName || "",
+          email: item.Email || "",
+          physicalAddress: item.PhysicalAddress || "",
+          content: item.Content || "",
+          phoneNumber: item.PhoneNumber || "",
+          region: item.Region || "",
+          registrationNumber: item.RegistrationNumber || "",
+          profilePic: item.ProfilePicUrl || "",
+        }))
+        .filter((u) => u.role === "cooperative")
+        .filter((u) => selectedRegion === "All" || u.region === selectedRegion);
       const localizedData = await Promise.all(
         data.map(async (user) => ({
           ...user,
