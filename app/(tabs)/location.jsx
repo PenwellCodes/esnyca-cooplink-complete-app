@@ -11,7 +11,10 @@ import {
   Dimensions,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Slider from '@react-native-community/slider';
@@ -25,6 +28,7 @@ import { apiRequest } from "../../utils/api";
 const { width, height } = Dimensions.get('window');
 
 const LocationsScreen = () => {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
@@ -249,7 +253,11 @@ const LocationsScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+    >
       <StatusBar style="dark" backgroundColor="#F5F5F5" />
       <TextInput
         style={styles.searchInput}
@@ -398,7 +406,7 @@ const LocationsScreen = () => {
           </View>
         </Modal>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 

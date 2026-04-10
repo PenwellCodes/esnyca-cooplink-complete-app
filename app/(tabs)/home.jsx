@@ -8,8 +8,11 @@ import {
   TouchableOpacity,
   FlatList,
   Animated,
-  StatusBar, // Import StatusBar
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "react-native-paper";
 import { typography } from "../../constants";
 import { useRouter } from "expo-router";
@@ -21,6 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiRequest } from "../../utils/api";
 
 const Home = () => {
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
@@ -189,7 +193,11 @@ const Home = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+    >
       {/* Status Bar */}
       <StatusBar style="dark" />
 
@@ -282,7 +290,7 @@ const Home = () => {
           </TouchableOpacity>
         )}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 

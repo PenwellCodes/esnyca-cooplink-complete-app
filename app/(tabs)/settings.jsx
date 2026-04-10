@@ -1,5 +1,15 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, ScrollView, StyleSheet, Modal, TouchableOpacity, Linking, Share } from "react-native";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  Linking,
+  Share,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { Text, List, Divider, Switch, Button, useTheme, TextInput, Dialog, Portal } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
@@ -280,59 +290,73 @@ const SettingsScreen = () => {
       </Modal>
 
       <Modal visible={deleteModalVisible} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
-            <Text style={[styles.modalTitle, { color: colors.error }]}>
-              {translations.confirmDeleteTitle}
-            </Text>
-            <Text style={{ marginBottom: 20, color: colors.text }}>
-              {translations.confirmDeleteBody}
-            </Text>
-
-            <TextInput
-              label={translations.email}
-              value={email}
-              onChangeText={setEmail}
-              mode="outlined"
-              style={styles.input}
-            />
-
-            <TextInput
-              label={translations.password}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              mode="outlined"
-              style={styles.input}
-            />
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-            <Button 
-              mode="contained"
-              onPress={handleDeleteAccount}
-              textColor={colors.secondary}
-              loading={loading}
-              disabled={loading || !email || !password}
-              style={[styles.deleteButton, { backgroundColor: colors.success }]}
+        <KeyboardAvoidingView
+          style={styles.deleteModalKeyboardRoot}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.modalContainer}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={styles.deleteModalScrollContent}
+              showsVerticalScrollIndicator={false}
             >
-              {translations.confirmDelete}
-            </Button>
+              <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+                <Text style={[styles.modalTitle, { color: colors.error }]}>
+                  {translations.confirmDeleteTitle}
+                </Text>
+                <Text style={{ marginBottom: 20, color: colors.text }}>
+                  {translations.confirmDeleteBody}
+                </Text>
 
-            <Button 
-              mode="outlined"
-              onPress={() => {
-                setDeleteModalVisible(false);
-                setEmail('');
-                setPassword('');
-                setError('');
-              }}
-              style={styles.cancelButton}
-            >
-              {translations.deleteDialogCancel}
-            </Button>
+                <TextInput
+                  label={translations.email}
+                  value={email}
+                  onChangeText={setEmail}
+                  mode="outlined"
+                  style={styles.input}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+
+                <TextInput
+                  label={translations.password}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  mode="outlined"
+                  style={styles.input}
+                />
+
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+                <Button
+                  mode="contained"
+                  onPress={handleDeleteAccount}
+                  textColor={colors.secondary}
+                  loading={loading}
+                  disabled={loading || !email || !password}
+                  style={[styles.deleteButton, { backgroundColor: colors.success }]}
+                >
+                  {translations.confirmDelete}
+                </Button>
+
+                <Button
+                  mode="outlined"
+                  onPress={() => {
+                    setDeleteModalVisible(false);
+                    setEmail("");
+                    setPassword("");
+                    setError("");
+                  }}
+                  style={styles.cancelButton}
+                >
+                  {translations.deleteDialogCancel}
+                </Button>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Portal>
@@ -366,17 +390,25 @@ const styles = StyleSheet.create({
     fontSize: 24,
     marginBottom: 16,
   },
+  deleteModalKeyboardRoot: {
+    flex: 1,
+  },
   modalContainer: {
     flex: 1,
     justifyContent: "flex-end",
     backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  deleteModalScrollContent: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+    paddingBottom: 24,
   },
   modalContent: {
     backgroundColor: "white",
     padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "80%",
+    maxHeight: "90%",
   },
   modalTitle: {
     fontSize: 20,

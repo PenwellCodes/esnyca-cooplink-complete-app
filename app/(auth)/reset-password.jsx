@@ -5,7 +5,11 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, Snackbar } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import { CustomButton } from "../../components";
@@ -15,6 +19,7 @@ import { useRouter } from "expo-router";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const ResetPassword = () => {
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { resetPassword } = useAuth();
   const { currentLanguage, t } = useLanguage();
@@ -102,49 +107,60 @@ const ResetPassword = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Ionicons
-          name="arrow-back"
-          size={24}
-          color={colors.primary}
-          style={styles.backIcon}
-          onPress={() => router.back()}
-        />
-        <Text style={[styles.title, typography.title, { color: colors.primary }]}>
-          {translations.resetPassword}
-        </Text>
-      </View>
-
-      <View style={styles.formContainer}>
-        <Text style={[typography.body, styles.instructions]}>
-          {translations.instructions}
-        </Text>
-
-        <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={20} color={colors.primary} />
-          <TextInput
-            placeholder={translations.email}
-            style={[styles.input, typography.body]}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.header}>
+          <Ionicons
+            name="arrow-back"
+            size={24}
+            color={colors.primary}
+            style={styles.backIcon}
+            onPress={() => router.back()}
           />
+          <Text style={[styles.title, typography.title, { color: colors.primary }]}>
+            {translations.resetPassword}
+          </Text>
         </View>
 
-        <CustomButton
-          title={
-            loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              translations.sendResetLink
-            )
-          }
-          onPress={handleResetPassword}
-          disabled={loading}
-        />
-      </View>
+        <View style={styles.formContainer}>
+          <Text style={[typography.body, styles.instructions]}>
+            {translations.instructions}
+          </Text>
+
+          <View style={styles.inputContainer}>
+            <Ionicons name="mail-outline" size={20} color={colors.primary} />
+            <TextInput
+              placeholder={translations.email}
+              style={[styles.input, typography.body]}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <CustomButton
+            title={
+              loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                translations.sendResetLink
+              )
+            }
+            onPress={handleResetPassword}
+            disabled={loading}
+          />
+        </View>
+      </ScrollView>
 
       <Snackbar
         visible={snackbarVisible}
@@ -154,7 +170,7 @@ const ResetPassword = () => {
       >
         {snackbarMessage}
       </Snackbar>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -162,6 +178,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
   },
   header: {
     marginTop: 40,
@@ -172,9 +192,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   formContainer: {
-    flex: 1,
-    justifyContent: "center",
-    paddingBottom: 100,
+    paddingBottom: 24,
   },
   instructions: {
     textAlign: "center",

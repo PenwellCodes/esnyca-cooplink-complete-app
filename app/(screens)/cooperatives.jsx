@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   FlatList,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, Portal, Modal, Menu } from "react-native-paper";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -20,6 +23,7 @@ import { apiRequest } from "../../utils/api";
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
 
 const CooperativeUsersScreen = () => {
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { currentUser } = useAuth();
   const router = useRouter();
@@ -251,7 +255,11 @@ const CooperativeUsersScreen = () => {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+    >
       {/* Top bar with filter button */}
       <View style={styles.topBar}>
         <View style={[styles.searchContainer, { borderColor: colors.primary }]}>
@@ -330,7 +338,7 @@ const CooperativeUsersScreen = () => {
           </View>
         </Modal>
       </Portal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 

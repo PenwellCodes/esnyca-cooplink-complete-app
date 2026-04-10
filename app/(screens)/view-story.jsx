@@ -10,7 +10,10 @@ import {
   Dimensions,
   Alert,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useStories } from "../../context/appstate/StoriesContext";
 import { useAuth } from "../../context/appstate/AuthContext";
@@ -21,6 +24,7 @@ const { width } = Dimensions.get("window");
 const TOTAL_DURATION = 10000; // total duration in ms (10 seconds)
 
 const ViewStoryScreen = () => {
+  const insets = useSafeAreaInsets();
   const { storyId, userId } = useLocalSearchParams();
   const router = useRouter();
   const { stories, recordView, deleteStory } = useStories();
@@ -223,7 +227,11 @@ const ViewStoryScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+    >
       {/* Progress Bar */}
       <View style={styles.progressBarContainer}>
         <Animated.View style={[styles.progressBar, { width: progressAnim }]} />
@@ -274,7 +282,7 @@ const ViewStoryScreen = () => {
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 

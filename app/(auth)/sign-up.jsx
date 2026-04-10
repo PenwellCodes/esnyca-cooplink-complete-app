@@ -256,6 +256,7 @@ const SignUp = () => {
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
     >
       <View style={{ flex: 1 }}>
         <TouchableOpacity onPress={handleBack} style={styles.backIcon}>
@@ -266,10 +267,14 @@ const SignUp = () => {
           style={{ flex: 1, backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.scrollContainer,
-            { paddingTop: TOP_SECTION_HEIGHT, paddingBottom: insets.bottom + 12 },
+            {
+              paddingTop: TOP_SECTION_HEIGHT,
+              paddingBottom: Math.max(insets.bottom, 8) + 48,
+            },
           ]}
-          scrollEnabled={role === "cooperative"}
+          scrollEnabled
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* Heading */}
           <View style={styles.headingContainer}>

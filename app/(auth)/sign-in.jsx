@@ -6,7 +6,11 @@ import {
   StyleSheet,
   Image,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, Snackbar, TextInput } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import { CustomButton } from "./../../components";
@@ -17,6 +21,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const SignIn = () => {
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { login } = useAuth();
   const { currentLanguage, t } = useLanguage();
@@ -100,22 +105,30 @@ const SignIn = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+    >
       <TouchableOpacity onPress={handleBack} style={styles.backIcon}>
         <Ionicons name="arrow-back" size={24} color={colors.background} />
       </TouchableOpacity>
 
-      {/* Top Section */}
-      <View style={[styles.topSection, { backgroundColor: colors.primary }]}>
-     
-        <Image source={images.logo} style={styles.logo} />
-        <Text style={[styles.title, typography.title, { color: colors.background }]}>
-          {translations.chatCorner}
-        </Text>
-      </View>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        bounces={false}
+      >
+        <View style={[styles.topSection, { backgroundColor: colors.primary }]}>
+          <Image source={images.logo} style={styles.logo} />
+          <Text style={[styles.title, typography.title, { color: colors.background }]}>
+            {translations.chatCorner}
+          </Text>
+        </View>
 
-      {/* Form Section */}
-      <View style={styles.formContainer}>
+        <View style={styles.formContainer}>
         <TextInput
           mode="outlined"
           label={translations.email}
@@ -175,7 +188,8 @@ const SignIn = () => {
             </Text>
           </Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </ScrollView>
 
       {/* Snackbar for feedback */}
       <Snackbar
@@ -186,15 +200,18 @@ const SignIn = () => {
       >
         {snackbarMessage}
       </Snackbar>
-
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
   topSection: {
-    height: "35%",
+    minHeight: 260,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
     alignItems: "center",
@@ -211,7 +228,7 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
   },
   title: { marginTop: 10 },
-  formContainer: { flex: 1, padding: 20, justifyContent: "center" },
+  formContainer: { padding: 20, paddingTop: 24 },
   input: { 
     marginBottom: 15,
     backgroundColor: 'transparent'

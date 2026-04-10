@@ -8,7 +8,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useStories } from "../../context/appstate/StoriesContext";
@@ -16,6 +20,7 @@ import { useRouter } from "expo-router";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 
 const AddStoryScreen = () => {
+  const insets = useSafeAreaInsets();
   const { currentUser } = useAuth();
   const { postStory } = useStories();
   const router = useRouter();
@@ -116,36 +121,54 @@ const AddStoryScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>{translations.addStory}</Text>
-      <TouchableOpacity style={styles.pickImageButton} onPress={pickImage}>
-        <Text style={styles.pickImageText}>
-          {imageURI ? translations.changeImage : translations.pickImage}
-        </Text>
-      </TouchableOpacity>
-      {imageURI && <Image source={{ uri: imageURI }} style={styles.previewImage} />}
-      <TextInput
-        style={styles.input}
-        placeholder={translations.addCaption}
-        value={caption}
-        onChangeText={setCaption}
-      />
-      {uploading ? (
-        <ActivityIndicator size="large" color="#007AFF" />
-      ) : (
-        <TouchableOpacity style={styles.postButton} onPress={handlePostStory}>
-          <Text style={styles.postButtonText}>{translations.postStory}</Text>
+    <KeyboardAvoidingView
+      style={styles.keyboardRoot}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 48 : 0}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.header}>{translations.addStory}</Text>
+        <TouchableOpacity style={styles.pickImageButton} onPress={pickImage}>
+          <Text style={styles.pickImageText}>
+            {imageURI ? translations.changeImage : translations.pickImage}
+          </Text>
         </TouchableOpacity>
-      )}
-    </View>
+        {imageURI && <Image source={{ uri: imageURI }} style={styles.previewImage} />}
+        <TextInput
+          style={styles.input}
+          placeholder={translations.addCaption}
+          value={caption}
+          onChangeText={setCaption}
+        />
+        {uploading ? (
+          <ActivityIndicator size="large" color="#007AFF" />
+        ) : (
+          <TouchableOpacity style={styles.postButton} onPress={handlePostStory}>
+            <Text style={styles.postButtonText}>{translations.postStory}</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default AddStoryScreen;
 
 const styles = StyleSheet.create({
-  container: {
+  keyboardRoot: {
     flex: 1,
+    backgroundColor: "#fff",
+  },
+  container: {
+    flexGrow: 1,
     padding: 16,
     backgroundColor: "#fff",
   },

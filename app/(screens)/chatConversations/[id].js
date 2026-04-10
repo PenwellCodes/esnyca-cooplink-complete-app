@@ -550,8 +550,10 @@ const ChatScreen = () => {
           styles.container,
           { backgroundColor: colors.background, flex: 1 },
         ]}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={
+          Platform.OS === "ios" ? insets.top + 8 : 0
+        }
       >
         <View style={[styles.header, { marginTop: 35 }]}>
           <TouchableOpacity

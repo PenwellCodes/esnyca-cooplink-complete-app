@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image, ActivityIndicator, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  Image,
+  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router'; // Add this import
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
@@ -12,6 +25,7 @@ import { apiRequest } from "../../utils/api";
 
 const Profile = () => {
   const router = useRouter(); // Add this
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();  // Add theme hook
   const { currentUser } = useAuth();
   const { currentLanguage, t } = useLanguage();
@@ -273,8 +287,22 @@ const Profile = () => {
     );
   }
 
+  const keyboardVerticalOffset =
+    Platform.OS === 'ios' ? insets.top + 56 : 0;
+
   return (
-    <ScrollView style={[styles.scrollContainer, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.keyboardRoot, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={keyboardVerticalOffset}
+    >
+      <ScrollView
+        style={[styles.scrollContainer, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.header, { color: colors.primary }]}>
           {translations.updateProfile}
@@ -404,11 +432,19 @@ const Profile = () => {
           )}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardRoot: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
   container: {
     flex: 1,
     alignItems: 'center',

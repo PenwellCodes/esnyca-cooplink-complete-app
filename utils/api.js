@@ -1,40 +1,30 @@
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
-
-const extra = Constants?.expoConfig?.extra || {};
 
 const REQUEST_TIMEOUT_MS = 15000;
 
-function getDevHostIp() {
-  const hostUri =
-    Constants?.expoConfig?.hostUri || Constants?.manifest2?.extra?.expoGo?.debuggerHost;
-  if (!hostUri || typeof hostUri !== "string") return null;
-  const [host] = hostUri.split(":");
-  return host || null;
-}
-
+/**
+ * ✅ PRODUCTION-READY BASE URL
+ * Uses ONLY app.json (extra.apiBaseUrl)
+ * This works 100% in APK builds
+ */
 function resolveApiBaseUrl() {
-  if (process.env.EXPO_PUBLIC_API_BASE_URL) {
-    return process.env.EXPO_PUBLIC_API_BASE_URL;
-  }
-  if (extra.apiBaseUrl) {
-    return extra.apiBaseUrl;
+  const baseUrl = Constants?.expoConfig?.extra?.apiBaseUrl;
+
+  if (!baseUrl) {
+    throw new Error(
+      "❌ API base URL missing. Set it in app.json under extra.apiBaseUrl"
+    );
   }
 
-  const devHostIp = getDevHostIp();
-  if (devHostIp) {
-    return `http://${devHostIp}:4000/api`;
-  }
-
-  if (Platform.OS === "android") {
-    return "http://10.0.2.2:4000/api";
-  }
-  return "http://localhost:4000/api";
+  return baseUrl;
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
 
+/**
+ * Build headers (with optional auth token)
+ */
 async function buildHeaders(customHeaders = {}, includeAuth = true) {
   const headers = { ...customHeaders };
 
@@ -48,6 +38,9 @@ async function buildHeaders(customHeaders = {}, includeAuth = true) {
   return headers;
 }
 
+/**
+ * Main API request handler
+ */
 export async function apiRequest(path, options = {}) {
   const {
     method = "GET",
@@ -57,8 +50,11 @@ export async function apiRequest(path, options = {}) {
   } = options;
 
   const headers = await buildHeaders(customHeaders, includeAuth);
-  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
 
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  // Set JSON header only if not FormData
   if (!isFormData && body !== undefined && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
@@ -67,21 +63,32 @@ export async function apiRequest(path, options = {}) {
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   let response;
+
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    const url = `${API_BASE_URL}${path}`;
+    console.log("🌐 API Request:", url);
+
+    response = await fetch(url, {
       method,
       headers,
-      body: isFormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
+      body: isFormData
+        ? body
+        : body !== undefined
+        ? JSON.stringify(body)
+        : undefined,
       signal: controller.signal,
     });
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error(
-        `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. Check backend URL/network. Current API base: ${API_BASE_URL}`,
+        `⏱ Request timed out after ${
+          REQUEST_TIMEOUT_MS / 1000
+        }s. Check server/network.`
       );
     }
+
     throw new Error(
-      `Network request failed. Check backend URL/network. Current API base: ${API_BASE_URL}`,
+      `❌ Network request failed. Check server URL or internet connection.`
     );
   } finally {
     clearTimeout(timeoutId);
@@ -89,6 +96,7 @@ export async function apiRequest(path, options = {}) {
 
   const text = await response.text();
   let data = null;
+
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
@@ -99,6 +107,7 @@ export async function apiRequest(path, options = {}) {
     const message =
       (data && (data.message || data.error)) ||
       `Request failed with status ${response.status}`;
+
     const error = new Error(message);
     error.status = response.status;
     error.data = data;
