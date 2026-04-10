@@ -15,6 +15,14 @@ app.get('/', (req, res) => {
   res.json({ ok: true, message: 'server is running' });
 });
 
+app.get('/api', (req, res) => {
+  res.json({ ok: true, message: 'api is running' });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true });
+});
+
 // Auth (SQL-backed Users)
 app.use('/api/auth', require('./routes/authRoutes'));
 
