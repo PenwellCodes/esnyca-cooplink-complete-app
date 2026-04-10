@@ -14,6 +14,7 @@ CREATE TABLE dbo.Users (
   PhysicalAddress NVARCHAR(255) NULL,
   Content NVARCHAR(MAX) NULL,
   ProfilePicUrl NVARCHAR(2048) NULL,
+  Disabled BIT NOT NULL CONSTRAINT DF_Users_Disabled DEFAULT (0),
   CompanyAddress NVARCHAR(255) NULL,
   LocationLat FLOAT NULL,
   LocationLng FLOAT NULL,
@@ -138,3 +139,9 @@ CREATE TABLE dbo.StoryViews (
   CONSTRAINT FK_StoryViews_User FOREIGN KEY (ViewerUserId) REFERENCES dbo.Users(Id)
 );
 
+-- Safe migrations for already-created databases
+IF COL_LENGTH('dbo.Users', 'Disabled') IS NULL
+BEGIN
+  ALTER TABLE dbo.Users
+  ADD Disabled BIT NOT NULL CONSTRAINT DF_Users_Disabled_Migration DEFAULT (0);
+END

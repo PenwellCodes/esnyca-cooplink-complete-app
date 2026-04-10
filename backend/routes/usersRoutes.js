@@ -13,17 +13,28 @@ function isGuid(value) {
   );
 }
 
+async function hasUsersDisabledColumn(pool) {
+  const result = await pool
+    .request()
+    .query(
+      "SELECT CASE WHEN COL_LENGTH('dbo.Users', 'Disabled') IS NULL THEN 0 ELSE 1 END AS HasDisabled",
+    );
+  return result.recordset?.[0]?.HasDisabled === 1;
+}
+
 // GET /api/users?email=...
 router.get('/', async (req, res) => {
   try {
     const pool = await getPool();
-    const { email } = req.query;
+    const { email, role } = req.query;
+    const hasDisabled = await hasUsersDisabledColumn(pool);
 
     const request = pool.request();
     let query = `
       SELECT
         Id, Email, Role, DisplayName, PhoneNumber, Region, RegistrationNumber,
         PhysicalAddress, Content, ProfilePicUrl, CompanyAddress,
+        ${hasDisabled ? 'Disabled,' : 'CAST(0 AS bit) AS Disabled,'}
         LocationLat, LocationLng, CreatedAt, UpdatedAt
       FROM dbo.Users
     `;
@@ -31,6 +42,13 @@ router.get('/', async (req, res) => {
     if (email) {
       request.input('Email', sql.NVarChar(320), String(email));
       query += ' WHERE Email = @Email';
+      if (role) {
+        request.input('Role', sql.NVarChar(32), String(role));
+        query += ' AND Role = @Role';
+      }
+    } else if (role) {
+      request.input('Role', sql.NVarChar(32), String(role));
+      query += ' WHERE Role = @Role';
     }
 
     query += ' ORDER BY CreatedAt DESC';
@@ -50,6 +68,7 @@ router.get('/:id', async (req, res) => {
 
   try {
     const pool = await getPool();
+    const hasDisabled = await hasUsersDisabledColumn(pool);
     const result = await pool
       .request()
       .input('Id', sql.UniqueIdentifier, id)
@@ -57,6 +76,7 @@ router.get('/:id', async (req, res) => {
         SELECT
           Id, Email, Role, DisplayName, PhoneNumber, Region, RegistrationNumber,
           PhysicalAddress, Content, ProfilePicUrl, CompanyAddress,
+          ${hasDisabled ? 'Disabled,' : 'CAST(0 AS bit) AS Disabled,'}
           LocationLat, LocationLng, CreatedAt, UpdatedAt
         FROM dbo.Users
         WHERE Id = @Id
@@ -123,11 +143,13 @@ router.put('/:id', async (req, res) => {
     companyAddress,
     locationLat,
     locationLng,
+    disabled,
   } = req.body || {};
 
   try {
     const pool = await getPool();
-    const result = await pool
+    const hasDisabled = await hasUsersDisabledColumn(pool);
+    const request = pool
       .request()
       .input('Id', sql.UniqueIdentifier, id)
       .input('Role', sql.NVarChar(32), role || null)
@@ -152,8 +174,11 @@ router.put('/:id', async (req, res) => {
         locationLng !== undefined && locationLng !== null
           ? Number(locationLng)
           : null,
-      )
-      .query(`
+      );
+    if (hasDisabled) {
+      request.input('Disabled', sql.Bit, disabled === undefined ? null : !!disabled);
+    }
+    const result = await request.query(`
         UPDATE dbo.Users
         SET
           Role = COALESCE(@Role, Role),
@@ -165,13 +190,14 @@ router.put('/:id', async (req, res) => {
           Content = @Content,
           ProfilePicUrl = @ProfilePicUrl,
           CompanyAddress = @CompanyAddress,
+          ${hasDisabled ? 'Disabled = COALESCE(@Disabled, Disabled),' : ''}
           LocationLat = @LocationLat,
           LocationLng = @LocationLng,
           UpdatedAt = SYSUTCDATETIME()
         OUTPUT inserted.Id, inserted.Email, inserted.Role, inserted.DisplayName,
                inserted.PhoneNumber, inserted.Region, inserted.RegistrationNumber,
                inserted.PhysicalAddress, inserted.Content, inserted.ProfilePicUrl,
-               inserted.CompanyAddress, inserted.LocationLat, inserted.LocationLng,
+               inserted.CompanyAddress, ${hasDisabled ? 'inserted.Disabled' : 'CAST(0 AS bit) AS Disabled'}, inserted.LocationLat, inserted.LocationLng,
                inserted.CreatedAt, inserted.UpdatedAt
         WHERE Id = @Id
       `);
