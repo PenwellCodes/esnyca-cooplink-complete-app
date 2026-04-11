@@ -1,26 +1,16 @@
-import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_BASE_URL as CONFIGURED_API_BASE_URL } from "./apiConfig";
 
 const REQUEST_TIMEOUT_MS = 15000;
 
-/**
- * ✅ PRODUCTION-READY BASE URL
- * Uses ONLY app.json (extra.apiBaseUrl)
- * This works 100% in APK builds
- */
-function resolveApiBaseUrl() {
-  const baseUrl = Constants?.expoConfig?.extra?.apiBaseUrl;
+export const API_BASE_URL = String(CONFIGURED_API_BASE_URL || "").replace(
+  /\/+$/,
+  ""
+);
 
-  if (!baseUrl) {
-    throw new Error(
-      "❌ API base URL missing. Set it in app.json under extra.apiBaseUrl"
-    );
-  }
-
-  return baseUrl;
+if (!API_BASE_URL) {
+  throw new Error("❌ API base URL missing. Set it in utils/apiConfig.js");
 }
-
-export const API_BASE_URL = resolveApiBaseUrl();
 
 /**
  * Build headers (with optional auth token)

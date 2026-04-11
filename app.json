@@ -33,6 +33,7 @@
     "android": {
       "versionCode": 18,
       "softwareKeyboardLayoutMode": "resize",
+      "usesCleartextTraffic": true,
 
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
@@ -56,7 +57,7 @@
     },
 
     "extra": {
-      "apiBaseUrl": "http://207.180.254.163:4000/api",
+      "apiBaseUrl": "https://fragrant-mode-69da.lihawu95.workers.dev/api",
       "eas": {
         "projectId": "3b2807cf-6a12-461b-abc3-cf7338f0ce72"
       }
