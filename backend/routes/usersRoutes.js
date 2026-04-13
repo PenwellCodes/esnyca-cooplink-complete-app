@@ -1,8 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { sql, getPool } = require('../db');
+const { requireAuth, requireAdmin, requireSelfOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+router.use(requireAuth);
 
 function isGuid(value) {
   return (
@@ -23,7 +25,7 @@ async function hasUsersDisabledColumn(pool) {
 }
 
 // GET /api/users?email=...
-router.get('/', async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const pool = await getPool();
     const { email, role } = req.query;
@@ -62,7 +64,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/users/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireSelfOrAdmin('id'), async (req, res) => {
   const { id } = req.params;
   if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
 
@@ -93,7 +95,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/users (admin-style create)
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const { email, password, role, displayName } = req.body || {};
   if (!email || !password || !displayName) {
     return res
@@ -127,7 +129,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/users/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireSelfOrAdmin('id'), async (req, res) => {
   const { id } = req.params;
   if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
 
@@ -213,7 +215,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/users/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
 

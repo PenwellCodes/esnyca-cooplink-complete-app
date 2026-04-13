@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const { uploadBufferToImageBB } = require('./services/imagebb');
+const { requireAuth, requireAdmin } = require('./middleware/auth');
 
 const app = express();
 
@@ -38,7 +39,7 @@ app.use('/api/chats', require('./routes/chatsRoutes'));
 app.use('/api/stories', require('./routes/storiesRoutes'));
 
 // Upload image (ImageBB)
-app.post('/api/upload', upload.single('image'), async (req, res) => {
+app.post('/api/upload', requireAuth, requireAdmin, upload.single('image'), async (req, res) => {
   try {
     const file = req.file;
     if (!file) {

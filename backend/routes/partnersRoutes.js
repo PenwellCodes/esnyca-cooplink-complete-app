@@ -1,5 +1,6 @@
 const express = require('express');
 const { sql, getPool } = require('../db');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -53,7 +54,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/partners
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, requireAdmin, async (req, res) => {
   const { title, description, imageUrl, facebookUrl } = req.body || {};
   if (!title) return res.status(400).json({ message: 'title is required' });
 
@@ -80,7 +81,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/partners/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
   if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
 
@@ -117,7 +118,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/partners/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
   if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
 
