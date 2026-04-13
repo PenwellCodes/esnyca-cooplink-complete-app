@@ -17,13 +17,15 @@ import { apiRequest } from "../../utils/api";
 // Helper function to convert Firestore Timestamp to Date
 const getDateFromTimestamp = (date) => {
   if (!date) return new Date();
-  
-  // If it's already a Date object
-  if (date instanceof Date) {
-    return date;
+
+  if (date instanceof Date) return date;
+
+  // SQL/API date strings
+  if (typeof date === "string" || typeof date === "number") {
+    const parsed = new Date(date);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
   }
-  
-  // Fallback to current date
+
   return new Date();
 };
 
@@ -125,7 +127,11 @@ const News = () => {
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const newsListRaw = await apiRequest("/news?published=true");
+        let newsListRaw = await apiRequest("/news?published=true");
+        // Fallback: if no published news yet, display available news entries.
+        if (!Array.isArray(newsListRaw) || newsListRaw.length === 0) {
+          newsListRaw = await apiRequest("/news");
+        }
         const newsList = (newsListRaw || []).map((item) => ({
           id: item.Id || item.id,
           title: item.Title || "",

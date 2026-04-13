@@ -35,6 +35,24 @@ async function requireAuth(req, res, next) {
   }
 }
 
+async function optionalAuth(req, _res, next) {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!decoded?.id) return next();
+    const user = await getUserById(decoded.id);
+    if (user && !user.Disabled) {
+      req.user = user;
+    }
+    return next();
+  } catch {
+    return next();
+  }
+}
+
 function requireAdmin(req, res, next) {
   const role = String(req.user?.Role || '').toLowerCase();
   if (role !== 'admin' && role !== 'superadmin') {
@@ -52,4 +70,4 @@ function requireSelfOrAdmin(paramName = 'id') {
   };
 }
 
-module.exports = { requireAuth, requireAdmin, requireSelfOrAdmin };
+module.exports = { requireAuth, optionalAuth, requireAdmin, requireSelfOrAdmin };

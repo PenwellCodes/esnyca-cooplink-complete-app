@@ -1,6 +1,7 @@
 const express = require('express');
 const { sql, getPool } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { sendPushToUsers } = require('../services/pushNotifications');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -182,7 +183,42 @@ router.post('/:chatId/messages', async (req, res) => {
         VALUES
           (@ChatId, @SenderUserId, @ReceiverUserId, @Type, @Text, @FileUrl, @FileName)
       `);
-    return res.status(201).json(created.recordset[0]);
+    const createdMessage = created.recordset[0];
+
+    try {
+      let recipientIds = [];
+      if (chatId === 'group_swazi_cooperators') {
+        // Fallback safety if a synthetic id is passed from client.
+        recipientIds = [];
+      } else if (receiverUserId) {
+        recipientIds = [String(receiverUserId)];
+      } else {
+        const participants = await pool
+          .request()
+          .input('ChatId', sql.UniqueIdentifier, chatId)
+          .query('SELECT UserId FROM dbo.ChatParticipants WHERE ChatId = @ChatId');
+        recipientIds = (participants.recordset || [])
+          .map((row) => String(row.UserId))
+          .filter((id) => id !== String(senderUserId));
+      }
+
+      if (recipientIds.length) {
+        await sendPushToUsers(recipientIds, {
+          title: 'New message',
+          body: text || (fileUrl ? 'Attachment' : 'You received a new message'),
+          data: {
+            chatId,
+            senderUserId: String(senderUserId),
+            receiverUserId: receiverUserId ? String(receiverUserId) : null,
+          },
+        });
+      }
+    } catch (pushError) {
+      // eslint-disable-next-line no-console
+      console.error('Push notification send failed:', pushError);
+    }
+
+    return res.status(201).json(createdMessage);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);

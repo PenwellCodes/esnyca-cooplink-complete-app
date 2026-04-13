@@ -4,17 +4,20 @@ import { ChatProvider } from "../appstate/ChatContext"; // Ensure correct import
 import { StoriesProvider } from "../appstate/StoriesContext"; // Ensure correct import
 import { CustomThemeProvider } from "../appstate/CustomThemeProvider"; // Ensure correct import
 import { LanguageProvider } from './LanguageContext';
+import { NotificationsProvider } from "./NotificationsContext";
 
 const GlobalContextProvider = ({ children }) => {
   return (
     <CustomThemeProvider>
       <LanguageProvider>
         <AuthProvider>
-          <ChatProvider>
-            <StoriesProvider>
-              {children}
-            </StoriesProvider>
-          </ChatProvider>
+          <NotificationsProvider>
+            <ChatProvider>
+              <StoriesProvider>
+                {children}
+              </StoriesProvider>
+            </ChatProvider>
+          </NotificationsProvider>
         </AuthProvider>
       </LanguageProvider>
     </CustomThemeProvider>
