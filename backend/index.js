@@ -26,6 +26,7 @@ app.get('/api/health', (req, res) => {
 
 // Auth (SQL-backed Users)
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 
 // Schema-based endpoints
 app.use('/api/users', require('./routes/usersRoutes'));

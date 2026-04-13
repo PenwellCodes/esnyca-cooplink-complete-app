@@ -3,6 +3,7 @@ const { sql, getPool } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+router.use(requireAuth);
 
 function isGuid(value) {
   return (

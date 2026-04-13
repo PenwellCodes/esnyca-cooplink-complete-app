@@ -1,7 +1,9 @@
 const express = require('express');
 const { sql, getPool } = require('../db');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+router.use(requireAuth);
 
 // GET /api/mission-vision (returns latest row)
 router.get('/', async (req, res) => {
@@ -21,7 +23,7 @@ router.get('/', async (req, res) => {
 });
 
 // PUT /api/mission-vision (creates a new row; treat as versioned)
-router.put('/', async (req, res) => {
+router.put('/', requireAdmin, async (req, res) => {
   const { mission, vision } = req.body || {};
 
   try {

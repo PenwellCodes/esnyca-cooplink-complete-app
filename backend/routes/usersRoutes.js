@@ -146,14 +146,53 @@ router.put('/:id', requireSelfOrAdmin('id'), async (req, res) => {
     locationLat,
     locationLng,
     disabled,
+    email,
+    password,
+    currentPassword,
   } = req.body || {};
 
   try {
     const pool = await getPool();
     const hasDisabled = await hasUsersDisabledColumn(pool);
+    const isAdmin = ['admin', 'superadmin'].includes(String(req.user?.Role || '').toLowerCase());
+    const isSelf = String(req.user?.Id || '') === String(id);
+
+    if (email) {
+      const existingEmail = await pool
+        .request()
+        .input('Email', sql.NVarChar(320), String(email))
+        .input('Id', sql.UniqueIdentifier, id)
+        .query('SELECT TOP 1 Id FROM dbo.Users WHERE Email = @Email AND Id <> @Id');
+      if (existingEmail.recordset.length > 0) {
+        return res.status(409).json({ message: 'Email already in use' });
+      }
+    }
+
+    let passwordHashToSet = null;
+    if (password) {
+      if (isSelf && !isAdmin) {
+        if (!currentPassword) {
+          return res.status(400).json({ message: 'currentPassword is required to change your password' });
+        }
+        const existingUser = await pool
+          .request()
+          .input('Id', sql.UniqueIdentifier, id)
+          .query('SELECT TOP 1 PasswordHash FROM dbo.Users WHERE Id = @Id');
+        const currentHash = existingUser.recordset?.[0]?.PasswordHash;
+        if (!currentHash) return res.status(404).json({ message: 'Not found' });
+        const matches = await bcrypt.compare(String(currentPassword), String(currentHash));
+        if (!matches) {
+          return res.status(401).json({ message: 'Current password is incorrect' });
+        }
+      }
+      passwordHashToSet = await bcrypt.hash(String(password), 10);
+    }
+
     const request = pool
       .request()
       .input('Id', sql.UniqueIdentifier, id)
+      .input('Email', sql.NVarChar(320), email || null)
+      .input('PasswordHash', sql.NVarChar(255), passwordHashToSet)
       .input('Role', sql.NVarChar(32), role || null)
       .input('DisplayName', sql.NVarChar(120), displayName || null)
       .input('PhoneNumber', sql.NVarChar(40), phoneNumber || null)
@@ -183,6 +222,8 @@ router.put('/:id', requireSelfOrAdmin('id'), async (req, res) => {
     const result = await request.query(`
         UPDATE dbo.Users
         SET
+          Email = COALESCE(@Email, Email),
+          PasswordHash = COALESCE(@PasswordHash, PasswordHash),
           Role = COALESCE(@Role, Role),
           DisplayName = COALESCE(@DisplayName, DisplayName),
           PhoneNumber = @PhoneNumber,
