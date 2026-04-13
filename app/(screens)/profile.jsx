@@ -22,10 +22,12 @@ import { useAuth } from '../../context/appstate/AuthContext';
 import { useLanguage } from '../../context/appstate/LanguageContext';
 import { useTheme, Snackbar } from "react-native-paper";  // Add this import
 import { apiRequest } from "../../utils/api";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const Profile = () => {
   const router = useRouter(); // Add this
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { colors } = useTheme();  // Add theme hook
   const { currentUser } = useAuth();
   const { currentLanguage, t } = useLanguage();
@@ -287,21 +289,26 @@ const Profile = () => {
     );
   }
 
-  const keyboardVerticalOffset =
-    Platform.OS === 'ios' ? insets.top + 56 : 0;
-
   return (
     <KeyboardAvoidingView
       style={[styles.keyboardRoot, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={keyboardVerticalOffset}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      enabled={Platform.OS === 'ios'}
+      keyboardVerticalOffset={insets.top + 56}
     >
       <ScrollView
         style={[styles.scrollContainer, { backgroundColor: colors.background }]}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom:
+              40 + keyboardHeight + Math.max(insets.bottom, 12),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets
       >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.header, { color: colors.primary }]}>
@@ -331,8 +338,9 @@ const Profile = () => {
                 {translations.name}
               </Text>
               <TextInput
-                style={[styles.input, { borderColor: colors.primary }]}
+                style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
                 placeholder={translations.enterYourName}
+                placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.displayName || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
@@ -345,8 +353,9 @@ const Profile = () => {
                 {translations.cooperativeName}
               </Text>
               <TextInput
-                style={[styles.input, { borderColor: colors.primary }]}
+                style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
                 placeholder={translations.enterCooperativeName}
+                placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.displayName || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
@@ -357,8 +366,9 @@ const Profile = () => {
                 {translations.phoneNumber}
               </Text>
               <TextInput
-                style={[styles.input, { borderColor: colors.primary }]}
+                style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
                 placeholder={translations.enterPhoneNumber}
+                placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.phoneNumber || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, phoneNumber: text }))}
               />
@@ -369,8 +379,9 @@ const Profile = () => {
                 {translations.productService}
               </Text>
               <TextInput
-                style={[styles.input, { borderColor: colors.primary }]}
+                style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
                 placeholder={translations.enterProductService}
+                placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.content || ''}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
               />
@@ -443,7 +454,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 32,
   },
   container: {
     flex: 1,
@@ -464,7 +474,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingLeft: 15,
     fontSize: 16,
-    color: '#333',
     marginBottom: 20,
   },
   profileImage: {

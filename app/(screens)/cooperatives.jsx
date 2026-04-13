@@ -268,8 +268,8 @@ const CooperativeUsersScreen = () => {
             placeholder={translations.searchPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            style={styles.searchInput}
-            placeholderTextColor="#777"
+            style={[styles.searchInput, { color: colors.onSurface }]}
+            placeholderTextColor={colors.onSurfaceVariant}
           />
         </View>
         <Menu

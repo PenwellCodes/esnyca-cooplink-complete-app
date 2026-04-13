@@ -1,7 +1,87 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+    createContext,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+} from "react";
+import { AppState } from "react-native";
+import { router } from "expo-router";
 import { useAuth } from "./AuthContext";
 import Toast from "react-native-toast-message";
 import { apiRequest } from "../../utils/api";
+
+function openChatFromKey(chatKey, currentUserUid, userMap) {
+    try {
+        if (chatKey === "group_swazi_cooperators") {
+            const groupChat = {
+                uid: "group_swazi_cooperators",
+                displayName: "Group",
+                profilePicture:
+                    "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
+                memberCount: Object.keys(userMap || {}).length,
+                isGroup: true,
+            };
+            router.push({
+                pathname: "/(screens)/group-chat",
+                params: {
+                    id: groupChat.uid,
+                    group: JSON.stringify(groupChat),
+                },
+            });
+            return;
+        }
+        const parts = String(chatKey).split("_");
+        const otherUid = parts.find((id) => id !== currentUserUid);
+        if (!otherUid) {
+            router.push("/(tabs)/chat");
+            return;
+        }
+        const user = userMap?.[otherUid];
+        if (!user) {
+            router.push("/(tabs)/chat");
+            return;
+        }
+        router.push({
+            pathname: `/(screens)/chatConversations/${otherUid}`,
+            params: {
+                user: JSON.stringify(user),
+                predefinedMessage: " ",
+            },
+        });
+    } catch (e) {
+        router.push("/(tabs)/chat");
+    }
+}
+
+function pickNewIncomingToast(prev, next, userUid, activeChatId) {
+    if (!userUid || !next) return null;
+    if (!prev || Object.keys(prev).length === 0) return null;
+
+    const candidates = [];
+
+    for (const chatKey of Object.keys(next)) {
+        const msgs = next[chatKey];
+        if (!msgs?.length) continue;
+        const latest = msgs[msgs.length - 1];
+        const prevMsgs = prev[chatKey];
+        const prevLatest = prevMsgs?.length
+            ? prevMsgs[prevMsgs.length - 1]
+            : null;
+
+        if (prevLatest && latest.id === prevLatest.id) continue;
+        if (latest.sender === userUid) continue;
+        if (latest.read) continue;
+        if (activeChatId === chatKey) continue;
+
+        const t =
+            latest.timestamp?.toDate?.()?.getTime?.() ?? Date.now();
+        candidates.push({ chatKey, latest, t });
+    }
+
+    if (!candidates.length) return null;
+    return candidates.reduce((a, b) => (a.t >= b.t ? a : b));
+}
 
 const ChatContext = createContext();
 
@@ -20,6 +100,11 @@ export const ChatProvider = ({ children }) => {
     const [userMap, setUserMap] = useState({});
     const [unreadCounts, setUnreadCounts] = useState({});
     const [chatIdMap, setChatIdMap] = useState({});
+    const activeChatIdRef = useRef(null);
+
+    useEffect(() => {
+        activeChatIdRef.current = activeChatId;
+    }, [activeChatId]);
 
     // Function to update unread counts
     const updateUnreadCount = (chatId, messages) => {
@@ -116,7 +201,42 @@ export const ChatProvider = ({ children }) => {
             ).length;
         }
 
-        setConversations(nextConversations);
+        setConversations((prev) => {
+            const picked = pickNewIncomingToast(
+                prev,
+                nextConversations,
+                userUid,
+                activeChatIdRef.current,
+            );
+            if (
+                picked &&
+                AppState.currentState === "active"
+            ) {
+                const { latest, chatKey } = picked;
+                const sender = nextUserMap[latest.sender];
+                const title = sender?.displayName || "New message";
+                let preview = (latest.text || "").trim();
+                if (!preview && latest.fileUrl) {
+                    preview = "📎 Attachment";
+                }
+                if (latest.type === "story_reply") {
+                    preview = preview || "Story reply";
+                }
+                Toast.show({
+                    type: "info",
+                    text1: title,
+                    text2: preview.slice(0, 140),
+                    position: "top",
+                    visibilityTime: 5500,
+                    topOffset: 52,
+                    onPress: () => {
+                        Toast.hide();
+                        openChatFromKey(chatKey, userUid, nextUserMap);
+                    },
+                });
+            }
+            return nextConversations;
+        });
         setLastMessages(nextLastMessages);
         setUnreadCounts(nextUnread);
         setChatIdMap(nextChatIdMap);

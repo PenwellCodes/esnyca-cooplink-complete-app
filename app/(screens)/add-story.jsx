@@ -18,9 +18,11 @@ import { useAuth } from "../../context/appstate/AuthContext";
 import { useStories } from "../../context/appstate/StoriesContext";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const AddStoryScreen = () => {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { currentUser } = useAuth();
   const { postStory } = useStories();
   const router = useRouter();
@@ -123,15 +125,20 @@ const AddStoryScreen = () => {
   return (
     <KeyboardAvoidingView
       style={styles.keyboardRoot}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 48 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      enabled={Platform.OS === "ios"}
+      keyboardVerticalOffset={insets.top + 48}
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
         contentContainerStyle={[
           styles.container,
-          { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+          {
+            paddingBottom:
+              Math.max(insets.bottom, 16) + 16 + keyboardHeight,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -145,6 +152,7 @@ const AddStoryScreen = () => {
         <TextInput
           style={styles.input}
           placeholder={translations.addCaption}
+          placeholderTextColor="#6B7280"
           value={caption}
           onChangeText={setCaption}
         />
@@ -201,6 +209,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+    color: "#111827",
     marginBottom: 16,
   },
   postButton: {

@@ -262,6 +262,7 @@ const LocationsScreen = () => {
       <TextInput
         style={styles.searchInput}
         placeholder={translations.searchPlaceholder}
+        placeholderTextColor="#6B7280"
         value={searchQuery}
         onChangeText={(text) => setSearchQuery(text)}
         onSubmitEditing={handleSearch}
@@ -423,6 +424,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#DDDDDD',
+    fontSize: 16,
+    color: '#111827',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

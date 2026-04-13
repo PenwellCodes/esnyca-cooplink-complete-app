@@ -17,9 +17,11 @@ import { typography } from "../../constants";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useRouter } from "expo-router";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const ResetPassword = () => {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { colors } = useTheme();
   const { resetPassword } = useAuth();
   const { currentLanguage, t } = useLanguage();
@@ -109,14 +111,21 @@ const ResetPassword = () => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      enabled={Platform.OS === "ios"}
+      keyboardVerticalOffset={insets.top + 8}
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom: 24 + keyboardHeight + Math.max(insets.bottom, 12),
+          },
+        ]}
       >
         <View style={styles.header}>
           <Ionicons
@@ -140,7 +149,8 @@ const ResetPassword = () => {
             <Ionicons name="mail-outline" size={20} color={colors.primary} />
             <TextInput
               placeholder={translations.email}
-              style={[styles.input, typography.body]}
+              style={[styles.input, typography.body, { color: colors.onSurface }]}
+              placeholderTextColor={colors.onSurfaceVariant}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -181,7 +191,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 32,
   },
   header: {
     marginTop: 40,

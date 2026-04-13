@@ -19,9 +19,11 @@ import { useAuth } from "../../context/appstate/AuthContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useNavigation } from "@react-navigation/native";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const SignIn = () => {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { colors } = useTheme();
   const { login } = useAuth();
   const { currentLanguage, t } = useLanguage();
@@ -107,8 +109,9 @@ const SignIn = () => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      enabled={Platform.OS === "ios"}
+      keyboardVerticalOffset={insets.top + 8}
     >
       <TouchableOpacity onPress={handleBack} style={styles.backIcon}>
         <Ionicons name="arrow-back" size={24} color={colors.background} />
@@ -118,7 +121,13 @@ const SignIn = () => {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom: 32 + keyboardHeight + Math.max(insets.bottom, 12),
+          },
+        ]}
         bounces={false}
       >
         <View style={[styles.topSection, { backgroundColor: colors.primary }]}>
@@ -208,7 +217,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 32,
   },
   topSection: {
     minHeight: 260,

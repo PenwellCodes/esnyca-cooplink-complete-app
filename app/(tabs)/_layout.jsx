@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
-import { View, Text } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { useTheme } from "react-native-paper";
 import Feather from "@expo/vector-icons/Feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../context/appstate/AuthContext"; // Import AuthContext
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { useChat } from "../../context/appstate/ChatContext";
 
 const TabIcon = ({ icon, color, label, isActive }) => (
   <View style={{ alignItems: "center", width: 70 }}>
@@ -22,13 +23,47 @@ const TabIcon = ({ icon, color, label, isActive }) => (
   </View>
 );
 
+function ChatTabIcon({ color, label, isActive, unreadTotal }) {
+  const display =
+    unreadTotal > 99 ? "99+" : unreadTotal > 0 ? String(unreadTotal) : "";
+  return (
+    <View style={styles.chatTabWrap}>
+      <View style={styles.chatIconWrap}>
+        <Ionicons
+          name="chatbubble-ellipses-outline"
+          size={24}
+          color={color}
+        />
+        {unreadTotal > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{display}</Text>
+          </View>
+        ) : null}
+      </View>
+      {isActive ? (
+        <Text
+          style={{ color, fontSize: 12, textAlign: "center", flexWrap: "wrap" }}
+        >
+          {label}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const TabLayout = () => {
   const { colors, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const pathname = usePathname(); // Get current active route
   const { currentUser } = useAuth(); // Get user state from AuthContext
+  const { unreadCounts } = useChat();
   const router = useRouter();
   const { currentLanguage, t } = useLanguage();
+
+  const totalUnreadChats = useMemo(() => {
+    if (!currentUser?.uid || !unreadCounts) return 0;
+    return Object.values(unreadCounts).reduce((sum, n) => sum + (Number(n) || 0), 0);
+  }, [currentUser?.uid, unreadCounts]);
 
   const [tabLabels, setTabLabels] = useState({
     home: "Home",
@@ -86,17 +121,11 @@ const TabLayout = () => {
             title: tabLabels.chat,
             headerShown: false,
             tabBarIcon: ({ color }) => (
-              <TabIcon
-                icon={() => (
-                  <Ionicons
-                    name="chatbubble-ellipses-outline"
-                    size={24}
-                    color={color}
-                  />
-                )}
+              <ChatTabIcon
                 color={color}
                 label={tabLabels.chat}
                 isActive={pathname === "/chat"}
+                unreadTotal={totalUnreadChats}
               />
             ),
           }}
@@ -150,5 +179,36 @@ const TabLayout = () => {
     </>
   );
 };
+
+const styles = StyleSheet.create({
+  chatTabWrap: {
+    alignItems: "center",
+    width: 70,
+  },
+  chatIconWrap: {
+    position: "relative",
+    width: 28,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badge: {
+    position: "absolute",
+    right: -10,
+    top: -6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: "#FF3B30",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+});
 
 export default TabLayout;

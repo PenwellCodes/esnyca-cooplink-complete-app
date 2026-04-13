@@ -10,8 +10,6 @@ import {
   Dimensions,
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,12 +17,14 @@ import { useStories } from "../../context/appstate/StoriesContext";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useChat } from "../../context/appstate/ChatContext";
 import { useLanguage } from "../../context/appstate/LanguageContext";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const { width } = Dimensions.get("window");
 const TOTAL_DURATION = 10000; // total duration in ms (10 seconds)
 
 const ViewStoryScreen = () => {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { storyId, userId } = useLocalSearchParams();
   const router = useRouter();
   const { stories, recordView, deleteStory } = useStories();
@@ -227,11 +227,7 @@ const ViewStoryScreen = () => {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
-    >
+    <View style={styles.container}>
       {/* Progress Bar */}
       <View style={styles.progressBarContainer}>
         <Animated.View style={[styles.progressBar, { width: progressAnim }]} />
@@ -260,14 +256,24 @@ const ViewStoryScreen = () => {
 
       {/* For story owner: show view count in center at bottom */}
       {currentUser.uid === story.userId ? (
-        <View style={styles.viewCountContainer}>
+        <View
+          style={[
+            styles.viewCountContainer,
+            { bottom: 16 + insets.bottom + keyboardHeight },
+          ]}
+        >
           <Text style={styles.viewCountText}>
             {story.views ? story.views.length : 0} {translations.views}
           </Text>
         </View>
       ) : (
         // For viewers: show reply input at bottom
-        <View style={styles.replyContainer}>
+        <View
+          style={[
+            styles.replyContainer,
+            { bottom: 16 + insets.bottom + keyboardHeight },
+          ]}
+        >
           <TextInput
             style={styles.replyInput}
             placeholder={translations.replyPlaceholder}
@@ -282,7 +288,7 @@ const ViewStoryScreen = () => {
           </TouchableOpacity>
         </View>
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 };
 
@@ -329,7 +335,6 @@ const styles = StyleSheet.create({
   },
   replyContainer: {
     position: "absolute",
-    bottom: 30,
     left: 10,
     right: 10,
     flexDirection: "row",
@@ -352,7 +357,6 @@ const styles = StyleSheet.create({
   },
   viewCountContainer: {
     position: "absolute",
-    bottom: 30,
     left: 0,
     right: 0,
     alignItems: "center",

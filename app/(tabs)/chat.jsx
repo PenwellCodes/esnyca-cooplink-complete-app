@@ -23,6 +23,19 @@ import { useLanguage } from "../../context/appstate/LanguageContext";
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
 
+function viewerHasSeenStory(story, viewerUid) {
+  if (!viewerUid || !story) return false;
+  const views = story.views;
+  if (!Array.isArray(views) || views.length === 0) return false;
+  const u = String(viewerUid).toLowerCase();
+  return views.some((v) => String(v).toLowerCase() === u);
+}
+
+function hasAnyUnviewedStory(storiesList, viewerUid) {
+  if (!viewerUid || !storiesList?.length) return true;
+  return storiesList.some((s) => !viewerHasSeenStory(s, viewerUid));
+}
+
 const ChatList = () => {
   const { colors } = useTheme();
   const router = useRouter();
@@ -228,23 +241,39 @@ const ChatList = () => {
               ? `${displayName.substring(0, 8)}...` 
               : displayName;
 
+            const showNewHighlight = hasAnyUnviewedStory(
+              stories,
+              currentUser?.uid
+            );
+
             return (
               <TouchableOpacity
                 key={userId}
                 style={styles.statusItem}
                 onPress={() => handleStoryPress(userId)}
               >
-                <LinearGradient
-                  colors={["#a8e0ff", "#8ee3f5"]}
-                  style={styles.statusBorder}
-                >
-                  <View style={styles.statusInner}>
-                    <Image
-                      source={{ uri: stories[0].imageURL }}
-                      style={styles.statusImage}
-                    />
+                {showNewHighlight ? (
+                  <LinearGradient
+                    colors={["#a8e0ff", "#8ee3f5"]}
+                    style={styles.statusBorder}
+                  >
+                    <View style={styles.statusInner}>
+                      <Image
+                        source={{ uri: stories[0].imageURL }}
+                        style={styles.statusImage}
+                      />
+                    </View>
+                  </LinearGradient>
+                ) : (
+                  <View style={[styles.statusBorder, styles.statusSeenRing]}>
+                    <View style={styles.statusInner}>
+                      <Image
+                        source={{ uri: stories[0].imageURL }}
+                        style={styles.statusImage}
+                      />
+                    </View>
                   </View>
-                </LinearGradient>
+                )}
                 <Text style={[styles.menuText, typography.small]}>
                   {shortName}
                 </Text>
@@ -381,6 +410,9 @@ const styles = StyleSheet.create({
     padding: 2,
     alignItems: "center",
     justifyContent: "center",
+  },
+  statusSeenRing: {
+    backgroundColor: "#e2e8f0",
   },
   statusInner: {
     width: 56,

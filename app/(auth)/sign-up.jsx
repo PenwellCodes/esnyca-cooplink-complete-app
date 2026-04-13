@@ -21,6 +21,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { useAuth } from "../../context/appstate/AuthContext";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const TOP_SECTION_HEIGHT = 180;
 
@@ -31,6 +32,7 @@ const SignUp = () => {
   const { register } = useAuth();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const params = useLocalSearchParams();
   const returnTo = params.returnTo;
 
@@ -254,9 +256,10 @@ const SignUp = () => {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      enabled={Platform.OS === "ios"}
       style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+      keyboardVerticalOffset={insets.top + 8}
     >
       <View style={{ flex: 1 }}>
         <TouchableOpacity onPress={handleBack} style={styles.backIcon}>
@@ -269,12 +272,14 @@ const SignUp = () => {
             styles.scrollContainer,
             {
               paddingTop: TOP_SECTION_HEIGHT,
-              paddingBottom: Math.max(insets.bottom, 8) + 48,
+              paddingBottom:
+                Math.max(insets.bottom, 8) + 48 + keyboardHeight,
             },
           ]}
           scrollEnabled
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
         >
           {/* Heading */}
           <View style={styles.headingContainer}>

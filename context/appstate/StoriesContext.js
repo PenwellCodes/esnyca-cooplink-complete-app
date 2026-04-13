@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useState,
+} from "react";
 import { apiRequest } from "../../utils/api";
 
 const StoriesContext = createContext();
@@ -19,7 +25,17 @@ export const StoriesProvider = ({ children }) => {
 
     const loadStories = async () => {
         const activeStories = await apiRequest("/stories/active");
-        setStories((activeStories || []).map(normalizeStory));
+        setStories((prev) => {
+            const prevById = new Map((prev || []).map((s) => [s.id, s]));
+            return (activeStories || []).map((item) => {
+                const next = normalizeStory(item);
+                const old = prevById.get(next.id);
+                if (old && Array.isArray(old.views) && old.views.length > 0) {
+                    return { ...next, views: old.views };
+                }
+                return next;
+            });
+        });
     };
 
     useEffect(() => {
@@ -66,7 +82,7 @@ export const StoriesProvider = ({ children }) => {
         }
     };
 
-    const recordView = async (storyId, viewerId) => {
+    const recordView = useCallback(async (storyId, viewerId) => {
         try {
             await apiRequest(`/stories/${storyId}/views`, {
                 method: "POST",
@@ -83,7 +99,7 @@ export const StoriesProvider = ({ children }) => {
         } catch (error) {
             console.error("Error recording story view:", error);
         }
-    };
+    }, []);
 
     const deleteStory = async (storyId) => {
         try {

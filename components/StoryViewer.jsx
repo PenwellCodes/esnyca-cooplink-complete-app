@@ -9,11 +9,11 @@ import {
   Dimensions,
   Text,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useAuth } from '../context/appstate/AuthContext';
 import { useStories } from '../context/appstate/StoriesContext';
 
@@ -21,8 +21,10 @@ const { width } = Dimensions.get('window');
 const STORY_DURATION = 5000;
 
 const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
+  const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { currentUser } = useAuth();
-  const { deleteStory } = useStories();
+  const { deleteStory, recordView } = useStories();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [replyText, setReplyText] = useState('');
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -37,6 +39,14 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
       progressAnim.setValue(0);
     };
   }, [currentIndex, isVisible]);
+
+  useEffect(() => {
+    if (!isVisible || !stories?.length || !currentUser?.uid) return;
+    const s = stories[currentIndex];
+    if (s?.id && s.userId && s.userId !== currentUser.uid) {
+      recordView(s.id, currentUser.uid);
+    }
+  }, [isVisible, currentIndex, stories, currentUser?.uid, recordView]);
 
   const startProgress = () => {
     progressAnim.setValue(0);
@@ -113,11 +123,8 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
 
   return (
     <Modal visible={isVisible} animationType="fade" transparent={false}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <View style={styles.progressContainer}>
+      <View style={styles.container}>
+        <View style={[styles.progressContainer, { top: Math.max(insets.top, 12) + 44 }]}>
           {stories.map((_, index) => (
             <View key={index} style={styles.progressBar}>
               <Animated.View
@@ -136,11 +143,18 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+        <TouchableOpacity style={[styles.closeButton, { top: Math.max(insets.top, 12) + 8 }]} onPress={onClose}>
           <Ionicons name="close" size={28} color="white" />
         </TouchableOpacity>
 
-        <View style={styles.contentWrapper}>
+        <View
+          style={[
+            styles.contentWrapper,
+            stories[currentIndex]?.userId !== currentUser?.uid && {
+              paddingBottom: 40,
+            },
+          ]}
+        >
           <TouchableOpacity 
             activeOpacity={1}
             onPress={togglePause}
@@ -185,7 +199,15 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
 
         {/* Only show reply container if user is not the story owner */}
         {stories[currentIndex]?.userId !== currentUser?.uid && (
-          <View style={styles.replyContainer}>
+          <View
+            style={[
+              styles.replyContainer,
+              {
+                bottom:
+                  keyboardHeight + Math.max(insets.bottom, 12),
+              },
+            ]}
+          >
             <TextInput
               style={styles.replyInput}
               placeholder="Reply to story..."
@@ -203,7 +225,7 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
             </TouchableOpacity>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 };
@@ -215,14 +237,12 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 40,
     right: 20,
     zIndex: 2,
   },
   progressContainer: {
     flexDirection: 'row',
     position: 'absolute',
-    top: 50,
     left: 10,
     right: 10,
     zIndex: 1,
@@ -283,10 +303,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   replyContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    zIndex: 20,
   },
   replyInput: {
     flex: 1,

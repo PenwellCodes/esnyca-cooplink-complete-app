@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../context/appstate/ChatContext";
@@ -24,6 +23,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
+import { useTheme } from "react-native-paper";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -50,6 +51,7 @@ const getGradientForUser = (uid) => {
 };
 
 const ChatScreen = () => {
+  const { colors } = useTheme();
   const params = useLocalSearchParams();
   // For group chats, a "group" param is provided; for individual chats, a "user" param is provided.
   const group = params.group ? JSON.parse(params.group) : null;
@@ -78,6 +80,12 @@ const ChatScreen = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
+  const kbOffset = Platform.OS === "ios" ? keyboardHeight : 0;
+  const inputBarReserve =
+    56 +
+    Math.max(insets.bottom, 8) +
+    (Platform.OS === "android" ? keyboardHeight : kbOffset);
   const { currentLanguage, t } = useLanguage();
 
   const [translations, setTranslations] = useState({
@@ -134,6 +142,14 @@ const ChatScreen = () => {
   useEffect(() => {
     markMessagesAsRead(chatId, messages);
   }, [messages]);
+
+  useEffect(() => {
+    if (keyboardHeight <= 0) return;
+    const timer = setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [keyboardHeight]);
 
   // Send a text message.
   const handleSendMessage = async () => {
@@ -417,11 +433,7 @@ const ChatScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
       <View style={styles.header}>
         <Image
@@ -432,18 +444,24 @@ const ChatScreen = () => {
       </View>
 
       {messages.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <View
+          style={[
+            styles.emptyContainer,
+            { paddingBottom: inputBarReserve },
+          ]}
+        >
           <Text style={styles.emptyText}>{translations.startConversation}</Text>
         </View>
       ) : (
         <FlatList
           ref={flatListRef}
+          style={{ flex: 1 }}
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={{
             padding: 10,
-            paddingBottom: 8 + Math.max(insets.bottom, 4) + 40,
+            paddingBottom: 16 + inputBarReserve,
           }}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
         />
@@ -458,7 +476,19 @@ const ChatScreen = () => {
       )}
 
       {/* Input Section */}
-      <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 4) }]}>
+      <View
+        style={[
+          styles.inputContainer,
+          {
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: kbOffset,
+            paddingBottom: Math.max(insets.bottom, 8),
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
         <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
           <Ionicons name="image-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
@@ -467,13 +497,17 @@ const ChatScreen = () => {
           placeholder={translations.typeMessage}
           value={messageText}
           onChangeText={setMessageText}
-          style={styles.input}
+          style={[
+            styles.input,
+            { color: colors.onSurface, borderColor: colors.outline },
+          ]}
+          placeholderTextColor={colors.onSurfaceVariant}
         />
         <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
           <Ionicons name="send" size={24} color="#007AFF" />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 };
 
