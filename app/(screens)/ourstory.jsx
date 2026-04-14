@@ -8,12 +8,9 @@ import {
   FlatList,
   Linking,
 } from "react-native";
-import { Appbar, useTheme, Portal, Modal } from "react-native-paper";
+import { useTheme, Portal, Modal } from "react-native-paper";
 import { typography } from "../../constants";
-import { useRouter } from "expo-router";
-import { MaterialIcons } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
-import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
 

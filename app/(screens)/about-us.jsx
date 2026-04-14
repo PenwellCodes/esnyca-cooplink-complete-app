@@ -8,18 +8,21 @@ import {
   FlatList,
   Linking,
 } from "react-native";
-import { Appbar, useTheme, Portal, Modal } from "react-native-paper";
+import { useTheme, Portal, Modal } from "react-native-paper";
 import { typography } from "../../constants";
-import { useRouter } from "expo-router";
-import { MaterialIcons } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
-import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
 
 const aboutus = () => {
   const { colors } = useTheme();
   const { currentLanguage, t } = useLanguage();
+  const HARD_CODED_MISSION =
+    "To empower youth cooperatives in Eswatini through inclusive support, capacity building, and strategic partnerships that drive sustainable economic growth.";
+  const HARD_CODED_VISION =
+    "To be the leading platform that connects, strengthens, and transforms youth cooperatives into resilient and innovative enterprises.";
+  const HARD_CODED_STORY =
+    "ESNYCA was established to support and unify youth cooperatives by providing guidance, market access, and opportunities for collaboration. Through this platform, cooperatives can showcase their work, connect with partners, and grow their impact in communities.";
 
   const [team, setTeam] = useState([]);
   const [mission, setMission] = useState("");
@@ -49,15 +52,11 @@ const aboutus = () => {
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Fetch team + mission/vision + story from backend
+  // Fetch team from backend.
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [teamRaw, missionDoc, storyDoc] = await Promise.all([
-          apiRequest("/team-members"),
-          apiRequest("/mission-vision"),
-          apiRequest("/our-story"),
-        ]);
+        const teamRaw = await apiRequest("/team-members");
 
         const teamData = (teamRaw || []).map((item) => ({
           id: item.Id || item.id,
@@ -78,38 +77,21 @@ const aboutus = () => {
           }))
         );
         setTeam(localizedTeam);
-
-        const rawMission =
-          missionDoc.mission ||
-            missionDoc.Mission ||
-            missionDoc.missionText ||
-            missionDoc.description ||
-            "";
-        const rawVision =
-          missionDoc.vision ||
-            missionDoc.Vision ||
-            missionDoc.visionText ||
-            missionDoc.descriptionVision ||
-            "";
-        setMission(await t(rawMission));
-        setVision(await t(rawVision));
-
-        const rawStory =
-          storyDoc.story ||
-            storyDoc.Story ||
-            storyDoc["Our Story"] ||
-            storyDoc.ourStory ||
-            storyDoc.ourstory ||
-            storyDoc.description ||
-            storyDoc.text ||
-            "";
-        setOurStory(await t(rawStory));
       } catch (error) {
-        console.error("Error fetching meetourteam/mission/ourstory: ", error);
+        console.error("Error fetching meetourteam: ", error);
       }
     };
 
     fetchData();
+  }, [currentLanguage, t]);
+
+  useEffect(() => {
+    const setHardcodedContent = async () => {
+      setMission(await t(HARD_CODED_MISSION));
+      setVision(await t(HARD_CODED_VISION));
+      setOurStory(await t(HARD_CODED_STORY));
+    };
+    setHardcodedContent();
   }, [currentLanguage, t]);
 
   const openDrawer = (partner) => {
@@ -130,27 +112,27 @@ const aboutus = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.error }]}>
+        <Text style={[styles.sectionTitle, { color: "#000000" }]}>
           {translations.missionVision}
         </Text>
         {mission ? (
-          <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
+          <Text style={[styles.sectionBody, { color: "#000000" }]}>
             {mission}
           </Text>
         ) : null}
         {vision ? (
-          <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
+          <Text style={[styles.sectionBody, { color: "#000000" }]}>
             {vision}
           </Text>
         ) : null}
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.error }]}>
+        <Text style={[styles.sectionTitle, { color: "#000000" }]}>
           {translations.ourStory}
         </Text>
         {ourStory ? (
-          <Text style={[styles.sectionBody, { color: colors.tertiary }]}>
+          <Text style={[styles.sectionBody, { color: "#000000" }]}>
             {ourStory}
           </Text>
         ) : null}
@@ -161,7 +143,7 @@ const aboutus = () => {
         style={[
           styles.sectionTitle,
           styles.teamHeader,
-          { color: colors.error },
+          { color: "#000000" },
         ]}
       >
         {translations.meetTeam}
@@ -176,7 +158,7 @@ const aboutus = () => {
             style={styles.menuItemContainer}
             onPress={() => openDrawer(item)}
           >
-            <View style={[styles.menuItem, { borderColor: colors.error }]}>
+            <View style={[styles.menuItem, { borderColor: "#000000" }]}>
               <Image
                 source={{ uri: item.image }}
                 style={styles.partnerImage}
@@ -188,7 +170,7 @@ const aboutus = () => {
                 styles.menuText,
                 typography.robotoMedium,
                 typography.small,
-                { color: colors.tertiary },
+                { color: "#000000" },
               ]}
             >
               {item.name || item.title}
@@ -212,18 +194,18 @@ const aboutus = () => {
             },
           ]}
         >
-          <Text style={[styles.drawerHeading, { color: colors.error }]}>
+          <Text style={[styles.drawerHeading, { color: "#000000" }]}>
             {translations.moreInformation}
           </Text>
           {selectedPartner && (
             <>
-              <Text style={[styles.drawerTitle, { color: colors.error }]}>
+              <Text style={[styles.drawerTitle, { color: "#000000" }]}>
                 {selectedPartner.name || selectedPartner.title}
               </Text>
-              <Text style={[styles.drawerSubTitle, { color: colors.tertiary }]}>
+              <Text style={[styles.drawerSubTitle, { color: "#000000" }]}>
                 {selectedPartner.title}
               </Text>
-              <Text style={[styles.drawerDescription, { color: colors.error }]}>
+              <Text style={[styles.drawerDescription, { color: "#000000" }]}>
                 {selectedPartner.description || selectedPartner.bio}
               </Text>
               {Array.isArray(selectedPartner.socialmedia) &&
@@ -236,10 +218,10 @@ const aboutus = () => {
                     <FontAwesome
                       name="facebook"
                       size={24}
-                      color={colors.tertiary}
+                      color="#000000"
                     />
                     <Text
-                      style={[styles.facebookText, { color: colors.tertiary }]}
+                      style={[styles.facebookText, { color: "#000000" }]}
                     >
                       {translations.socialLink}
                     </Text>

@@ -11,6 +11,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "react-native-paper";
@@ -25,6 +26,7 @@ import { apiRequest } from "../../utils/api";
 
 const Home = () => {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { colors } = useTheme();
   const { t } = useLanguage();
   const router = useRouter();
@@ -33,11 +35,8 @@ const Home = () => {
   const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
   const [searchQuery, setSearchQuery] = useState("");
   const [hasUnreadNews, setHasUnreadNews] = useState(false);
-  const [newsHeadlines, setNewsHeadlines] = useState([
-    "Welcome to ESNYCA",
-    "Stay updated with the latest news",
-    "Connecting cooperatives together",
-  ]); // Default headlines until news is loaded
+  const [newsHeadlines, setNewsHeadlines] = useState([]);
+  const [newsItems, setNewsItems] = useState([]);
 
   const [translations, setTranslations] = useState({
     services: "Services",
@@ -100,11 +99,14 @@ const Home = () => {
       try {
         const lastReadTime =
           (await AsyncStorage.getItem("lastNewsReadTime")) || "0";
-        const publishedNews = await apiRequest("/news?published=true");
+        let fetchedNews = await apiRequest("/news?published=true");
+        if (!Array.isArray(fetchedNews) || fetchedNews.length === 0) {
+          fetchedNews = await apiRequest("/news");
+        }
 
-        if (publishedNews.length > 0) {
+        if (fetchedNews.length > 0) {
           // Extract titles from published news
-          const headlines = publishedNews
+          const headlines = fetchedNews
             .map((news) => news.Title || news.title)
             .filter((title) => title && title.trim() !== ""); // Filter out empty titles
 
@@ -112,8 +114,15 @@ const Home = () => {
             setNewsHeadlines(headlines);
           }
 
+          const bannerItems = fetchedNews.map((news) => ({
+            title: news.Title || news.title || "ESNYCA News",
+            imageUrl: news.ImageUrl || news.imageUrl || null,
+            createdAt: news.CreatedAt || news.createdAt || null,
+          }));
+          setNewsItems(bannerItems);
+
           // Check for unread news using the first published item
-          const latestNews = publishedNews[0];
+          const latestNews = fetchedNews[0];
           const newsDate = latestNews.CreatedAt || latestNews.createdAt;
 
           let newsTimestamp = 0;
@@ -173,6 +182,19 @@ const Home = () => {
     },
   ];
 
+  const horizontalPadding = 16 * 2;
+  const cardGap = 12;
+  const cardsPerRow = 3;
+  const cardSize = Math.max(
+    78,
+    Math.floor((width - horizontalPadding - cardGap * (cardsPerRow - 1)) / cardsPerRow)
+  );
+  const bannerItem = newsItems[headlineIndex % Math.max(newsItems.length, 1)];
+  const bannerImage =
+    bannerItem?.imageUrl ||
+    newsItems.find((item) => item.imageUrl)?.imageUrl ||
+    "https://img.freepik.com/free-photo/abstract-sale-busioness-background-banner-design-multipurpose_1340-16799.jpg";
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
 
@@ -213,26 +235,25 @@ const Home = () => {
       </Text>
 
       {/* Banner */}
-      <View style={styles.bannerContainer}>
+      <TouchableOpacity style={styles.bannerContainer} onPress={handleNewsPress} activeOpacity={0.9}>
         <Image
-          source={{
-            uri: "https://img.freepik.com/free-photo/abstract-sale-busioness-background-banner-design-multipurpose_1340-16799.jpg",
-          }}
+          source={{ uri: bannerImage }}
           style={styles.bannerImage}
         />
+        <View style={styles.bannerOverlay} />
         <Animated.Text
           style={[
             styles.bannerText,
             typography.robotoBold,
             typography.subtitle,
-            { color: colors.primary, opacity: textOpacity },
+            { color: "#ffff", opacity: textOpacity, fontWeight: "bolder" },
           ]}
         >
           {newsHeadlines[headlineIndex] ||
             newsHeadlines[0] ||
-            "Welcome to ESNYCA"}
+            "No news available"}
         </Animated.Text>
-      </View>
+      </TouchableOpacity>
       {/* Updated Search Box */}
       <View style={[styles.searchContainer, { borderColor: colors.outline }]}>
         <TextInput
@@ -250,20 +271,26 @@ const Home = () => {
       </View>
 
       {/* Menu Items */}
-      <FlatList
-        data={menuItems}
-        numColumns={3}
-        keyExtractor={(item) => item.name}
-        contentContainerStyle={styles.flatListContainer}
-        renderItem={({ item }) => (
+      <View style={styles.gridContainer}>
+        {menuItems.map((item) => (
           <TouchableOpacity
+            key={item.name}
             style={styles.menuItemContainer}
             onPress={item.onPress || (() => router.push(item.route))}
           >
-            <View style={[styles.menuItem, { borderColor: colors.error }]}>
+            <View
+              style={[
+                styles.menuItem,
+                {
+                  borderColor: "#000000",
+                  width: cardSize,
+                  height: cardSize,
+                },
+              ]}
+            >
               <MaterialIcons
                 name={item.icon}
-                size={40}
+                size={Math.max(30, Math.floor(cardSize * 0.42))}
                 color={colors.primary}
               />
               {item.hasNotification && (
@@ -288,8 +315,8 @@ const Home = () => {
               {item.name}
             </Text>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </View>
     </KeyboardAvoidingView>
   );
 };
@@ -315,6 +342,10 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 150,
   },
+  bannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
   bannerText: {
     position: "absolute",
     left: 10,
@@ -339,19 +370,19 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
   },
-  flatListContainer: {
-    flexGrow: 1,
-    paddingBottom: 8,
+  gridContainer: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignContent: "space-between",
+    paddingBottom: 4,
   },
   menuItemContainer: {
-    flex: 1,
     alignItems: "center",
-    marginVertical: 8,
-    marginHorizontal: 6,
+    marginBottom: 10,
   },
   menuItem: {
-    width: 90,
-    height: 90,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
