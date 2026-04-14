@@ -11,6 +11,8 @@ import { useAuth } from "./AuthContext";
 import Toast from "react-native-toast-message";
 import { apiRequest } from "../../utils/api";
 
+const CHAT_SYNC_TIMEOUT_MS = 450000;
+
 function openChatFromKey(chatKey, currentUserUid, userMap) {
     try {
         const parts = String(chatKey).split("_");
@@ -114,7 +116,9 @@ export const ChatProvider = ({ children }) => {
         if (!currentUser?.uid) return;
         const userUid = currentUser.uid;
 
-        const allUsers = await apiRequest("/users");
+        const allUsers = await apiRequest("/users", {
+            timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+        });
         const normalizedUsers = (allUsers || []).map((item) => ({
             id: item.Id || item.id,
             uid: item.Id || item.id,
@@ -138,14 +142,18 @@ export const ChatProvider = ({ children }) => {
         });
         setUserMap(nextUserMap);
 
-        const chats = await apiRequest(`/chats?userId=${encodeURIComponent(userUid)}`);
+        const chats = await apiRequest(`/chats?userId=${encodeURIComponent(userUid)}`, {
+            timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+        });
         const nextConversations = {};
         const nextLastMessages = {};
         const nextUnread = {};
         const nextChatIdMap = {};
 
         for (const chat of chats || []) {
-            const participants = await apiRequest(`/chats/${chat.Id}/participants`);
+            const participants = await apiRequest(`/chats/${chat.Id}/participants`, {
+                timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+            });
             const participantIds = (participants || []).map((p) => p.UserId);
             let chatKey = chat.Id;
 
@@ -157,7 +165,9 @@ export const ChatProvider = ({ children }) => {
 
             nextChatIdMap[chatKey] = chat.Id;
 
-            const messagesRaw = await apiRequest(`/chats/${chat.Id}/messages?limit=200`);
+            const messagesRaw = await apiRequest(`/chats/${chat.Id}/messages?limit=200`, {
+                timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+            });
             const messages = (messagesRaw || [])
                 .map((m) => ({
                     id: m.Id,
@@ -258,7 +268,7 @@ export const ChatProvider = ({ children }) => {
             for (const message of unreadMessages) {
                 await apiRequest(
                     `/chats/${actualChatId}/messages/${message.id}/read`,
-                    { method: "POST" },
+                    { method: "POST", timeoutMs: CHAT_SYNC_TIMEOUT_MS },
                 );
             }
             updateUnreadCount(chatId, messages.map((msg) =>
@@ -295,6 +305,7 @@ export const ChatProvider = ({ children }) => {
 
         const created = await apiRequest("/chats", {
             method: "POST",
+            timeoutMs: CHAT_SYNC_TIMEOUT_MS,
             body: {
                 isGroup: false,
                 participantUserIds: [currentUser?.uid, otherUserId],
@@ -323,6 +334,7 @@ export const ChatProvider = ({ children }) => {
         }
         const created = await apiRequest(`/chats/${resolved}/messages`, {
             method: "POST",
+            timeoutMs: CHAT_SYNC_TIMEOUT_MS,
             body: {
                 senderUserId: currentUser?.uid,
                 receiverUserId: receiverUserId || null,

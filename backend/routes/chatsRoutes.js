@@ -76,7 +76,7 @@ router.get('/', async (req, res) => {
     const pool = await getPool();
     const request = pool.request();
     let query = `
-      SELECT c.Id, c.IsGroup, c.CreatedAt
+      SELECT DISTINCT c.Id, c.IsGroup, c.CreatedAt
       FROM dbo.Chats c
     `;
     if (userId) {
