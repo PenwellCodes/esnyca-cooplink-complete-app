@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }) => {
     const hydrate = async () => {
       const savedUser = await AsyncStorage.getItem("user");
       if (savedUser) {
-        setCurrentUser(JSON.parse(savedUser));
+        setCurrentUser(normalizeUser(JSON.parse(savedUser)));
       } else {
         setCurrentUser(null);
       }
@@ -29,8 +29,9 @@ export const AuthProvider = ({ children }) => {
     if (!rawUser) return null;
     return {
       ...rawUser,
-      uid: rawUser.uid || rawUser.Id || rawUser.id,
-      id: rawUser.id || rawUser.Id || rawUser.uid,
+      // Prefer SQL GUID ids for API calls/chats.
+      uid: rawUser.Id || rawUser.id || rawUser.uid,
+      id: rawUser.Id || rawUser.id || rawUser.uid,
       displayName: rawUser.displayName || rawUser.DisplayName || "",
       email: rawUser.email || rawUser.Email || "",
       role: rawUser.role || rawUser.Role || "individual",

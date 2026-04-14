@@ -58,7 +58,11 @@ const ChatScreen = () => {
   const [selectedDocuments, setSelectedDocuments] = useState([]);
 
   const contextMessages = chatId ? conversations[chatId] || [] : [];
-  const messages = [...contextMessages, ...localMessages];
+  const contextMessageIds = new Set(contextMessages.map((m) => String(m.id)));
+  const dedupedLocalMessages = localMessages.filter(
+    (m) => !contextMessageIds.has(String(m.id))
+  );
+  const messages = [...contextMessages, ...dedupedLocalMessages];
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
@@ -151,30 +155,54 @@ const ChatScreen = () => {
       ? JSON.parse(params.storyPreview)
       : null;
 
+    const tempId = Date.now().toString();
     const tempMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       sender: currentUserUid,
       receiver: targetUserUid,
       text: messageText,
       type: storyPreview ? "story_reply" : "text",
       storyPreview,
       timestamp: new Date(),
-      status: "sent",
+      status: "sending",
     };
     setLocalMessages((prev) => [...prev, tempMessage]);
     flatListRef.current?.scrollToEnd({ animated: true });
 
     try {
-      await sendChatMessage({
+      const created = await sendChatMessage({
         chatKey: chatId,
         receiverUserId: targetUserUid,
         text: messageText,
         type: storyPreview ? "story_reply" : "text",
       });
       setMessageText("");
-      setLocalMessages([]);
+      if (created?.Id || created?.id) {
+        setLocalMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...m,
+                  id: created.Id || created.id,
+                  _chatId: created.ChatId || created.chatId,
+                  timestamp: created.CreatedAt
+                    ? { toDate: () => new Date(created.CreatedAt) }
+                    : m.timestamp,
+                  status: "sent",
+                }
+              : m
+          )
+        );
+      }
     } catch (error) {
       console.error("Error sending message:", error);
+      setLocalMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, status: "failed" } : m))
+      );
+      Alert.alert(
+        translations.error,
+        error?.message || "Failed to send message. Please try again."
+      );
     }
   };
 
@@ -229,8 +257,9 @@ const ChatScreen = () => {
     if (!chatId || !currentUserUid || !targetUserUid) return;
     if (!file) return;
 
+    const tempId = Date.now().toString();
     const tempMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       sender: currentUserUid,
       receiver: targetUserUid,
       fileUrl: file.uri,
@@ -246,14 +275,32 @@ const ChatScreen = () => {
 
     try {
       const downloadURL = await uploadFile(file.uri, file.name);
-      await sendChatMessage({
+      const created = await sendChatMessage({
         chatKey: chatId,
         receiverUserId: targetUserUid,
         type: "file",
         fileUrl: downloadURL,
         fileName: file.name,
       });
-      setLocalMessages([]);
+      if (created?.Id || created?.id) {
+        setLocalMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...m,
+                  id: created.Id || created.id,
+                  _chatId: created.ChatId || created.chatId,
+                  fileUrl: created.FileUrl || m.fileUrl,
+                  fileName: created.FileName || m.fileName,
+                  timestamp: created.CreatedAt
+                    ? { toDate: () => new Date(created.CreatedAt) }
+                    : m.timestamp,
+                  status: "sent",
+                }
+              : m
+          )
+        );
+      }
     } catch (error) {
       console.error("Error sending document:", error);
       Alert.alert(translations.error, translations.failedSendDocument);
@@ -268,8 +315,9 @@ const ChatScreen = () => {
     const uri = await pickImage();
     if (!uri) return;
 
+    const tempId = Date.now().toString();
     const tempMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       sender: currentUserUid,
       receiver: targetUserUid,
       fileUrl: uri,
@@ -285,14 +333,32 @@ const ChatScreen = () => {
     try {
       const fileName = uri.split("/").pop();
       const downloadURL = await uploadFile(uri, fileName);
-      await sendChatMessage({
+      const created = await sendChatMessage({
         chatKey: chatId,
         receiverUserId: targetUserUid,
         type: "image",
         fileUrl: downloadURL,
         fileName,
       });
-      setLocalMessages([]);
+      if (created?.Id || created?.id) {
+        setLocalMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...m,
+                  id: created.Id || created.id,
+                  _chatId: created.ChatId || created.chatId,
+                  fileUrl: created.FileUrl || m.fileUrl,
+                  fileName: created.FileName || m.fileName,
+                  timestamp: created.CreatedAt
+                    ? { toDate: () => new Date(created.CreatedAt) }
+                    : m.timestamp,
+                  status: "sent",
+                }
+              : m
+          )
+        );
+      }
       setSelectedImage(null);
     } catch (error) {
       console.error("Error sending image:", error);
