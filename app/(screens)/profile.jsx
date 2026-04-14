@@ -38,6 +38,9 @@ const Profile = () => {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [locationName, setLocationName] = useState('');
   const [mapType, setMapType] = useState('standard');
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const navigation = useNavigation();
 
   const [translations, setTranslations] = useState({
@@ -57,6 +60,14 @@ const Profile = () => {
     enterCooperativeName: "Enter cooperative name",
     enterPhoneNumber: "Enter phone number",
     enterProductService: "Enter product/service",
+    email: "Email",
+    enterEmail: "Enter email",
+    currentPassword: "Current Password",
+    enterCurrentPassword: "Enter current password",
+    newPassword: "New Password",
+    enterNewPassword: "Enter new password",
+    confirmNewPassword: "Confirm New Password",
+    reEnterNewPassword: "Re-enter new password",
     permissionDeniedTitle: "Permission denied",
     permissionDeniedBody: "Location permission is required",
     error: "Error",
@@ -67,6 +78,8 @@ const Profile = () => {
     failedUploadProfilePhoto: "Failed to upload profile photo",
     profileUpdatedSuccessfully: "Profile updated successfully",
     failedUpdateProfile: "Failed to update profile. Please check your input data.",
+    passwordFieldsRequired: "Current password and new password are required to change password.",
+    passwordMismatch: "New password and confirm password do not match.",
   });
 
   useEffect(() => {
@@ -88,6 +101,14 @@ const Profile = () => {
         enterCooperativeName: await t("Enter cooperative name"),
         enterPhoneNumber: await t("Enter phone number"),
         enterProductService: await t("Enter product/service"),
+        email: await t("Email"),
+        enterEmail: await t("Enter email"),
+        currentPassword: await t("Current Password"),
+        enterCurrentPassword: await t("Enter current password"),
+        newPassword: await t("New Password"),
+        enterNewPassword: await t("Enter new password"),
+        confirmNewPassword: await t("Confirm New Password"),
+        reEnterNewPassword: await t("Re-enter new password"),
         permissionDeniedTitle: await t("Permission denied"),
         permissionDeniedBody: await t("Location permission is required"),
         error: await t("Error"),
@@ -101,6 +122,12 @@ const Profile = () => {
         profileUpdatedSuccessfully: await t("Profile updated successfully"),
         failedUpdateProfile: await t(
           "Failed to update profile. Please check your input data."
+        ),
+        passwordFieldsRequired: await t(
+          "Current password and new password are required to change password."
+        ),
+        passwordMismatch: await t(
+          "New password and confirm password do not match."
         ),
       });
     };
@@ -181,7 +208,12 @@ const Profile = () => {
           role: profile.Role || profile.role || currentUser.role || "individual",
           phoneNumber: profile.PhoneNumber || profile.phoneNumber || "",
           content: profile.Content || profile.content || "",
-          profilePic: profile.ProfilePicUrl || profile.profilePic || "",
+          profilePic:
+            profile.ProfilePicUrl ||
+            profile.profilePicUrl ||
+            profile.ProfilePic ||
+            profile.profilePic ||
+            "",
           locationLat: profile.LocationLat ?? profile.locationLat ?? null,
           locationLng: profile.LocationLng ?? profile.locationLng ?? null,
         });
@@ -202,7 +234,7 @@ const Profile = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: 0.6,
       });
 
       if (!result.canceled && result.assets && result.assets[0].uri) {
@@ -232,6 +264,7 @@ const Profile = () => {
       const uploadResult = await apiRequest("/upload", {
         method: "POST",
         body: formData,
+        timeoutMs: 60000,
       });
       return uploadResult?.imageUrl || null;
     } catch (error) {
@@ -251,6 +284,7 @@ const Profile = () => {
       if (userData.displayName) updatedFields.displayName = userData.displayName;
       if (userData.phoneNumber) updatedFields.phoneNumber = userData.phoneNumber;
       if (userData.content) updatedFields.content = userData.content; // Add content field
+      if (userData.email) updatedFields.email = userData.email.trim().toLowerCase();
       if (userData.location?.latitude) {
         updatedFields.locationLat = userData.location.latitude;
       }
@@ -260,21 +294,57 @@ const Profile = () => {
       
       if (newPhotoUri) {
         const profilePic = await uploadProfilePhoto();
-        if (profilePic) {
-          updatedFields.profilePicUrl = profilePic;
+        if (!profilePic) {
+          throw new Error("Image upload failed");
         }
+        updatedFields.profilePicUrl = profilePic;
       }
 
-      await apiRequest(`/users/${userData.id}`, {
+      const hasAnyPasswordInput =
+        currentPassword.trim() || newPassword.trim() || confirmNewPassword.trim();
+      if (hasAnyPasswordInput) {
+        if (!currentPassword.trim() || !newPassword.trim()) {
+          Alert.alert(translations.error, translations.passwordFieldsRequired);
+          setIsLoading(false);
+          return;
+        }
+        if (newPassword !== confirmNewPassword) {
+          Alert.alert(translations.error, translations.passwordMismatch);
+          setIsLoading(false);
+          return;
+        }
+        updatedFields.currentPassword = currentPassword;
+        updatedFields.password = newPassword;
+      }
+
+      const updatedUser = await apiRequest(`/users/${userData.id}`, {
         method: "PUT",
         body: updatedFields,
       });
+
+      setUserData((prev) => ({
+        ...prev,
+        email: updatedUser?.Email || updatedUser?.email || prev?.email || "",
+        profilePic:
+          updatedUser?.ProfilePicUrl ||
+          updatedUser?.profilePicUrl ||
+          updatedFields.profilePicUrl ||
+          prev?.profilePic ||
+          "",
+      }));
+      setNewPhotoUri(null);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
 
       Alert.alert(translations.success, translations.profileUpdatedSuccessfully);
       navigation.goBack();
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert(translations.error, translations.failedUpdateProfile);
+      Alert.alert(
+        translations.error,
+        error?.message || translations.failedUpdateProfile
+      );
     } finally {
       setIsLoading(false);
     }
@@ -292,9 +362,9 @@ const Profile = () => {
   return (
     <KeyboardAvoidingView
       style={[styles.keyboardRoot, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      enabled={Platform.OS === 'ios'}
-      keyboardVerticalOffset={insets.top + 56}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      enabled
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 24}
     >
       <ScrollView
         style={[styles.scrollContainer, { backgroundColor: colors.background }]}
@@ -330,6 +400,21 @@ const Profile = () => {
         <Text style={[styles.photoText, { color: colors.primary }]}>
           {translations.tapToChangePhoto}
         </Text>
+
+        <View style={styles.inputContainer}>
+          <Text style={[styles.inputLabel, { color: colors.primary }]}>
+            {translations.email}
+          </Text>
+          <TextInput
+            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+            placeholder={translations.enterEmail}
+            placeholderTextColor={colors.onSurfaceVariant}
+            value={userData?.email || ''}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={(text) => setUserData(prev => ({ ...prev, email: text }))}
+          />
+        </View>
 
         {currentUser?.role === 'individual' ? (
           <>
@@ -428,6 +513,51 @@ const Profile = () => {
             )}
           </>
         )}
+
+        <View style={styles.inputContainer}>
+          <Text style={[styles.inputLabel, { color: colors.primary }]}>
+            {translations.currentPassword}
+          </Text>
+          <TextInput
+            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+            placeholder={translations.enterCurrentPassword}
+            placeholderTextColor={colors.onSurfaceVariant}
+            value={currentPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            onChangeText={setCurrentPassword}
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={[styles.inputLabel, { color: colors.primary }]}>
+            {translations.newPassword}
+          </Text>
+          <TextInput
+            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+            placeholder={translations.enterNewPassword}
+            placeholderTextColor={colors.onSurfaceVariant}
+            value={newPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            onChangeText={setNewPassword}
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={[styles.inputLabel, { color: colors.primary }]}>
+            {translations.confirmNewPassword}
+          </Text>
+          <TextInput
+            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+            placeholder={translations.reEnterNewPassword}
+            placeholderTextColor={colors.onSurfaceVariant}
+            value={confirmNewPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            onChangeText={setConfirmNewPassword}
+          />
+        </View>
 
         <TouchableOpacity 
           style={[styles.updateButton, { backgroundColor: colors.primary, marginTop: 20 }]} 

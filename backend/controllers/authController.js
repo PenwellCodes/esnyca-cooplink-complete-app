@@ -29,12 +29,13 @@ exports.registerUser = async (req, res) => {
   }
 
   try {
+    const normalizedEmail = String(email).trim().toLowerCase();
     const pool = await getPool();
 
     const existing = await pool
       .request()
-      .input('Email', sql.NVarChar(320), email)
-      .query('SELECT TOP 1 Id FROM dbo.Users WHERE Email = @Email');
+      .input('Email', sql.NVarChar(320), normalizedEmail)
+      .query('SELECT TOP 1 Id FROM dbo.Users WHERE LOWER(Email) = LOWER(@Email)');
 
     if (existing.recordset.length > 0) {
       return res.status(409).json({ message: 'User already exists' });
@@ -47,7 +48,7 @@ exports.registerUser = async (req, res) => {
 
     const created = await pool
       .request()
-      .input('Email', sql.NVarChar(320), email)
+      .input('Email', sql.NVarChar(320), normalizedEmail)
       .input('PasswordHash', sql.NVarChar(255), passwordHash)
       .input('Role', sql.NVarChar(32), role || 'individual')
       .input('DisplayName', sql.NVarChar(120), displayName)
@@ -113,17 +114,19 @@ exports.loginUser = async (req, res) => {
   }
 
   try {
+    const normalizedEmail = String(email).trim().toLowerCase();
     const pool = await getPool();
     const result = await pool
       .request()
-      .input('Email', sql.NVarChar(320), email)
+      .input('Email', sql.NVarChar(320), normalizedEmail)
       .query(`
         SELECT TOP 1
           Id, Email, PasswordHash, Role, DisplayName, ProfilePicUrl,
           PhoneNumber, Region, RegistrationNumber, PhysicalAddress, Content,
           CompanyAddress, LocationLat, LocationLng, CreatedAt, UpdatedAt
         FROM dbo.Users
-        WHERE Email = @Email
+        WHERE LOWER(Email) = LOWER(@Email)
+        ORDER BY UpdatedAt DESC, CreatedAt DESC
       `);
 
     const user = result.recordset[0];

@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL as CONFIGURED_API_BASE_URL } from "./apiConfig";
 
 const REQUEST_TIMEOUT_MS = 15000;
+const UPLOAD_REQUEST_TIMEOUT_MS = 60000;
 
 export const API_BASE_URL = String(CONFIGURED_API_BASE_URL || "").replace(
   /\/+$/,
@@ -37,6 +38,7 @@ export async function apiRequest(path, options = {}) {
     body,
     headers: customHeaders = {},
     includeAuth = true,
+    timeoutMs,
   } = options;
 
   const headers = await buildHeaders(customHeaders, includeAuth);
@@ -49,8 +51,14 @@ export async function apiRequest(path, options = {}) {
     headers["Content-Type"] = "application/json";
   }
 
+  const resolvedTimeoutMs =
+    typeof timeoutMs === "number" && timeoutMs > 0
+      ? timeoutMs
+      : path.includes("/upload")
+      ? UPLOAD_REQUEST_TIMEOUT_MS
+      : REQUEST_TIMEOUT_MS;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), resolvedTimeoutMs);
 
   let response;
 
@@ -71,9 +79,9 @@ export async function apiRequest(path, options = {}) {
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error(
-        `⏱ Request timed out after ${
-          REQUEST_TIMEOUT_MS / 1000
-        }s. Check server/network.`
+        `⏱ Request timed out after ${Math.round(
+          resolvedTimeoutMs / 1000
+        )}s. Check server/network.`
       );
     }
 

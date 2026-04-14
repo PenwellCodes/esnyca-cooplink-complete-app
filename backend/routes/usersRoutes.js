@@ -149,6 +149,7 @@ router.put('/:id', requireSelfOrAdmin('id'), async (req, res) => {
     email,
     password,
     currentPassword,
+    newPassword,
   } = req.body || {};
 
   try {
@@ -157,19 +158,26 @@ router.put('/:id', requireSelfOrAdmin('id'), async (req, res) => {
     const isAdmin = ['admin', 'superadmin'].includes(String(req.user?.Role || '').toLowerCase());
     const isSelf = String(req.user?.Id || '') === String(id);
 
-    if (email) {
+    const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+    if (normalizedEmail) {
       const existingEmail = await pool
         .request()
-        .input('Email', sql.NVarChar(320), String(email))
+        .input('Email', sql.NVarChar(320), normalizedEmail)
         .input('Id', sql.UniqueIdentifier, id)
-        .query('SELECT TOP 1 Id FROM dbo.Users WHERE Email = @Email AND Id <> @Id');
+        .query('SELECT TOP 1 Id FROM dbo.Users WHERE LOWER(Email) = LOWER(@Email) AND Id <> @Id');
       if (existingEmail.recordset.length > 0) {
         return res.status(409).json({ message: 'Email already in use' });
       }
     }
 
     let passwordHashToSet = null;
-    if (password) {
+    const passwordToSet =
+      password !== undefined && password !== null && String(password).trim() !== ''
+        ? String(password)
+        : newPassword !== undefined && newPassword !== null && String(newPassword).trim() !== ''
+        ? String(newPassword)
+        : null;
+    if (passwordToSet) {
       if (isSelf && !isAdmin) {
         if (!currentPassword) {
           return res.status(400).json({ message: 'currentPassword is required to change your password' });
@@ -185,13 +193,13 @@ router.put('/:id', requireSelfOrAdmin('id'), async (req, res) => {
           return res.status(401).json({ message: 'Current password is incorrect' });
         }
       }
-      passwordHashToSet = await bcrypt.hash(String(password), 10);
+      passwordHashToSet = await bcrypt.hash(passwordToSet, 10);
     }
 
     const request = pool
       .request()
       .input('Id', sql.UniqueIdentifier, id)
-      .input('Email', sql.NVarChar(320), email || null)
+      .input('Email', sql.NVarChar(320), normalizedEmail || null)
       .input('PasswordHash', sql.NVarChar(255), passwordHashToSet)
       .input('Role', sql.NVarChar(32), role || null)
       .input('DisplayName', sql.NVarChar(120), displayName || null)
