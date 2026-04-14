@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -47,6 +47,8 @@ const SignIn = () => {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarStyle, setSnackbarStyle] = useState({});
+  const [inputPositions, setInputPositions] = useState({});
+  const scrollViewRef = useRef(null);
   const [translations, setTranslations] = useState({
     successSignedIn: "Successfully signed in!",
     wrongPasswordOrEmail: "Wrong password or email",
@@ -106,18 +108,32 @@ const SignIn = () => {
     setLoading(false);
   };
 
+  const handleInputLayout = (key) => (event) => {
+    const { y } = event.nativeEvent.layout;
+    setInputPositions((prev) => ({ ...prev, [key]: y }));
+  };
+
+  const scrollToInput = (key) => {
+    const y = inputPositions[key];
+    if (typeof y !== "number") return;
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    }, 100);
+  };
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      enabled={Platform.OS === "ios"}
-      keyboardVerticalOffset={insets.top + 8}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      enabled
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 24}
     >
       <TouchableOpacity onPress={handleBack} style={styles.backIcon}>
         <Ionicons name="arrow-back" size={24} color={colors.background} />
       </TouchableOpacity>
 
       <ScrollView
+        ref={scrollViewRef}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
@@ -138,30 +154,36 @@ const SignIn = () => {
         </View>
 
         <View style={styles.formContainer}>
-        <TextInput
-          mode="outlined"
-          label={translations.email}
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-          left={<TextInput.Icon icon="email" color={colors.primary} />}
-        />
+        <View onLayout={handleInputLayout("email")}>
+          <TextInput
+            mode="outlined"
+            label={translations.email}
+            value={email}
+            onChangeText={setEmail}
+            onFocus={() => scrollToInput("email")}
+            style={styles.input}
+            left={<TextInput.Icon icon="email" color={colors.primary} />}
+          />
+        </View>
 
-        <TextInput
-          mode="outlined"
-          label={translations.password}
-          secureTextEntry={hidePassword}
-          value={password}
-          onChangeText={setPassword}
-          style={styles.input}
-          left={<TextInput.Icon icon="lock" color={colors.primary} />}
-          right={
-            <TextInput.Icon
-              icon={hidePassword ? "eye-off" : "eye"}
-              onPress={() => setHidePassword((prev) => !prev)}
-            />
-          }
-        />
+        <View onLayout={handleInputLayout("password")}>
+          <TextInput
+            mode="outlined"
+            label={translations.password}
+            secureTextEntry={hidePassword}
+            value={password}
+            onChangeText={setPassword}
+            onFocus={() => scrollToInput("password")}
+            style={styles.input}
+            left={<TextInput.Icon icon="lock" color={colors.primary} />}
+            right={
+              <TextInput.Icon
+                icon={hidePassword ? "eye-off" : "eye"}
+                onPress={() => setHidePassword((prev) => !prev)}
+              />
+            }
+          />
+        </View>
 
         <TouchableOpacity onPress={() => router.push("/(auth)/reset-password")}>
           <Text style={[styles.forgotPassword, typography.small, { color: colors.primary }]}>

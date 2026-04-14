@@ -203,8 +203,7 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
             style={[
               styles.replyContainer,
               {
-                bottom:
-                  keyboardHeight + Math.max(insets.bottom, 12),
+                bottom: keyboardHeight + Math.max(insets.bottom, 12),
               },
             ]}
           >
@@ -304,13 +303,14 @@ const styles = StyleSheet.create({
   },
   replyContainer: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 8,
+    right: 8,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 12,
     backgroundColor: 'rgba(0,0,0,0.92)',
+    borderRadius: 14,
     zIndex: 20,
   },
   replyInput: {
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     borderRadius: 20,
     paddingHorizontal: 15,
-    paddingVertical: 8,
+    paddingVertical: 10,
     color: 'white',
     marginRight: 10,
   },

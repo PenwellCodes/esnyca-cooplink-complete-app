@@ -187,10 +187,7 @@ router.post('/:chatId/messages', async (req, res) => {
 
     try {
       let recipientIds = [];
-      if (chatId === 'group_swazi_cooperators') {
-        // Fallback safety if a synthetic id is passed from client.
-        recipientIds = [];
-      } else if (receiverUserId) {
+      if (receiverUserId) {
         recipientIds = [String(receiverUserId)];
       } else {
         const participants = await pool

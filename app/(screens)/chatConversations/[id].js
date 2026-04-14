@@ -38,10 +38,14 @@ const ChatScreen = () => {
   const { currentUser } = useAuth();
   const { conversations, markMessagesAsRead, setActiveChatId, sendMessage: sendChatMessage } =
     useChat();
+  const currentUserUid = currentUser?.uid || null;
+  const targetUserUid = user?.uid || null;
   const chatId =
-    currentUser.uid > user.uid
-      ? `${currentUser.uid}_${user.uid}`
-      : `${user.uid}_${currentUser.uid}`;
+    currentUserUid && targetUserUid
+      ? currentUserUid > targetUserUid
+        ? `${currentUserUid}_${targetUserUid}`
+        : `${targetUserUid}_${currentUserUid}`
+      : null;
 
   // State for text messages and local messages
   const [messageText, setMessageText] = useState(predefinedMessage || "");
@@ -53,14 +57,14 @@ const ChatScreen = () => {
 
   const [selectedDocuments, setSelectedDocuments] = useState([]);
 
-  const contextMessages = conversations[chatId] || [];
+  const contextMessages = chatId ? conversations[chatId] || [] : [];
   const messages = [...contextMessages, ...localMessages];
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
   const { currentLanguage, t } = useLanguage();
 
-  const kbOffset = Platform.OS === "ios" ? keyboardHeight : 0;
+  const kbOffset = keyboardHeight;
   const inputBarReserve =
     56 +
     Math.max(insets.bottom, 8) +
@@ -99,6 +103,7 @@ const ChatScreen = () => {
   }, [currentLanguage, t]);
 
   useEffect(() => {
+    if (!chatId) return;
     setActiveChatId(chatId);
     return () => setActiveChatId(null);
   }, [chatId, setActiveChatId]);
@@ -117,11 +122,13 @@ const ChatScreen = () => {
   }, []);
 
   useEffect(() => {
+    if (!chatId) return;
     markMessagesAsRead(chatId, messages);
-  }, [messages]);
+  }, [messages, chatId]);
 
   // Add this useEffect to mark messages as read when the chat is opened
   useEffect(() => {
+    if (!chatId) return;
     if (messages.length > 0) {
       markMessagesAsRead(chatId, messages);
     }
@@ -136,6 +143,7 @@ const ChatScreen = () => {
   }, [keyboardHeight]);
 
   const handleSendMessage = async () => {
+    if (!chatId || !currentUserUid || !targetUserUid) return;
     if (!messageText.trim()) return;
 
     // Check if there's a story preview in the params
@@ -145,8 +153,8 @@ const ChatScreen = () => {
 
     const tempMessage = {
       id: Date.now().toString(),
-      sender: currentUser.uid,
-      receiver: user.uid,
+      sender: currentUserUid,
+      receiver: targetUserUid,
       text: messageText,
       type: storyPreview ? "story_reply" : "text",
       storyPreview,
@@ -159,7 +167,7 @@ const ChatScreen = () => {
     try {
       await sendChatMessage({
         chatKey: chatId,
-        receiverUserId: user.uid,
+        receiverUserId: targetUserUid,
         text: messageText,
         type: storyPreview ? "story_reply" : "text",
       });
@@ -219,12 +227,13 @@ const ChatScreen = () => {
   };
 
   const sendDocument = async (file) => {
+    if (!chatId || !currentUserUid || !targetUserUid) return;
     if (!file) return;
 
     const tempMessage = {
       id: Date.now().toString(),
-      sender: currentUser.uid,
-      receiver: user.uid,
+      sender: currentUserUid,
+      receiver: targetUserUid,
       fileUrl: file.uri,
       fileName: file.name,
       type: "file",
@@ -240,7 +249,7 @@ const ChatScreen = () => {
       const downloadURL = await uploadFile(file.uri, file.name);
       await sendChatMessage({
         chatKey: chatId,
-        receiverUserId: user.uid,
+        receiverUserId: targetUserUid,
         type: "file",
         fileUrl: downloadURL,
         fileName: file.name,
@@ -256,13 +265,14 @@ const ChatScreen = () => {
   };
 
   const sendImage = async () => {
+    if (!chatId || !currentUserUid || !targetUserUid) return;
     const uri = await pickImage();
     if (!uri) return;
 
     const tempMessage = {
       id: Date.now().toString(),
-      sender: currentUser.uid,
-      receiver: user.uid,
+      sender: currentUserUid,
+      receiver: targetUserUid,
       fileUrl: uri,
       type: "image",
       timestamp: new Date(),
@@ -278,7 +288,7 @@ const ChatScreen = () => {
       const downloadURL = await uploadFile(uri, fileName);
       await sendChatMessage({
         chatKey: chatId,
-        receiverUserId: user.uid,
+        receiverUserId: targetUserUid,
         type: "image",
         fileUrl: downloadURL,
         fileName,
@@ -553,6 +563,14 @@ const ChatScreen = () => {
     );
   };
 
+  if (!currentUserUid || !targetUserUid || !chatId) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
   return (
     <>
       <Stack.Screen
@@ -574,10 +592,10 @@ const ChatScreen = () => {
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           <Image
-            source={{ uri: user.profilePic || placeholderAvatar }}
+            source={{ uri: user?.profilePic || placeholderAvatar }}
             style={styles.headerAvatar}
           />
-          <Text style={styles.headerTitle}>{user.displayName}</Text>
+          <Text style={styles.headerTitle}>{user?.displayName || "Chat"}</Text>
         </View>
 
         {messages.length === 0 ? (

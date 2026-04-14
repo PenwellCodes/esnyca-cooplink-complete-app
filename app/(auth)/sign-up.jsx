@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -61,6 +61,8 @@ const SignUp = () => {
 
   // Loading state for ActivityIndicator
   const [loading, setLoading] = useState(false);
+  const [inputPositions, setInputPositions] = useState({});
+  const scrollViewRef = useRef(null);
   const [translations, setTranslations] = useState({
     fillEmailPassword: "Please fill in email and password",
     emailMistyped: "Email looks mistyped (e.g. .comc). Please correct it.",
@@ -254,12 +256,25 @@ const SignUp = () => {
     }
   };
 
+  const handleInputLayout = (key) => (event) => {
+    const { y } = event.nativeEvent.layout;
+    setInputPositions((prev) => ({ ...prev, [key]: y }));
+  };
+
+  const scrollToInput = (key) => {
+    const y = inputPositions[key];
+    if (typeof y !== "number") return;
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    }, 100);
+  };
+
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      enabled={Platform.OS === "ios"}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      enabled
       style={{ flex: 1 }}
-      keyboardVerticalOffset={insets.top + 8}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 24}
     >
       <View style={{ flex: 1 }}>
         <TouchableOpacity onPress={handleBack} style={styles.backIcon}>
@@ -267,6 +282,7 @@ const SignUp = () => {
         </TouchableOpacity>
 
         <ScrollView
+          ref={scrollViewRef}
           style={{ flex: 1, backgroundColor: colors.background }}
           contentContainerStyle={[
             styles.scrollContainer,
@@ -325,80 +341,101 @@ const SignUp = () => {
           <View style={styles.formContainer}>
             {role === "individual" ? (
               <>
-                <TextInput
-                  mode="outlined"
-                  label={translations.name}
-                  value={formData.displayName}
-                  onChangeText={(value) =>
-                    handleInputChange("displayName", value)
-                  }
-                  style={styles.input}
-                />
-                <TextInput
-                  mode="outlined"
-                  label={translations.email}
-                  value={formData.email}
-                  onChangeText={(value) => handleInputChange("email", value)}
-                  style={styles.input}
-                />
-                <TextInput
-                  mode="outlined"
-                  label={translations.password}
-                  secureTextEntry={hidePassword}
-                  value={formData.password}
-                  onChangeText={(value) => handleInputChange("password", value)}
-                  style={styles.input}
-                  right={
-                    <TextInput.Icon
-                      icon={hidePassword ? "eye-off" : "eye"}
-                      onPress={() => setHidePassword((prev) => !prev)}
-                    />
-                  }
-                />
-                <TextInput
-                  mode="outlined"
-                  label={translations.confirmPassword}
-                  secureTextEntry={hideConfirmPassword}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  style={styles.input}
-                  right={
-                    <TextInput.Icon
-                      icon={hideConfirmPassword ? "eye-off" : "eye"}
-                      onPress={() => setHideConfirmPassword((prev) => !prev)}
-                    />
-                  }
-                />
+                <View onLayout={handleInputLayout("individual_name")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.name}
+                    value={formData.displayName}
+                    onChangeText={(value) =>
+                      handleInputChange("displayName", value)
+                    }
+                    onFocus={() => scrollToInput("individual_name")}
+                    style={styles.input}
+                  />
+                </View>
+                <View onLayout={handleInputLayout("individual_email")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.email}
+                    value={formData.email}
+                    onChangeText={(value) => handleInputChange("email", value)}
+                    onFocus={() => scrollToInput("individual_email")}
+                    style={styles.input}
+                  />
+                </View>
+                <View onLayout={handleInputLayout("individual_password")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.password}
+                    secureTextEntry={hidePassword}
+                    value={formData.password}
+                    onChangeText={(value) => handleInputChange("password", value)}
+                    onFocus={() => scrollToInput("individual_password")}
+                    style={styles.input}
+                    right={
+                      <TextInput.Icon
+                        icon={hidePassword ? "eye-off" : "eye"}
+                        onPress={() => setHidePassword((prev) => !prev)}
+                      />
+                    }
+                  />
+                </View>
+                <View onLayout={handleInputLayout("individual_confirm_password")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.confirmPassword}
+                    secureTextEntry={hideConfirmPassword}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    onFocus={() => scrollToInput("individual_confirm_password")}
+                    style={styles.input}
+                    right={
+                      <TextInput.Icon
+                        icon={hideConfirmPassword ? "eye-off" : "eye"}
+                        onPress={() => setHideConfirmPassword((prev) => !prev)}
+                      />
+                    }
+                  />
+                </View>
               </>
             ) : (
               <>
-                <TextInput
-                  mode="outlined"
-                  label={translations.cooperativeName}
-                  value={formData.displayName}
-                  onChangeText={(value) =>
-                    handleInputChange("displayName", value)
-                  }
-                  style={styles.input}
-                />
-                <TextInput
-                  mode="outlined"
-                  label={translations.registrationNumber}
-                  value={formData.registrationNumber}
-                  onChangeText={(value) =>
-                    handleInputChange("registrationNumber", value)
-                  }
-                  style={styles.input}
-                />
-                <TextInput
-                  mode="outlined"
-                  label={translations.physicalAddress}
-                  value={formData.physicalAddress}
-                  onChangeText={(value) =>
-                    handleInputChange("physicalAddress", value)
-                  }
-                  style={styles.input}
-                />
+                <View onLayout={handleInputLayout("coop_name")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.cooperativeName}
+                    value={formData.displayName}
+                    onChangeText={(value) =>
+                      handleInputChange("displayName", value)
+                    }
+                    onFocus={() => scrollToInput("coop_name")}
+                    style={styles.input}
+                  />
+                </View>
+                <View onLayout={handleInputLayout("coop_registration")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.registrationNumber}
+                    value={formData.registrationNumber}
+                    onChangeText={(value) =>
+                      handleInputChange("registrationNumber", value)
+                    }
+                    onFocus={() => scrollToInput("coop_registration")}
+                    style={styles.input}
+                  />
+                </View>
+                <View onLayout={handleInputLayout("coop_address")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.physicalAddress}
+                    value={formData.physicalAddress}
+                    onChangeText={(value) =>
+                      handleInputChange("physicalAddress", value)
+                    }
+                    onFocus={() => scrollToInput("coop_address")}
+                    style={styles.input}
+                  />
+                </View>
                 <View style={styles.pickerContainer}>
                   <Text style={[styles.pickerLabel, { color: colors.text }]}>
                     {translations.region}
@@ -417,41 +454,50 @@ const SignUp = () => {
                     <Picker.Item label="Lubombo" value="Lubombo" />
                   </Picker>
                 </View>
-                <TextInput
-                  mode="outlined"
-                  label={translations.email}
-                  value={formData.email}
-                  onChangeText={(value) => handleInputChange("email", value)}
-                  style={styles.input}
-                />
-                <TextInput
-                  mode="outlined"
-                  label={translations.password}
-                  secureTextEntry={hidePassword}
-                  value={formData.password}
-                  onChangeText={(value) => handleInputChange("password", value)}
-                  style={styles.input}
-                  right={
-                    <TextInput.Icon
-                      icon={hidePassword ? "eye-off" : "eye"}
-                      onPress={() => setHidePassword((prev) => !prev)}
-                    />
-                  }
-                />
-                <TextInput
-                  mode="outlined"
-                  label={translations.confirmPassword}
-                  secureTextEntry={hideConfirmPassword}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  style={styles.input}
-                  right={
-                    <TextInput.Icon
-                      icon={hideConfirmPassword ? "eye-off" : "eye"}
-                      onPress={() => setHideConfirmPassword((prev) => !prev)}
-                    />
-                  }
-                />
+                <View onLayout={handleInputLayout("coop_email")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.email}
+                    value={formData.email}
+                    onChangeText={(value) => handleInputChange("email", value)}
+                    onFocus={() => scrollToInput("coop_email")}
+                    style={styles.input}
+                  />
+                </View>
+                <View onLayout={handleInputLayout("coop_password")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.password}
+                    secureTextEntry={hidePassword}
+                    value={formData.password}
+                    onChangeText={(value) => handleInputChange("password", value)}
+                    onFocus={() => scrollToInput("coop_password")}
+                    style={styles.input}
+                    right={
+                      <TextInput.Icon
+                        icon={hidePassword ? "eye-off" : "eye"}
+                        onPress={() => setHidePassword((prev) => !prev)}
+                      />
+                    }
+                  />
+                </View>
+                <View onLayout={handleInputLayout("coop_confirm_password")}>
+                  <TextInput
+                    mode="outlined"
+                    label={translations.confirmPassword}
+                    secureTextEntry={hideConfirmPassword}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    onFocus={() => scrollToInput("coop_confirm_password")}
+                    style={styles.input}
+                    right={
+                      <TextInput.Icon
+                        icon={hideConfirmPassword ? "eye-off" : "eye"}
+                        onPress={() => setHideConfirmPassword((prev) => !prev)}
+                      />
+                    }
+                  />
+                </View>
               </>
             )}
 

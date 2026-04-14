@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -41,7 +41,9 @@ const Profile = () => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [inputPositions, setInputPositions] = useState({});
   const navigation = useNavigation();
+  const scrollViewRef = useRef(null);
 
   const [translations, setTranslations] = useState({
     updateProfile: "Update Profile",
@@ -300,21 +302,25 @@ const Profile = () => {
         updatedFields.profilePicUrl = profilePic;
       }
 
+      const currentPasswordValue = currentPassword.trim();
+      const newPasswordValue = newPassword.trim();
+      const confirmNewPasswordValue = confirmNewPassword.trim();
       const hasAnyPasswordInput =
-        currentPassword.trim() || newPassword.trim() || confirmNewPassword.trim();
+        currentPasswordValue || newPasswordValue || confirmNewPasswordValue;
       if (hasAnyPasswordInput) {
-        if (!currentPassword.trim() || !newPassword.trim()) {
+        if (!currentPasswordValue || !newPasswordValue) {
           Alert.alert(translations.error, translations.passwordFieldsRequired);
           setIsLoading(false);
           return;
         }
-        if (newPassword !== confirmNewPassword) {
+        if (newPasswordValue !== confirmNewPasswordValue) {
           Alert.alert(translations.error, translations.passwordMismatch);
           setIsLoading(false);
           return;
         }
-        updatedFields.currentPassword = currentPassword;
-        updatedFields.password = newPassword;
+        updatedFields.currentPassword = currentPasswordValue;
+        updatedFields.password = newPasswordValue;
+        updatedFields.newPassword = newPasswordValue;
       }
 
       const updatedUser = await apiRequest(`/users/${userData.id}`, {
@@ -350,6 +356,19 @@ const Profile = () => {
     }
   };
 
+  const handleInputLayout = (key) => (event) => {
+    const { y } = event.nativeEvent.layout;
+    setInputPositions((prev) => ({ ...prev, [key]: y }));
+  };
+
+  const scrollToInput = (key) => {
+    const y = inputPositions[key];
+    if (typeof y !== "number") return;
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    }, 120);
+  };
+
   if (!userData) {
     return (
       <View style={styles.container}>
@@ -367,6 +386,7 @@ const Profile = () => {
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 24}
     >
       <ScrollView
+        ref={scrollViewRef}
         style={[styles.scrollContainer, { backgroundColor: colors.background }]}
         contentContainerStyle={[
           styles.scrollContent,
@@ -401,7 +421,7 @@ const Profile = () => {
           {translations.tapToChangePhoto}
         </Text>
 
-        <View style={styles.inputContainer}>
+        <View style={styles.inputContainer} onLayout={handleInputLayout("email")}>
           <Text style={[styles.inputLabel, { color: colors.primary }]}>
             {translations.email}
           </Text>
@@ -412,13 +432,14 @@ const Profile = () => {
             value={userData?.email || ''}
             autoCapitalize="none"
             keyboardType="email-address"
+            onFocus={() => scrollToInput("email")}
             onChangeText={(text) => setUserData(prev => ({ ...prev, email: text }))}
           />
         </View>
 
         {currentUser?.role === 'individual' ? (
           <>
-            <View style={styles.inputContainer}>
+            <View style={styles.inputContainer} onLayout={handleInputLayout("displayName")}>
               <Text style={[styles.inputLabel, { color: colors.primary }]}>
                 {translations.name}
               </Text>
@@ -427,13 +448,14 @@ const Profile = () => {
                 placeholder={translations.enterYourName}
                 placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.displayName || ''}
+                onFocus={() => scrollToInput("displayName")}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
             </View>
           </>
         ) : (
           <>
-            <View style={styles.inputContainer}>
+            <View style={styles.inputContainer} onLayout={handleInputLayout("coopName")}>
               <Text style={[styles.inputLabel, { color: colors.primary }]}>
                 {translations.cooperativeName}
               </Text>
@@ -442,11 +464,12 @@ const Profile = () => {
                 placeholder={translations.enterCooperativeName}
                 placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.displayName || ''}
+                onFocus={() => scrollToInput("coopName")}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
             </View>
 
-            <View style={styles.inputContainer}>
+            <View style={styles.inputContainer} onLayout={handleInputLayout("phoneNumber")}>
               <Text style={[styles.inputLabel, { color: colors.primary }]}>
                 {translations.phoneNumber}
               </Text>
@@ -455,11 +478,12 @@ const Profile = () => {
                 placeholder={translations.enterPhoneNumber}
                 placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.phoneNumber || ''}
+                onFocus={() => scrollToInput("phoneNumber")}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, phoneNumber: text }))}
               />
             </View>
 
-            <View style={styles.inputContainer}>
+            <View style={styles.inputContainer} onLayout={handleInputLayout("content")}>
               <Text style={[styles.inputLabel, { color: colors.primary }]}>
                 {translations.productService}
               </Text>
@@ -468,6 +492,7 @@ const Profile = () => {
                 placeholder={translations.enterProductService}
                 placeholderTextColor={colors.onSurfaceVariant}
                 value={userData?.content || ''}
+                onFocus={() => scrollToInput("content")}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
               />
             </View>
@@ -514,7 +539,7 @@ const Profile = () => {
           </>
         )}
 
-        <View style={styles.inputContainer}>
+        <View style={styles.inputContainer} onLayout={handleInputLayout("currentPassword")}>
           <Text style={[styles.inputLabel, { color: colors.primary }]}>
             {translations.currentPassword}
           </Text>
@@ -525,11 +550,12 @@ const Profile = () => {
             value={currentPassword}
             secureTextEntry
             autoCapitalize="none"
+            onFocus={() => scrollToInput("currentPassword")}
             onChangeText={setCurrentPassword}
           />
         </View>
 
-        <View style={styles.inputContainer}>
+        <View style={styles.inputContainer} onLayout={handleInputLayout("newPassword")}>
           <Text style={[styles.inputLabel, { color: colors.primary }]}>
             {translations.newPassword}
           </Text>
@@ -540,11 +566,12 @@ const Profile = () => {
             value={newPassword}
             secureTextEntry
             autoCapitalize="none"
+            onFocus={() => scrollToInput("newPassword")}
             onChangeText={setNewPassword}
           />
         </View>
 
-        <View style={styles.inputContainer}>
+        <View style={styles.inputContainer} onLayout={handleInputLayout("confirmNewPassword")}>
           <Text style={[styles.inputLabel, { color: colors.primary }]}>
             {translations.confirmNewPassword}
           </Text>
@@ -555,6 +582,7 @@ const Profile = () => {
             value={confirmNewPassword}
             secureTextEntry
             autoCapitalize="none"
+            onFocus={() => scrollToInput("confirmNewPassword")}
             onChangeText={setConfirmNewPassword}
           />
         </View>

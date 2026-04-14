@@ -45,14 +45,12 @@ const ChatList = () => {
   const { chatList: baseUserList, conversations, lastMessages, loadingChats } =
     useChat();
   const { currentLanguage, t } = useLanguage();
-  const [groupMemberCount, setGroupMemberCount] = useState(0);
   const [translations, setTranslations] = useState({
     chat: "Chat",
     addStory: "Add Story",
+    me: "Me",
     unknownUser: "Unknown User",
     unknown: "Unknown",
-    members: "members",
-    groupName: "Swazi Cooparators",
     startConversation: "Start a conversation",
     fileSent: "📂 File sent",
   });
@@ -62,10 +60,9 @@ const ChatList = () => {
       setTranslations({
         chat: await t("Chat"),
         addStory: await t("Add Story"),
+        me: await t("Me"),
         unknownUser: await t("Unknown User"),
         unknown: await t("Unknown"),
-        members: await t("members"),
-        groupName: await t("Swazi Cooparators"),
         startConversation: await t("Start a conversation"),
         fileSent: await t("📂 File sent"),
       });
@@ -114,10 +111,6 @@ const ChatList = () => {
     translations.startConversation,
   ]);
 
-  useEffect(() => {
-    setGroupMemberCount(baseUserList.length + 1);
-  }, [baseUserList.length]);
-
   // Group stories by user
   const groupedStories = React.useMemo(() => {
     const groups = {};
@@ -140,9 +133,12 @@ const ChatList = () => {
   const handleStoryPress = (userId) => {
     if (groupedStories[userId]) {
       const storyUser = chatList.find(user => user.uid === userId);
+      const isCurrentUserStory = String(userId) === String(currentUser?.uid);
       setSelectedUserStories({
         stories: groupedStories[userId],
-        userName: storyUser?.displayName || translations.unknownUser,
+        userName: isCurrentUserStory
+          ? translations.me
+          : storyUser?.displayName || translations.unknownUser,
       });
       setIsStoryViewerVisible(true);
     }
@@ -179,16 +175,6 @@ const ChatList = () => {
       userId: story.userId,
     });
   });
-
-  // Define the group chat object
-  const groupChat = {
-    uid: "group_swazi_cooperators",
-    displayName: translations.groupName,
-    profilePicture:
-      "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
-    memberCount: groupMemberCount,
-    isGroup: true,
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -236,7 +222,10 @@ const ChatList = () => {
           {/* Render user story containers with usernames */}
           {Object.entries(groupedStories).map(([userId, stories]) => {
             const storyUser = chatList.find(user => user.uid === userId);
-            const displayName = storyUser?.displayName || translations.unknown;
+            const isCurrentUserStory = String(userId) === String(currentUser?.uid);
+            const displayName = isCurrentUserStory
+              ? translations.me
+              : storyUser?.displayName || translations.unknown;
             const shortName = displayName.length > 8 
               ? `${displayName.substring(0, 8)}...` 
               : displayName;
@@ -307,30 +296,6 @@ const ChatList = () => {
           setIsStoryViewerVisible(false);
         }}
       />
-
-      {/* Group Chat Item */}
-      <TouchableOpacity
-        style={[styles.chatItem, { backgroundColor: "#8ee4f59c" }]}
-        onPress={() => {
-          router.push({
-            pathname: "/(screens)/group-chat",
-            params: { id: groupChat.uid, group: JSON.stringify(groupChat) },
-          })
-        }}
-      >
-        <Image
-          source={{ uri: groupChat.profilePicture }}
-          style={styles.avatar}
-        />
-        <View style={styles.chatInfo}>
-          <Text style={[styles.username, { color: colors.tertiary }]}>
-            {groupChat.displayName}
-          </Text>
-          <Text style={styles.lastMessage}>
-            {groupChat.memberCount} {translations.members}
-          </Text>
-        </View>
-      </TouchableOpacity>
 
       {/* Individual Chat List */}
       <FlatList

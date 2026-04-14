@@ -13,24 +13,6 @@ import { apiRequest } from "../../utils/api";
 
 function openChatFromKey(chatKey, currentUserUid, userMap) {
     try {
-        if (chatKey === "group_swazi_cooperators") {
-            const groupChat = {
-                uid: "group_swazi_cooperators",
-                displayName: "Group",
-                profilePicture:
-                    "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
-                memberCount: Object.keys(userMap || {}).length,
-                isGroup: true,
-            };
-            router.push({
-                pathname: "/(screens)/group-chat",
-                params: {
-                    id: groupChat.uid,
-                    group: JSON.stringify(groupChat),
-                },
-            });
-            return;
-        }
         const parts = String(chatKey).split("_");
         const otherUid = parts.find((id) => id !== currentUserUid);
         if (!otherUid) {
@@ -90,7 +72,6 @@ export const useChat = () => {
 };
 
 export const ChatProvider = ({ children }) => {
-    const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
     const { currentUser } = useAuth();
     const [chatList, setChatList] = useState([]);
     const [conversations, setConversations] = useState({});
@@ -168,10 +149,10 @@ export const ChatProvider = ({ children }) => {
             const participantIds = (participants || []).map((p) => p.UserId);
             let chatKey = chat.Id;
 
-            if (chat.IsGroup) {
-                chatKey = GLOBAL_GROUP_CHAT_KEY;
-            } else if (participantIds.length === 2) {
+            if (!chat.IsGroup && participantIds.length === 2) {
                 chatKey = buildDirectKey(participantIds[0], participantIds[1]);
+            } else {
+                continue;
             }
 
             nextChatIdMap[chatKey] = chat.Id;
@@ -328,37 +309,6 @@ export const ChatProvider = ({ children }) => {
         return { chatKey, chatId: actualChatId };
     };
 
-    const ensureGlobalGroupChat = async () => {
-        if (chatIdMap[GLOBAL_GROUP_CHAT_KEY]) {
-            return {
-                chatKey: GLOBAL_GROUP_CHAT_KEY,
-                chatId: chatIdMap[GLOBAL_GROUP_CHAT_KEY],
-            };
-        }
-
-        const usersRaw = await apiRequest("/users");
-        const participantUserIds = (usersRaw || [])
-            .map((u) => u.Id || u.id)
-            .filter(Boolean);
-
-        const created = await apiRequest("/chats", {
-            method: "POST",
-            body: {
-                isGroup: true,
-                participantUserIds,
-            },
-        });
-        const actualChatId = created?.Id || created?.id;
-        if (!actualChatId) {
-            throw new Error("Failed to create group chat.");
-        }
-        setChatIdMap((prev) => ({
-            ...prev,
-            [GLOBAL_GROUP_CHAT_KEY]: actualChatId,
-        }));
-        return { chatKey: GLOBAL_GROUP_CHAT_KEY, chatId: actualChatId };
-    };
-
     const sendMessage = async ({
         chatKey,
         receiverUserId,
@@ -369,25 +319,24 @@ export const ChatProvider = ({ children }) => {
     }) => {
         let resolved = chatIdMap[chatKey];
         if (!resolved) {
-            if (chatKey === GLOBAL_GROUP_CHAT_KEY) {
-                resolved = (await ensureGlobalGroupChat()).chatId;
-            } else {
-                resolved = (await ensureDirectChat(receiverUserId)).chatId;
-            }
+            resolved = (await ensureDirectChat(receiverUserId)).chatId;
         }
         const created = await apiRequest(`/chats/${resolved}/messages`, {
             method: "POST",
             body: {
                 senderUserId: currentUser?.uid,
-                receiverUserId:
-                    chatKey === GLOBAL_GROUP_CHAT_KEY ? null : receiverUserId || null,
+                receiverUserId: receiverUserId || null,
                 type,
                 text,
                 fileUrl,
                 fileName,
             },
         });
-        await refreshChatState();
+        // Do not block message send success on full chat refresh.
+        // Refresh in background; polling will also reconcile state.
+        refreshChatState().catch((error) => {
+            console.error("Background chat refresh failed:", error);
+        });
         return created;
     };
 

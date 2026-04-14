@@ -17,7 +17,6 @@ const Layout = () => {
   const screenDefs = [
     { name: "about-us", title: "About Us" },
     { name: "add-story", title: "Add Story" },
-    { name: "group-chat", title: "Group Chat" },
     { name: "view-story", title: "View Story" },
     { name: "news", title: "News" },
     { name: "cooperatives", title: "Cooperatives" },
