@@ -5,6 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 const { uploadBufferToImageBB } = require('./services/imagebb');
 const { requireAuth } = require('./middleware/auth');
+const { startAutoGitPull } = require('./services/autoGitPull');
 
 const app = express();
 
@@ -63,4 +64,5 @@ const HOST = process.env.HOST || '0.0.0.0';
 app.listen(PORT, HOST, () => {
   // eslint-disable-next-line no-console
   console.log(`server running on http://${HOST}:${PORT}`);
+  startAutoGitPull();
 });
