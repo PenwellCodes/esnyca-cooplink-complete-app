@@ -268,21 +268,70 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
 
+  let tx = null;
   try {
     const pool = await getPool();
-    const result = await pool
-      .request()
+    tx = new sql.Transaction(pool);
+    await tx.begin();
+    const request = new sql.Request(tx).input('Id', sql.UniqueIdentifier, id);
+
+    await request.query(`
+      DELETE sv
+      FROM dbo.StoryViews sv
+      INNER JOIN dbo.Stories s ON s.Id = sv.StoryId
+      WHERE sv.ViewerUserId = @Id OR s.UserId = @Id
+    `);
+
+    await new sql.Request(tx)
+      .input('Id', sql.UniqueIdentifier, id)
+      .query('DELETE FROM dbo.Stories WHERE UserId = @Id');
+
+    await new sql.Request(tx)
+      .input('Id', sql.UniqueIdentifier, id)
+      .query('DELETE FROM dbo.ChatMessages WHERE SenderUserId = @Id OR ReceiverUserId = @Id');
+
+    await new sql.Request(tx)
+      .input('Id', sql.UniqueIdentifier, id)
+      .query('DELETE FROM dbo.ChatParticipants WHERE UserId = @Id');
+
+    await new sql.Request(tx)
+      .input('Id', sql.UniqueIdentifier, id)
+      .query(`
+        IF OBJECT_ID('dbo.UserPushTokens', 'U') IS NOT NULL
+        BEGIN
+          DELETE FROM dbo.UserPushTokens WHERE UserId = @Id
+        END
+      `);
+
+    await new sql.Request(tx).query(`
+      DELETE c
+      FROM dbo.Chats c
+      LEFT JOIN dbo.ChatParticipants p ON p.ChatId = c.Id
+      WHERE p.ChatId IS NULL
+    `);
+
+    const result = await new sql.Request(tx)
       .input('Id', sql.UniqueIdentifier, id)
       .query('DELETE FROM dbo.Users WHERE Id = @Id');
 
     if (result.rowsAffected?.[0] === 0) {
+      await tx.rollback();
       return res.status(404).json({ message: 'Not found' });
     }
+
+    await tx.commit();
     return res.json({ success: true });
   } catch (err) {
+    if (tx) {
+      try {
+        await tx.rollback();
+      } catch {}
+    }
     // eslint-disable-next-line no-console
     console.error(err);
-    return res.status(500).json({ message: 'Failed to delete user' });
+    const dbMessage =
+      err?.originalError?.info?.message || err?.message || 'Failed to delete user';
+    return res.status(500).json({ message: dbMessage });
   }
 });
 
