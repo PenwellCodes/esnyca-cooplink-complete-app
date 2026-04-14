@@ -146,12 +146,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const resetPassword = async () => {
-    return {
-      success: false,
-      error:
-        "Password reset by email is not configured on the SQL backend yet. Please contact support.",
-    };
+  const resetPassword = async ({ step, email, token, newPassword }) => {
+    try {
+      if (step === "request") {
+        const data = await apiRequest("/auth/forgot-password/email", {
+          method: "POST",
+          includeAuth: false,
+          body: { email: String(email || "").trim().toLowerCase() },
+        });
+        return {
+          success: true,
+          message: data?.message || "Reset email sent. Check your inbox.",
+        };
+      }
+
+      const data = await apiRequest("/auth/forgot-password/reset", {
+        method: "POST",
+        includeAuth: false,
+        body: {
+          email: String(email || "").trim().toLowerCase(),
+          token: String(token || "").trim(),
+          newPassword: String(newPassword || ""),
+        },
+      });
+      return {
+        success: true,
+        message: data?.message || "Password reset successful.",
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   };
 
   const value = {

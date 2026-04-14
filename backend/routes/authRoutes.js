@@ -3,8 +3,8 @@ const router = express.Router();
 const {
   registerUser,
   loginUser,
-  getForgotPasswordQuestions,
-  resetPasswordWithQuestions,
+  sendForgotPasswordEmail,
+  resetPasswordWithToken,
 } = require('../controllers/authController');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
@@ -17,10 +17,10 @@ router.post('/register', upload.single('profilePic'), registerUser);
 // 2. POST /api/auth/login (Handles Email/Password)
 router.post('/login', loginUser);
 
-// 3. POST /api/auth/forgot-password/questions
-router.post('/forgot-password/questions', getForgotPasswordQuestions);
+// 3. POST /api/auth/forgot-password/email
+router.post('/forgot-password/email', sendForgotPasswordEmail);
 
 // 4. POST /api/auth/forgot-password/reset
-router.post('/forgot-password/reset', resetPasswordWithQuestions);
+router.post('/forgot-password/reset', resetPasswordWithToken);
 
 module.exports = router;

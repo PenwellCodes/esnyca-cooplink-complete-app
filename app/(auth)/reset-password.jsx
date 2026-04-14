@@ -27,6 +27,10 @@ const ResetPassword = () => {
   const { currentLanguage, t } = useLanguage();
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [step, setStep] = useState("request");
   const [loading, setLoading] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
@@ -36,12 +40,22 @@ const ResetPassword = () => {
     emailMistyped:
       "Email looks mistyped (e.g. .comc). Please correct it and try again.",
     successMessage:
-      "If password reset is configured, reset instructions will be sent to your email.",
+      "Reset email sent. Check your inbox for the reset token.",
+    resetDone: "Password reset successful. You can login now.",
     resetPassword: "Reset Password",
     instructions:
-      "Enter your email address and we'll send you instructions to reset your password.",
+      "Enter your email address and we'll send you a reset token.",
+    confirmInstructions:
+      "Enter the token from email and your new password.",
     email: "Email",
-    sendResetLink: "Send Reset Link",
+    token: "Reset Token",
+    newPassword: "New Password",
+    confirmNewPassword: "Confirm New Password",
+    sendResetLink: "Send Reset Email",
+    submitReset: "Reset Password",
+    tokenRequired: "Reset token is required",
+    passwordMismatch: "New password and confirm password do not match",
+    weakPassword: "New password must be at least 6 characters",
   });
 
   React.useEffect(() => {
@@ -52,14 +66,25 @@ const ResetPassword = () => {
           "Email looks mistyped (e.g. .comc). Please correct it and try again."
         ),
         successMessage: await t(
-          "If password reset is configured, reset instructions will be sent to your email."
+          "Reset email sent. Check your inbox for the reset token."
         ),
+        resetDone: await t("Password reset successful. You can login now."),
         resetPassword: await t("Reset Password"),
         instructions: await t(
-          "Enter your email address and we'll send you instructions to reset your password."
+          "Enter your email address and we'll send you a reset token."
+        ),
+        confirmInstructions: await t(
+          "Enter the token from email and your new password."
         ),
         email: await t("Email"),
-        sendResetLink: await t("Send Reset Link"),
+        token: await t("Reset Token"),
+        newPassword: await t("New Password"),
+        confirmNewPassword: await t("Confirm New Password"),
+        sendResetLink: await t("Send Reset Email"),
+        submitReset: await t("Reset Password"),
+        tokenRequired: await t("Reset token is required"),
+        passwordMismatch: await t("New password and confirm password do not match"),
+        weakPassword: await t("New password must be at least 6 characters"),
       });
     };
     loadTranslations();
@@ -91,15 +116,52 @@ const ResetPassword = () => {
       return;
     }
 
+    if (step === "confirm") {
+      if (!resetToken.trim()) {
+        setSnackbarMessage(translations.tokenRequired);
+        setSnackbarStyle({ backgroundColor: "red" });
+        setSnackbarVisible(true);
+        return;
+      }
+      if (newPassword.length < 6) {
+        setSnackbarMessage(translations.weakPassword);
+        setSnackbarStyle({ backgroundColor: "red" });
+        setSnackbarVisible(true);
+        return;
+      }
+      if (newPassword !== confirmNewPassword) {
+        setSnackbarMessage(translations.passwordMismatch);
+        setSnackbarStyle({ backgroundColor: "red" });
+        setSnackbarVisible(true);
+        return;
+      }
+    }
+
     setLoading(true);
-    const result = await resetPassword(email.trim().toLowerCase());
+    const result = await resetPassword(
+      step === "request"
+        ? {
+            step: "request",
+            email: email.trim().toLowerCase(),
+          }
+        : {
+            step: "reset",
+            email: email.trim().toLowerCase(),
+            token: resetToken.trim(),
+            newPassword,
+          }
+    );
     if (result.success) {
-      setSnackbarMessage(translations.successMessage);
+      setSnackbarMessage(step === "request" ? translations.successMessage : translations.resetDone);
       setSnackbarStyle({ backgroundColor: "green" });
       setSnackbarVisible(true);
-      setTimeout(() => {
-        router.back();
-      }, 3000);
+      if (step === "request") {
+        setStep("confirm");
+      } else {
+        setTimeout(() => {
+          router.back();
+        }, 1500);
+      }
     } else {
       setSnackbarMessage(result.error);
       setSnackbarStyle({ backgroundColor: "red" });
@@ -142,7 +204,7 @@ const ResetPassword = () => {
 
         <View style={styles.formContainer}>
           <Text style={[typography.body, styles.instructions]}>
-            {translations.instructions}
+            {step === "request" ? translations.instructions : translations.confirmInstructions}
           </Text>
 
           <View style={styles.inputContainer}>
@@ -155,15 +217,54 @@ const ResetPassword = () => {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={step === "request"}
             />
           </View>
+
+          {step === "confirm" && (
+            <>
+              <View style={styles.inputContainer}>
+                <Ionicons name="key-outline" size={20} color={colors.primary} />
+                <TextInput
+                  placeholder={translations.token}
+                  style={[styles.input, typography.body, { color: colors.onSurface }]}
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={resetToken}
+                  onChangeText={setResetToken}
+                  autoCapitalize="none"
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color={colors.primary} />
+                <TextInput
+                  placeholder={translations.newPassword}
+                  style={[styles.input, typography.body, { color: colors.onSurface }]}
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
+                <TextInput
+                  placeholder={translations.confirmNewPassword}
+                  style={[styles.input, typography.body, { color: colors.onSurface }]}
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={confirmNewPassword}
+                  onChangeText={setConfirmNewPassword}
+                  secureTextEntry
+                />
+              </View>
+            </>
+          )}
 
           <CustomButton
             title={
               loading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                translations.sendResetLink
+                step === "request" ? translations.sendResetLink : translations.submitReset
               )
             }
             onPress={handleResetPassword}
