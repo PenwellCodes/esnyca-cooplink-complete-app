@@ -9,9 +9,16 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { translateText } from '../../utils/translate';
 
-const LanguageContext = createContext();
+const LanguageContext = createContext(undefined);
 
-export const useLanguage = () => useContext(LanguageContext);
+const defaultLanguageContext = {
+  currentLanguage: 'en',
+  changeLanguage: async () => {},
+  t: async (text) => (text === null || text === undefined ? text : String(text)),
+  isLanguageReady: true,
+};
+
+export const useLanguage = () => useContext(LanguageContext) || defaultLanguageContext;
 
 export const LanguageProvider = ({ children }) => {
   const [currentLanguage, setCurrentLanguage] = useState('en');

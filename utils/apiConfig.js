@@ -4,4 +4,3 @@
  */
 export const API_BASE_URL =
   "http://207.180.254.163:4000/api";
-

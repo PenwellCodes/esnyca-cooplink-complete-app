@@ -17,7 +17,11 @@ Notifications.setNotificationHandler({
 
 async function registerForPushNotificationsAsync() {
   // Expo Go (SDK 53+) does not support remote push notifications.
-  if (Constants.appOwnership === "expo") {
+  // Detect Expo Go using both appOwnership and executionEnvironment for compatibility.
+  const isExpoGo =
+    Constants.appOwnership === "expo" ||
+    Constants.executionEnvironment === "storeClient";
+  if (isExpoGo) {
     return null;
   }
 

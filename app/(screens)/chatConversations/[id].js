@@ -171,11 +171,10 @@ const ChatScreen = () => {
         text: messageText,
         type: storyPreview ? "story_reply" : "text",
       });
-    } catch (error) {
-      console.error("Error sending message:", error);
-    } finally {
       setMessageText("");
       setLocalMessages([]);
+    } catch (error) {
+      console.error("Error sending message:", error);
     }
   };
 
