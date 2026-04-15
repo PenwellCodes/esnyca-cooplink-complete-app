@@ -30,6 +30,16 @@ import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
 
+const parseStoryPreviewParam = (rawValue) => {
+  if (!rawValue) return null;
+  try {
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 const ChatScreen = () => {
   const params = useLocalSearchParams();
   const router = useRouter();
@@ -56,6 +66,9 @@ const ChatScreen = () => {
   const flatListRef = useRef(null);
 
   const [selectedDocuments, setSelectedDocuments] = useState([]);
+  const [pendingStoryReply, setPendingStoryReply] = useState(() =>
+    parseStoryPreviewParam(params.storyPreview)
+  );
 
   const contextMessages = chatId ? conversations[chatId] || [] : [];
   const contextMessageIds = new Set(contextMessages.map((m) => String(m.id)));
@@ -150,10 +163,7 @@ const ChatScreen = () => {
     if (!chatId || !currentUserUid || !targetUserUid) return;
     if (!messageText.trim()) return;
 
-    // Check if there's a story preview in the params
-    const storyPreview = params.storyPreview
-      ? JSON.parse(params.storyPreview)
-      : null;
+    const storyPreview = pendingStoryReply;
 
     const tempId = Date.now().toString();
     const tempMessage = {
@@ -175,8 +185,10 @@ const ChatScreen = () => {
         receiverUserId: targetUserUid,
         text: messageText,
         type: storyPreview ? "story_reply" : "text",
+        storyPreview,
       });
       setMessageText("");
+      setPendingStoryReply(null);
       if (created?.Id || created?.id) {
         setLocalMessages((prev) =>
           prev.map((m) =>
@@ -418,7 +430,20 @@ const ChatScreen = () => {
               )}
             </View>
           )}
-          <Text style={styles.messageText}>{item.text}</Text>
+          <Text
+            style={{
+              color: item.sender === currentUser.uid ? "white" : "black",
+            }}
+          >
+            {item.text}
+          </Text>
+          <Text style={styles.timestamp}>
+            {item.timestamp && typeof item.timestamp.toDate === "function"
+              ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
+                  addSuffix: true,
+                })
+              : translations.sending}
+          </Text>
         </View>
       );
     }
@@ -738,6 +763,31 @@ const ChatScreen = () => {
             <Ionicons name="send" size={24} color="#007AFF" />
           </TouchableOpacity>
         </View>
+        {pendingStoryReply && (
+          <View style={[styles.pendingStoryReply, { bottom: kbOffset + 64 }]}>
+            <View style={styles.pendingStoryReplyLeft}>
+              {pendingStoryReply.imageURL ? (
+                <Image
+                  source={{ uri: pendingStoryReply.imageURL }}
+                  style={styles.pendingStoryReplyImage}
+                />
+              ) : null}
+              <View style={styles.pendingStoryReplyTextWrap}>
+                <Text style={styles.pendingStoryReplyTitle}>
+                  Replying to this status
+                </Text>
+                {!!pendingStoryReply.caption && (
+                  <Text style={styles.pendingStoryReplyCaption} numberOfLines={1}>
+                    {pendingStoryReply.caption}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => setPendingStoryReply(null)}>
+              <Ionicons name="close-circle" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </>
   );
@@ -858,5 +908,42 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     padding: 8,
     color: "white",
+  },
+  pendingStoryReply: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#d9d9d9",
+    padding: 8,
+  },
+  pendingStoryReplyLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  pendingStoryReplyImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  pendingStoryReplyTextWrap: {
+    flex: 1,
+  },
+  pendingStoryReplyTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#222",
+  },
+  pendingStoryReplyCaption: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#666",
   },
 });

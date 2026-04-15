@@ -29,7 +29,7 @@ const ViewStoryScreen = () => {
   const router = useRouter();
   const { stories, recordView, deleteStory } = useStories();
   const { currentUser } = useAuth();
-  const { setActiveChatId, sendMessage } = useChat();
+  const { setActiveChatId, chatList, sendMessage } = useChat();
   const { currentLanguage, t } = useLanguage();
 
   // Find the story
@@ -176,17 +176,39 @@ const ViewStoryScreen = () => {
   const handleReply = async () => {
     if (!replyText.trim()) return;
     try {
-      const chatId =
-        currentUser.uid > userId
-          ? `${currentUser.uid}_${userId}`
-          : `${userId}_${currentUser.uid}`;
-      await sendMessage({
-        chatKey: chatId,
-        receiverUserId: userId,
-        type: "text",
-        text: replyText,
-      });
-      Alert.alert(translations.replySentTitle, translations.replySentBody);
+      const storyUser = chatList.find((u) => String(u.uid) === String(userId));
+      const replyData = {
+        text: replyText.trim(),
+        storyPreview: {
+          imageURL: story?.imageURL,
+          caption: story?.caption || "",
+          storyId: story?.id,
+        },
+      };
+
+      if (storyUser) {
+        router.push({
+          pathname: `/(screens)/chatConversations/${userId}`,
+          params: {
+            user: JSON.stringify(storyUser),
+            predefinedMessage: replyData.text,
+            storyPreview: JSON.stringify(replyData.storyPreview),
+          },
+        });
+      } else {
+        const chatId =
+          currentUser.uid > userId
+            ? `${currentUser.uid}_${userId}`
+            : `${userId}_${currentUser.uid}`;
+        await sendMessage({
+          chatKey: chatId,
+          receiverUserId: userId,
+          type: "story_reply",
+          text: replyData.text,
+          storyPreview: replyData.storyPreview,
+        });
+        Alert.alert(translations.replySentTitle, translations.replySentBody);
+      }
       setReplyText("");
     } catch (error) {
       console.error("Error sending reply:", error);

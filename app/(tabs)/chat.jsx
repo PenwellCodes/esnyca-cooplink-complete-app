@@ -89,10 +89,13 @@ const ChatList = () => {
       
       return {
         ...user,
-        lastMessage: lastMessage?.text || 
-          (lastMessage?.fileUrl
-            ? translations.fileSent
-            : translations.startConversation),
+        lastMessage:
+          lastMessage?.type === "story_reply"
+            ? `Replied to status: ${lastMessage?.text || ""}`.trim()
+            : lastMessage?.text ||
+              (lastMessage?.fileUrl
+                ? translations.fileSent
+                : translations.startConversation),
         lastMessageTimestamp: lastMessages[chatId],
         unreadCount,
       };

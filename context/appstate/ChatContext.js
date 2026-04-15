@@ -13,6 +13,29 @@ import { apiRequest } from "../../utils/api";
 
 const CHAT_SYNC_TIMEOUT_MS = 450000;
 const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
+const STORY_REPLY_META_PREFIX = "story_preview:";
+
+function encodeStoryPreview(storyPreview) {
+  if (!storyPreview) return null;
+  try {
+    return `${STORY_REPLY_META_PREFIX}${JSON.stringify(storyPreview)}`;
+  } catch {
+    return null;
+  }
+}
+
+function decodeStoryPreview(fileName) {
+  if (!fileName || typeof fileName !== "string") return null;
+  if (!fileName.startsWith(STORY_REPLY_META_PREFIX)) return null;
+  const raw = fileName.slice(STORY_REPLY_META_PREFIX.length);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 function openChatFromKey(chatKey, currentUserUid, userMap) {
   try {
@@ -209,6 +232,16 @@ export const ChatProvider = ({ children }) => {
               fileUrl: m.FileUrl,
               fileName: m.FileName,
               type: m.Type || "text",
+              storyPreview:
+                (m.Type || "text") === "story_reply"
+                  ? {
+                      ...(decodeStoryPreview(m.FileName) || {}),
+                      imageURL:
+                        m.FileUrl ||
+                        decodeStoryPreview(m.FileName)?.imageURL ||
+                        null,
+                    }
+                  : null,
               timestamp: toTimestamp(m.CreatedAt),
               read: !!m.ReadAt,
               _chatId: chat.Id,
@@ -400,6 +433,7 @@ export const ChatProvider = ({ children }) => {
     text = null,
     fileUrl = null,
     fileName = null,
+    storyPreview = null,
   }) => {
     let resolved = chatIdMap[chatKey];
     if (!resolved) {
@@ -427,8 +461,14 @@ export const ChatProvider = ({ children }) => {
         receiverUserId: receiverUserId || null,
         type,
         text,
-        fileUrl,
-        fileName,
+        fileUrl:
+          type === "story_reply"
+            ? storyPreview?.imageURL || fileUrl || null
+            : fileUrl,
+        fileName:
+          type === "story_reply"
+            ? encodeStoryPreview(storyPreview) || fileName
+            : fileName,
       },
     });
 
@@ -445,6 +485,19 @@ export const ChatProvider = ({ children }) => {
       fileUrl: created?.FileUrl ?? fileUrl ?? null,
       fileName: created?.FileName ?? fileName ?? null,
       type: created?.Type || type || "text",
+      storyPreview:
+        (created?.Type || type || "text") === "story_reply"
+          ? {
+              ...(storyPreview ||
+                decodeStoryPreview(created?.FileName || fileName) ||
+                {}),
+              imageURL:
+                created?.FileUrl ||
+                storyPreview?.imageURL ||
+                fileUrl ||
+                null,
+            }
+          : null,
       timestamp: toTimestamp(created?.CreatedAt || new Date().toISOString()),
       read: !!created?.ReadAt,
       _chatId: created?.ChatId || resolved,

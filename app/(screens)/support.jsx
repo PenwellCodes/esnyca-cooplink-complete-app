@@ -160,7 +160,7 @@ const ServiceScreen = () => {
             style={styles.menuItemContainer}
             onPress={() => openDrawer(item)}
           >
-            <View style={[styles.menuItem, { borderColor: colors.error }]}>
+            <View style={[styles.menuItem, { borderColor: "#000000" }]}>
               {renderIcon(item.icon)}
             </View>
             <Text style={[styles.menuText, { color: colors.tertiary }]}>
@@ -181,12 +181,12 @@ const ServiceScreen = () => {
           ]}
         >
           <ScrollView style={styles.drawerScroll}>
-            <Text style={[styles.drawerHeading, { color: colors.error }]}>
+            <Text style={[styles.drawerHeading, { color: "#000000" }]}>
               {translations.moreInfo}
             </Text>
             {selectedService && (
               <>
-                <Text style={[styles.drawerTitle, { color: colors.error }]}>
+                <Text style={[styles.drawerTitle, { color: "#000000" }]}>
                   {translations.services[selectedService.id]?.title ||
                     selectedService.title}
                 </Text>
@@ -198,7 +198,7 @@ const ServiceScreen = () => {
                   />
                 </Card>
                 <Text
-                  style={[styles.drawerDescription, { color: colors.error }]}
+                  style={[styles.drawerDescription, { color: "#000000" }]}
                 >
                   {translations.services[selectedService.id]?.info ||
                     selectedService.info}
