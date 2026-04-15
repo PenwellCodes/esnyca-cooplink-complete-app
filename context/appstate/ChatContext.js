@@ -12,9 +12,26 @@ import Toast from "react-native-toast-message";
 import { apiRequest } from "../../utils/api";
 
 const CHAT_SYNC_TIMEOUT_MS = 450000;
+const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
 
 function openChatFromKey(chatKey, currentUserUid, userMap) {
   try {
+    if (chatKey === GLOBAL_GROUP_CHAT_KEY) {
+      const groupChat = {
+        uid: GLOBAL_GROUP_CHAT_KEY,
+        displayName: "Group",
+        profilePicture:
+          "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
+        memberCount: Object.keys(userMap || {}).length,
+        isGroup: true,
+      };
+      router.push({
+        pathname: "/(screens)/group-chat",
+        params: { id: groupChat.uid, group: JSON.stringify(groupChat) },
+      });
+      return;
+    }
+
     const parts = String(chatKey).split("_");
     const otherUid = parts.find((id) => id !== currentUserUid);
     if (!otherUid) {
@@ -173,9 +190,14 @@ export const ChatProvider = ({ children }) => {
           const { chat, participants, messagesRaw } = payload;
           const participantIds = (participants || []).map((p) => p.UserId);
           if (!participantIds.includes(userUid)) continue;
-          if (chat.IsGroup || participantIds.length !== 2) continue;
-
-          const chatKey = buildDirectKey(participantIds[0], participantIds[1]);
+          let chatKey = chat.Id;
+          if (chat.IsGroup) {
+            chatKey = GLOBAL_GROUP_CHAT_KEY;
+          } else if (participantIds.length === 2) {
+            chatKey = buildDirectKey(participantIds[0], participantIds[1]);
+          } else {
+            continue;
+          }
           nextChatIdMap[chatKey] = chat.Id;
 
           const messages = (messagesRaw || [])
@@ -353,6 +375,24 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
+  const ensureGlobalGroupChat = async () => {
+    if (chatIdMap[GLOBAL_GROUP_CHAT_KEY]) {
+      return { chatKey: GLOBAL_GROUP_CHAT_KEY, chatId: chatIdMap[GLOBAL_GROUP_CHAT_KEY] };
+    }
+
+    const usersRaw = await apiRequest("/users", { timeoutMs: CHAT_SYNC_TIMEOUT_MS });
+    const participantUserIds = (usersRaw || []).map((u) => u.Id || u.id).filter(Boolean);
+    const created = await apiRequest("/chats", {
+      method: "POST",
+      timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+      body: { isGroup: true, participantUserIds },
+    });
+    const actualChatId = created?.Id || created?.id;
+    if (!actualChatId) throw new Error("Failed to create group chat.");
+    setChatIdMap((prev) => ({ ...prev, [GLOBAL_GROUP_CHAT_KEY]: actualChatId }));
+    return { chatKey: GLOBAL_GROUP_CHAT_KEY, chatId: actualChatId };
+  };
+
   const sendMessage = async ({
     chatKey,
     receiverUserId,
@@ -372,7 +412,11 @@ export const ChatProvider = ({ children }) => {
       }
     }
     if (!resolved) {
-      resolved = (await ensureDirectChat(receiverUserId)).chatId;
+      if (chatKey === GLOBAL_GROUP_CHAT_KEY) {
+        resolved = (await ensureGlobalGroupChat()).chatId;
+      } else {
+        resolved = (await ensureDirectChat(receiverUserId)).chatId;
+      }
     }
 
     const created = await apiRequest(`/chats/${resolved}/messages`, {

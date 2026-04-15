@@ -41,6 +41,7 @@ const ChatList = () => {
   const router = useRouter();
   const navigation = useNavigation();
   const { currentUser } = useAuth();
+  const currentUserId = currentUser?.id || currentUser?.uid;
   const { stories: activeStories } = useStories();
   const { chatList: baseUserList, conversations, lastMessages, loadingChats } =
     useChat();
@@ -75,15 +76,15 @@ const ChatList = () => {
     if (!currentUser || baseUserList.length === 0) return [];
     
     const updatedUsers = baseUserList.map(user => {
-      const chatId = currentUser.uid > user.uid
-        ? `${currentUser.uid}_${user.uid}`
-        : `${user.uid}_${currentUser.uid}`;
+      const chatId = currentUserId > user.uid
+        ? `${currentUserId}_${user.uid}`
+        : `${user.uid}_${currentUserId}`;
         
       const chatData = conversations[chatId] || [];
       const lastMessage = chatData[chatData.length - 1];
       
       const unreadCount = chatData.filter(
-        msg => !msg.read && msg.sender !== currentUser.uid
+        msg => !msg.read && msg.sender !== currentUserId
       ).length;
       
       return {
@@ -133,7 +134,7 @@ const ChatList = () => {
   const handleStoryPress = (userId) => {
     if (groupedStories[userId]) {
       const storyUser = chatList.find(user => user.uid === userId);
-      const isCurrentUserStory = String(userId) === String(currentUser?.uid);
+      const isCurrentUserStory = String(userId) === String(currentUserId);
       setSelectedUserStories({
         stories: groupedStories[userId],
         userName: isCurrentUserStory
@@ -222,7 +223,7 @@ const ChatList = () => {
           {/* Render user story containers with usernames */}
           {Object.entries(groupedStories).map(([userId, stories]) => {
             const storyUser = chatList.find(user => user.uid === userId);
-            const isCurrentUserStory = String(userId) === String(currentUser?.uid);
+            const isCurrentUserStory = String(userId) === String(currentUserId);
             const displayName = isCurrentUserStory
               ? translations.me
               : storyUser?.displayName || translations.unknown;
@@ -232,7 +233,7 @@ const ChatList = () => {
 
             const showNewHighlight = hasAnyUnviewedStory(
               stories,
-              currentUser?.uid
+              currentUserId
             );
 
             return (
@@ -296,6 +297,39 @@ const ChatList = () => {
           setIsStoryViewerVisible(false);
         }}
       />
+
+      {/* Group Chat */}
+      <TouchableOpacity
+        style={[styles.chatItem, { backgroundColor: "#8ee4f59c" }]}
+        onPress={() =>
+          router.push({
+            pathname: "/(screens)/group-chat",
+            params: {
+              id: "group_swazi_cooperators",
+              group: JSON.stringify({
+                uid: "group_swazi_cooperators",
+                displayName: "Swazi Cooparators",
+                profilePicture:
+                  "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
+                isGroup: true,
+              }),
+            },
+          })
+        }
+      >
+        <Image
+          source={{
+            uri: "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
+          }}
+          style={styles.avatar}
+        />
+        <View style={styles.chatInfo}>
+          <Text style={[styles.username, { color: colors.tertiary }]}>
+            Swazi Cooparators
+          </Text>
+          <Text style={styles.lastMessage}>Group chat</Text>
+        </View>
+      </TouchableOpacity>
 
       {/* Individual Chat List */}
       <FlatList

@@ -10,53 +10,29 @@ function isGuid(value) {
   return (
     typeof value === 'string' &&
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(
-      value,
+      value
     )
   );
 }
 
-// POST /api/chats
-// body: { isGroup?: boolean, participantUserIds: string[] }
+/* =========================
+   CREATE CHAT
+========================= */
 router.post('/', async (req, res) => {
   const { isGroup, participantUserIds } = req.body || {};
+
   if (!Array.isArray(participantUserIds) || participantUserIds.length === 0) {
-    return res
-      .status(400)
-      .json({ message: 'participantUserIds is required' });
+    return res.status(400).json({ message: 'participantUserIds is required' });
   }
+
   const participants = participantUserIds.map(String);
+
   if (participants.some((id) => !isGuid(id))) {
     return res.status(400).json({ message: 'Invalid participant id' });
   }
 
   try {
     const pool = await getPool();
-
-    // Reuse existing direct chat between the same two users to avoid duplicate rows
-    // and prevent "Failed to create chat" on client retries/races.
-    if (!isGroup && participants.length === 2) {
-      const existing = await pool
-        .request()
-        .input('UserA', sql.UniqueIdentifier, participants[0])
-        .input('UserB', sql.UniqueIdentifier, participants[1])
-        .query(`
-          SELECT TOP 1 c.Id, c.IsGroup, c.CreatedAt
-          FROM dbo.Chats c
-          INNER JOIN dbo.ChatParticipants p ON p.ChatId = c.Id
-          WHERE c.IsGroup = 0
-          GROUP BY c.Id, c.IsGroup, c.CreatedAt
-          HAVING
-            COUNT(*) = 2
-            AND SUM(CASE WHEN p.UserId IN (@UserA, @UserB) THEN 1 ELSE 0 END) = 2
-          ORDER BY c.CreatedAt DESC
-        `);
-      if (existing.recordset?.[0]) {
-        return res.status(200).json({
-          ...existing.recordset[0],
-          Participants: participants,
-        });
-      }
-    }
 
     const tx = new sql.Transaction(pool);
     await tx.begin();
@@ -70,32 +46,38 @@ router.post('/', async (req, res) => {
       `);
 
     const chat = chatInsert.recordset[0];
+
     for (const userId of participants) {
       await new sql.Request(tx)
         .input('ChatId', sql.UniqueIdentifier, chat.Id)
         .input('UserId', sql.UniqueIdentifier, userId)
-        .query(
-          `INSERT INTO dbo.ChatParticipants (ChatId, UserId) VALUES (@ChatId, @UserId)`,
-        );
+        .query(`
+          INSERT INTO dbo.ChatParticipants (ChatId, UserId)
+          VALUES (@ChatId, @UserId)
+        `);
     }
 
     await tx.commit();
-    return res.status(201).json({ ...chat, Participants: participants });
+
+    return res.status(201).json({
+      ...chat,
+      Participants: participants,
+    });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(err);
-    try {
-      // best-effort rollback if tx exists; ignore
-      // eslint-disable-next-line no-empty
-    } catch {}
-    return res.status(500).json({ message: 'Failed to create chat' });
+    console.error('🔥 CREATE CHAT ERROR:', err);
+    return res.status(500).json({
+      message: err.message,
+    });
   }
 });
 
-// GET /api/chats?userId=...
+/* =========================
+   GET CHATS (FIXED)
+========================= */
 router.get('/', async (req, res) => {
   const requestedUserId = req.query.userId ? String(req.query.userId) : null;
   const tokenUserId = req.user?.Id ? String(req.user.Id) : null;
+
   const effectiveUserId =
     requestedUserId && isGuid(requestedUserId)
       ? requestedUserId
@@ -105,60 +87,53 @@ router.get('/', async (req, res) => {
 
   try {
     const pool = await getPool();
-    try {
-      const request = pool.request();
-      let query = `
-        SELECT c.Id, c.IsGroup, c.CreatedAt
-        FROM dbo.Chats c
+    const request = pool.request();
+
+    let query = `
+      SELECT c.Id, c.IsGroup, c.CreatedAt
+      FROM dbo.Chats c
+    `;
+
+    if (effectiveUserId) {
+      request.input('UserId', sql.UniqueIdentifier, effectiveUserId);
+
+      query += `
+        WHERE EXISTS (
+          SELECT 1
+          FROM dbo.ChatParticipants p
+          WHERE p.ChatId = c.Id
+          AND p.UserId = @UserId
+        )
       `;
-      if (effectiveUserId) {
-        request.input('UserId', sql.UniqueIdentifier, effectiveUserId);
-        query += `
-          INNER JOIN dbo.ChatParticipants p ON p.ChatId = c.Id
-          WHERE p.UserId = @UserId
-        `;
-      }
-      query += ' ORDER BY c.CreatedAt DESC';
-      const result = await request.query(query);
-      return res.json(result.recordset);
-    } catch (primaryErr) {
-      // eslint-disable-next-line no-console
-      console.error('GET /api/chats primary query failed:', primaryErr);
-      // Fallback query path to avoid blocking chat sync on join/query planner issues.
-      const fallbackRequest = pool.request();
-      let fallbackQuery = `
-        SELECT c.Id, c.IsGroup, c.CreatedAt
-        FROM dbo.Chats c
-      `;
-      if (effectiveUserId) {
-        fallbackRequest.input('UserId', sql.UniqueIdentifier, effectiveUserId);
-        fallbackQuery += `
-          WHERE EXISTS (
-            SELECT 1
-            FROM dbo.ChatParticipants p
-            WHERE p.ChatId = c.Id AND p.UserId = @UserId
-          )
-        `;
-      }
-      fallbackQuery += ' ORDER BY c.CreatedAt DESC';
-      const fallbackResult = await fallbackRequest.query(fallbackQuery);
-      return res.json(fallbackResult.recordset);
     }
+
+    query += ` ORDER BY c.CreatedAt DESC`;
+
+    const result = await request.query(query);
+    return res.json(result.recordset);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('GET /api/chats hard failure:', err);
-    // Keep clients functional even if chats query fails unexpectedly.
-    return res.status(200).json([]);
+    console.error('🔥 GET /api/chats ERROR:', err);
+
+    return res.status(500).json({
+      message: err.message,
+      stack: err.stack,
+    });
   }
 });
 
-// GET /api/chats/:chatId/participants
+/* =========================
+   GET PARTICIPANTS
+========================= */
 router.get('/:chatId/participants', async (req, res) => {
   const { chatId } = req.params;
-  if (!isGuid(chatId)) return res.status(400).json({ message: 'Invalid chatId' });
+
+  if (!isGuid(chatId)) {
+    return res.status(400).json({ message: 'Invalid chatId' });
+  }
 
   try {
     const pool = await getPool();
+
     const result = await pool
       .request()
       .input('ChatId', sql.UniqueIdentifier, chatId)
@@ -168,55 +143,77 @@ router.get('/:chatId/participants', async (req, res) => {
         WHERE ChatId = @ChatId
         ORDER BY CreatedAt ASC
       `);
+
     return res.json(result.recordset);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     return res.status(500).json({ message: 'Failed to fetch participants' });
   }
 });
 
-// POST /api/chats/:chatId/participants
+/* =========================
+   ADD PARTICIPANT
+========================= */
 router.post('/:chatId/participants', async (req, res) => {
   const { chatId } = req.params;
   const { userId } = req.body || {};
-  if (!isGuid(chatId)) return res.status(400).json({ message: 'Invalid chatId' });
-  if (!isGuid(String(userId))) return res.status(400).json({ message: 'Invalid userId' });
+
+  if (!isGuid(chatId)) {
+    return res.status(400).json({ message: 'Invalid chatId' });
+  }
+
+  if (!isGuid(String(userId))) {
+    return res.status(400).json({ message: 'Invalid userId' });
+  }
 
   try {
     const pool = await getPool();
+
     await pool
       .request()
       .input('ChatId', sql.UniqueIdentifier, chatId)
       .input('UserId', sql.UniqueIdentifier, String(userId))
-      .query(
-        `INSERT INTO dbo.ChatParticipants (ChatId, UserId) VALUES (@ChatId, @UserId)`,
-      );
+      .query(`
+        INSERT INTO dbo.ChatParticipants (ChatId, UserId)
+        VALUES (@ChatId, @UserId)
+      `);
+
     return res.status(201).json({ success: true });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     return res.status(500).json({ message: 'Failed to add participant' });
   }
 });
 
-// POST /api/chats/:chatId/messages
+/* =========================
+   SEND MESSAGE
+========================= */
 router.post('/:chatId/messages', async (req, res) => {
   const { chatId } = req.params;
-  if (!isGuid(chatId)) return res.status(400).json({ message: 'Invalid chatId' });
+  const {
+    senderUserId,
+    receiverUserId,
+    type,
+    text,
+    fileUrl,
+    fileName,
+  } = req.body || {};
 
-  const { senderUserId, receiverUserId, type, text, fileUrl, fileName } =
-    req.body || {};
+  if (!isGuid(chatId)) {
+    return res.status(400).json({ message: 'Invalid chatId' });
+  }
 
   if (!isGuid(String(senderUserId))) {
     return res.status(400).json({ message: 'senderUserId is required' });
   }
+
   if (receiverUserId && !isGuid(String(receiverUserId))) {
     return res.status(400).json({ message: 'Invalid receiverUserId' });
   }
 
   try {
     const pool = await getPool();
+
     const created = await pool
       .request()
       .input('ChatId', sql.UniqueIdentifier, chatId)
@@ -224,7 +221,7 @@ router.post('/:chatId/messages', async (req, res) => {
       .input(
         'ReceiverUserId',
         sql.UniqueIdentifier,
-        receiverUserId ? String(receiverUserId) : null,
+        receiverUserId ? String(receiverUserId) : null
       )
       .input('Type', sql.NVarChar(16), type || 'text')
       .input('Text', sql.NVarChar(sql.MAX), text || null)
@@ -233,89 +230,66 @@ router.post('/:chatId/messages', async (req, res) => {
       .query(`
         INSERT INTO dbo.ChatMessages
           (ChatId, SenderUserId, ReceiverUserId, Type, Text, FileUrl, FileName)
-        OUTPUT inserted.Id, inserted.ChatId, inserted.SenderUserId, inserted.ReceiverUserId,
-               inserted.Type, inserted.Text, inserted.FileUrl, inserted.FileName,
-               inserted.CreatedAt, inserted.ReadAt
+        OUTPUT inserted.*
         VALUES
           (@ChatId, @SenderUserId, @ReceiverUserId, @Type, @Text, @FileUrl, @FileName)
       `);
+
     const createdMessage = created.recordset[0];
-
-    try {
-      let recipientIds = [];
-      if (receiverUserId) {
-        recipientIds = [String(receiverUserId)];
-      } else {
-        const participants = await pool
-          .request()
-          .input('ChatId', sql.UniqueIdentifier, chatId)
-          .query('SELECT UserId FROM dbo.ChatParticipants WHERE ChatId = @ChatId');
-        recipientIds = (participants.recordset || [])
-          .map((row) => String(row.UserId))
-          .filter((id) => id !== String(senderUserId));
-      }
-
-      if (recipientIds.length) {
-        await sendPushToUsers(recipientIds, {
-          title: 'New message',
-          body: text || (fileUrl ? 'Attachment' : 'You received a new message'),
-          data: {
-            chatId,
-            senderUserId: String(senderUserId),
-            receiverUserId: receiverUserId ? String(receiverUserId) : null,
-          },
-        });
-      }
-    } catch (pushError) {
-      // eslint-disable-next-line no-console
-      console.error('Push notification send failed:', pushError);
-    }
 
     return res.status(201).json(createdMessage);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(err);
-    return res.status(500).json({ message: 'Failed to send message' });
+    console.error('🔥 SEND MESSAGE ERROR:', err);
+    return res.status(500).json({ message: err.message });
   }
 });
 
-// GET /api/chats/:chatId/messages?limit=50
+/* =========================
+   GET MESSAGES
+========================= */
 router.get('/:chatId/messages', async (req, res) => {
   const { chatId } = req.params;
-  if (!isGuid(chatId)) return res.status(400).json({ message: 'Invalid chatId' });
+
+  if (!isGuid(chatId)) {
+    return res.status(400).json({ message: 'Invalid chatId' });
+  }
 
   const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
 
   try {
     const pool = await getPool();
+
     const result = await pool
       .request()
       .input('ChatId', sql.UniqueIdentifier, chatId)
       .input('Limit', sql.Int, limit)
       .query(`
-        SELECT TOP (@Limit)
-          Id, ChatId, SenderUserId, ReceiverUserId, Type, Text, FileUrl, FileName,
-          CreatedAt, ReadAt
+        SELECT TOP (@Limit) *
         FROM dbo.ChatMessages
         WHERE ChatId = @ChatId
         ORDER BY CreatedAt DESC
       `);
+
     return res.json(result.recordset);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     return res.status(500).json({ message: 'Failed to fetch messages' });
   }
 });
 
-// POST /api/chats/:chatId/messages/:messageId/read
+/* =========================
+   MARK AS READ
+========================= */
 router.post('/:chatId/messages/:messageId/read', async (req, res) => {
   const { chatId, messageId } = req.params;
-  if (!isGuid(chatId)) return res.status(400).json({ message: 'Invalid chatId' });
-  if (!isGuid(messageId)) return res.status(400).json({ message: 'Invalid messageId' });
+
+  if (!isGuid(chatId) || !isGuid(messageId)) {
+    return res.status(400).json({ message: 'Invalid IDs' });
+  }
 
   try {
     const pool = await getPool();
+
     const updated = await pool
       .request()
       .input('ChatId', sql.UniqueIdentifier, chatId)
@@ -323,18 +297,14 @@ router.post('/:chatId/messages/:messageId/read', async (req, res) => {
       .query(`
         UPDATE dbo.ChatMessages
         SET ReadAt = COALESCE(ReadAt, SYSUTCDATETIME())
-        OUTPUT inserted.Id, inserted.ChatId, inserted.ReadAt
         WHERE Id = @Id AND ChatId = @ChatId
       `);
-    const item = updated.recordset[0];
-    if (!item) return res.status(404).json({ message: 'Not found' });
-    return res.json(item);
+
+    return res.json({ success: true });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(err);
     return res.status(500).json({ message: 'Failed to mark read' });
   }
 });
 
 module.exports = router;
-
