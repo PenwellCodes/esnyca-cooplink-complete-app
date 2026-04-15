@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 const { sql, getPool } = require('../db');
 const { uploadBufferToImageBB } = require('../services/imagebb');
 
@@ -224,37 +225,119 @@ exports.getForgotPasswordQuestions = async (req, res) => {
   }
 };
 
-exports.resetPasswordWithQuestions = async (req, res) => {
-  const { email, answers, newPassword } = req.body || {};
-  if (!email || !answers || typeof answers !== 'object' || !newPassword) {
-    return res.status(400).json({ message: 'email, answers and newPassword are required' });
+async function sendPasswordResetEmail({ toEmail, displayName, token }) {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const fromEmail = process.env.SMTP_FROM || smtpUser;
+
+  if (!smtpHost || !smtpUser || !smtpPass || !fromEmail) {
+    throw new Error('SMTP is not configured on server');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  });
+
+  const resetBaseUrl = process.env.DASHBOARD_RESET_URL || '';
+  const resetLink = resetBaseUrl
+    ? `${resetBaseUrl}?token=${encodeURIComponent(token)}&email=${encodeURIComponent(toEmail)}`
+    : '';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h2>Esnyca Admin Password Reset</h2>
+      <p>Hello ${displayName || 'Admin'},</p>
+      <p>Use this reset token to change your dashboard password:</p>
+      <p style="font-size: 18px; font-weight: bold;">${token}</p>
+      <p>This token expires in 15 minutes.</p>
+      ${resetLink ? `<p>Reset link: <a href="${resetLink}">${resetLink}</a></p>` : ''}
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from: fromEmail,
+    to: toEmail,
+    subject: 'Esnyca Admin Password Reset',
+    text: `Use this reset token to change your dashboard password: ${token}. It expires in 15 minutes.`,
+    html,
+  });
+}
+
+exports.sendForgotPasswordEmail = async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ message: 'email is required' });
+  }
+
+  try {
+    const user = await getUserByEmail(email);
+    if (!user) {
+      return res.json({ status: 'success', message: 'If the account exists, reset email was sent.' });
+    }
+
+    const role = String(user.Role || '').toLowerCase();
+    if (!['admin', 'superadmin'].includes(role)) {
+      return res.json({ status: 'success', message: 'If the account exists, reset email was sent.' });
+    }
+
+    const token = jwt.sign(
+      { id: user.Id, email: String(user.Email || '').toLowerCase(), purpose: 'admin-password-reset' },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' },
+    );
+
+    await sendPasswordResetEmail({
+      toEmail: user.Email,
+      displayName: user.DisplayName,
+      token,
+    });
+
+    return res.json({ status: 'success', message: 'Password reset email sent.' });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(error);
+    return res.status(500).json({ message: 'Failed to send reset email' });
+  }
+};
+
+exports.resetPasswordWithToken = async (req, res) => {
+  const { email, token, newPassword } = req.body || {};
+  if (!email || !token || !newPassword) {
+    return res.status(400).json({ message: 'email, token and newPassword are required' });
   }
   if (String(newPassword).trim().length < 6) {
     return res.status(400).json({ message: 'New password must be at least 6 characters' });
   }
 
   try {
-    const user = await getUserByEmail(email);
+    const decoded = jwt.verify(String(token), process.env.JWT_SECRET);
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (
+      !decoded ||
+      decoded.purpose !== 'admin-password-reset' ||
+      String(decoded.email || '').toLowerCase() !== normalizedEmail
+    ) {
+      return res.status(401).json({ message: 'Invalid or expired reset token' });
+    }
+
+    const user = await getUserByEmail(normalizedEmail);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
-    const submittedDisplayName = String(answers.displayName || '').trim().toLowerCase();
-    const submittedRole = String(answers.role || '').trim().toLowerCase();
-    const submittedRegistration = String(answers.registrationNumber || '').trim().toLowerCase();
-
-    const expectedDisplayName = String(user.DisplayName || '').trim().toLowerCase();
-    const expectedRole = String(user.Role || '').trim().toLowerCase();
-    const expectedRegistration = String(user.RegistrationNumber || '').trim().toLowerCase();
-
-    if (!submittedDisplayName || submittedDisplayName !== expectedDisplayName) {
-      return res.status(401).json({ message: 'Security answers are incorrect' });
+    if (String(user.Id) !== String(decoded.id)) {
+      return res.status(401).json({ message: 'Invalid or expired reset token' });
     }
-    if (!submittedRole || submittedRole !== expectedRole) {
-      return res.status(401).json({ message: 'Security answers are incorrect' });
-    }
-    if (expectedRole === 'cooperative' && submittedRegistration !== expectedRegistration) {
-      return res.status(401).json({ message: 'Security answers are incorrect' });
+    const role = String(user.Role || '').toLowerCase();
+    if (!['admin', 'superadmin'].includes(role)) {
+      return res.status(403).json({ message: 'Only admin users can reset through this endpoint' });
     }
 
     const passwordHash = await bcrypt.hash(String(newPassword).trim(), 10);
@@ -273,6 +356,6 @@ exports.resetPasswordWithQuestions = async (req, res) => {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error(error);
-    return res.status(500).json({ message: 'Failed to reset password' });
+    return res.status(401).json({ message: 'Invalid or expired reset token' });
   }
 };

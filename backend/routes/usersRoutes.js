@@ -263,6 +263,70 @@ router.put('/:id', requireSelfOrAdmin('id'), async (req, res) => {
   }
 });
 
+// PATCH /api/users/:id/disable (admin only)
+router.patch('/:id/disable', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
+
+  try {
+    const pool = await getPool();
+    const hasDisabled = await hasUsersDisabledColumn(pool);
+    if (!hasDisabled) {
+      return res.status(400).json({ message: 'Disabled column is not available in dbo.Users' });
+    }
+
+    const result = await pool
+      .request()
+      .input('Id', sql.UniqueIdentifier, id)
+      .query(`
+        UPDATE dbo.Users
+        SET Disabled = 1, UpdatedAt = SYSUTCDATETIME()
+        OUTPUT inserted.Id, inserted.Email, inserted.Role, inserted.DisplayName, inserted.Disabled, inserted.UpdatedAt
+        WHERE Id = @Id
+      `);
+
+    const updated = result.recordset?.[0];
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    return res.json(updated);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return res.status(500).json({ message: 'Failed to disable user' });
+  }
+});
+
+// PATCH /api/users/:id/enable (admin only)
+router.patch('/:id/enable', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  if (!isGuid(id)) return res.status(400).json({ message: 'Invalid Id' });
+
+  try {
+    const pool = await getPool();
+    const hasDisabled = await hasUsersDisabledColumn(pool);
+    if (!hasDisabled) {
+      return res.status(400).json({ message: 'Disabled column is not available in dbo.Users' });
+    }
+
+    const result = await pool
+      .request()
+      .input('Id', sql.UniqueIdentifier, id)
+      .query(`
+        UPDATE dbo.Users
+        SET Disabled = 0, UpdatedAt = SYSUTCDATETIME()
+        OUTPUT inserted.Id, inserted.Email, inserted.Role, inserted.DisplayName, inserted.Disabled, inserted.UpdatedAt
+        WHERE Id = @Id
+      `);
+
+    const updated = result.recordset?.[0];
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    return res.json(updated);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    return res.status(500).json({ message: 'Failed to enable user' });
+  }
+});
+
 // DELETE /api/users/:id
 router.delete('/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
