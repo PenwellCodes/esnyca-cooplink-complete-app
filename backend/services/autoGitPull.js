@@ -1,6 +1,31 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
+function restartCurrentProcess(repoDir) {
+  const runningUnderPm2 = process.env.pm_id !== undefined;
+  if (runningUnderPm2) {
+    // eslint-disable-next-line no-console
+    console.log('[auto-git-pull] PM2 detected. Exiting so PM2 can restart...');
+    setTimeout(() => process.exit(0), 500);
+    return;
+  }
+
+  // Relaunch this same entry command when running without PM2 (e.g. npm start).
+  // process.argv usually looks like: [node, index.js, ...args]
+  const nodeExec = process.argv[0];
+  const nodeArgs = process.argv.slice(1);
+  const child = spawn(nodeExec, nodeArgs, {
+    cwd: repoDir,
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+
+  // eslint-disable-next-line no-console
+  console.log('[auto-git-pull] restarted app process after pulling new commits.');
+  setTimeout(() => process.exit(0), 500);
+}
+
 function runGit(args, repoDir) {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, { cwd: repoDir });
@@ -41,6 +66,18 @@ async function runGitPull() {
     if (stdout) {
       // eslint-disable-next-line no-console
       console.log('[auto-git-pull] success:', stdout.trim());
+    }
+
+    const output = `${stdout || ''}\n${stderr || ''}`;
+    const hasNewCommits =
+      /Updating\s+[0-9a-f]+\.\.[0-9a-f]+/i.test(output) ||
+      /Fast-forward/i.test(output) ||
+      /files changed/i.test(output);
+
+    if (hasNewCommits) {
+      // eslint-disable-next-line no-console
+      console.log('[auto-git-pull] new commits pulled. Restarting to apply updates...');
+      restartCurrentProcess(repoDir);
     }
   } catch (error) {
     // eslint-disable-next-line no-console

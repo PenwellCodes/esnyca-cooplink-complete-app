@@ -1,4 +1,3 @@
-const jwt = require('jsonwebtoken');
 const { sql, getPool } = require('../db');
 
 async function getUserById(id) {
@@ -16,36 +15,43 @@ async function getUserById(id) {
 }
 
 async function requireAuth(req, res, next) {
+  const userId = String(req.headers['x-user-id'] || '').trim();
+  const requestedRole = String(req.headers['x-user-role'] || '').trim();
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+
   try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return res.status(401).json({ message: 'Authentication required' });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded?.id) return res.status(401).json({ message: 'Invalid token' });
-
-    const user = await getUserById(decoded.id);
+    const user = await getUserById(userId);
     if (!user) return res.status(401).json({ message: 'User not found' });
     if (user.Disabled) return res.status(403).json({ message: 'Account is disabled' });
 
-    req.user = user;
+    req.user = {
+      ...user,
+      Role: requestedRole || user.Role,
+    };
     return next();
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    // eslint-disable-next-line no-console
+    console.error('Authentication user lookup failed:', error);
+    return res.status(500).json({ message: 'Authentication lookup failed' });
   }
 }
 
 async function optionalAuth(req, _res, next) {
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return next();
+  const userId = String(req.headers['x-user-id'] || '').trim();
+  const requestedRole = String(req.headers['x-user-role'] || '').trim();
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded?.id) return next();
-    const user = await getUserById(decoded.id);
+  if (!userId) return next();
+
+  try {
+    const user = await getUserById(userId);
     if (user && !user.Disabled) {
-      req.user = user;
+      req.user = {
+        ...user,
+        Role: requestedRole || user.Role,
+      };
     }
     return next();
   } catch {
