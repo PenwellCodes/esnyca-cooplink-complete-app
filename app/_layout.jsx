@@ -42,10 +42,6 @@ const RootLayout = () => {
   return (
     <PaperProvider theme={theme}>
       <GlobalContextProvider>
-        {/* Global status bar:
-            - dark icons/text on light (default) background
-            - individual screens with blue headers can override to light */}
-        {/* Use a static background here to avoid accessing theme before it is ready */}
         <StatusBar style="dark" />
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />

@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useRef,
   useState,
+  useCallback,
 } from "react";
 import { AppState } from "react-native";
 import { router } from "expo-router";
@@ -198,12 +199,10 @@ export const ChatProvider = ({ children }) => {
           );
         } catch (_errorWithUserId) {
           try {
-            // Some deployments expect userId, others infer it from token.
             chats = await apiRequest(`/chats`, {
               timeoutMs: CHAT_SYNC_TIMEOUT_MS,
             });
           } catch (fallbackError) {
-            // Keep existing chat state and avoid bubbling noisy refresh errors.
             console.log(
               "Chat refresh warning:",
               fallbackError?.message || fallbackError
@@ -308,7 +307,6 @@ export const ChatProvider = ({ children }) => {
         setConversations((prev) => {
           const hasIncomingData = Object.keys(nextConversations).length > 0;
           if (!hasIncomingData && Object.keys(prev).length > 0) {
-            // Preserve previously loaded chats if backend temporarily returns no rows.
             return prev;
           }
           const picked = pickNewIncomingToast(
@@ -367,8 +365,6 @@ export const ChatProvider = ({ children }) => {
     }
 
     refreshChatState().catch((error) => {
-      // Keep chat UI usable even if periodic refresh fails.
-      // Do not wipe existing in-memory chats on transient backend issues.
       console.log("Chat refresh warning:", error?.message || error);
       setLoadingChats(false);
     });
@@ -380,6 +376,7 @@ export const ChatProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [currentUserId, currentUser?.role]);
 
+  // FIXED: Mark messages as read and refresh unread counts
   const markMessagesAsRead = async (chatId, messages) => {
     try {
       const unreadMessages = messages.filter(
@@ -395,15 +392,41 @@ export const ChatProvider = ({ children }) => {
         });
       }
 
+      // Update local unread count
       setUnreadCounts((prev) => ({
         ...prev,
         [chatId]: Math.max((prev[chatId] || 0) - unreadMessages.length, 0),
       }));
+      
+      // Refresh the entire chat state to ensure consistency
+      await refreshChatState();
+      
       Toast.hide();
     } catch (error) {
       console.error("Error marking messages as read:", error);
     }
   };
+
+  // NEW: Function to manually refresh chats
+  const refreshChats = useCallback(async () => {
+    if (!currentUserId) return false;
+    try {
+      await refreshChatState();
+      return true;
+    } catch (error) {
+      console.error("Error refreshing chats:", error);
+      return false;
+    }
+  }, [currentUserId, refreshChatState]);
+
+  // NEW: Function to get total unread count
+  const getTotalUnreadCount = useCallback(() => {
+    let total = 0;
+    Object.values(unreadCounts).forEach(count => {
+      total += (Number(count) || 0);
+    });
+    return total;
+  }, [unreadCounts]);
 
   const ensureDirectChat = async (otherUserId) => {
     const chatKey = buildDirectKey(currentUserId, otherUserId);
@@ -424,7 +447,6 @@ export const ChatProvider = ({ children }) => {
       setChatIdMap((prev) => ({ ...prev, [chatKey]: actualChatId }));
       return { chatKey, chatId: actualChatId };
     } catch (createError) {
-      // Recovery path: chat may already exist and create failed due to duplicate/constraint.
       try {
         let chats = [];
         try {
@@ -433,7 +455,6 @@ export const ChatProvider = ({ children }) => {
             { timeoutMs: CHAT_SYNC_TIMEOUT_MS }
           );
         } catch {
-          // Fallback when user-filtered chats endpoint is unstable.
           chats = await apiRequest(`/chats`, { timeoutMs: CHAT_SYNC_TIMEOUT_MS });
         }
 
@@ -453,7 +474,7 @@ export const ChatProvider = ({ children }) => {
           }
         }
       } catch {
-        // Ignore fallback sync lookup errors; preserve original create error below.
+        // Ignore fallback sync lookup errors
       }
 
       throw createError;
@@ -524,8 +545,6 @@ export const ChatProvider = ({ children }) => {
       },
     });
 
-    // Persist sent message into shared context immediately so it survives navigation
-    // even when background /chats refresh is temporarily failing.
     const createdMessage = {
       id: created?.Id || created?.id || `${Date.now()}`,
       sender: created?.SenderUserId || currentUserId,
@@ -573,8 +592,6 @@ export const ChatProvider = ({ children }) => {
     }));
 
     refreshChatState().catch((error) => {
-      // Avoid surfacing non-fatal background sync failures as hard errors in UI.
-      // Sent message already lives in context state; keep it visible.
       console.log("Background chat refresh warning:", error?.message || error);
     });
     return created;
@@ -594,6 +611,8 @@ export const ChatProvider = ({ children }) => {
         unreadCounts,
         ensureDirectChat,
         sendMessage,
+        refreshChats,           // NEW: Added
+        getTotalUnreadCount,    // NEW: Added
       }}
     >
       {children}

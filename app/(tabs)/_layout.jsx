@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Tabs, usePathname, useRouter } from "expo-router";
+import { Tabs, usePathname, useRouter, useFocusEffect } from "expo-router";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { View, Text, StyleSheet } from "react-native";
 import { useTheme } from "react-native-paper";
 import Feather from "@expo/vector-icons/Feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "../../context/appstate/AuthContext"; // Import AuthContext
+import { useAuth } from "../../context/appstate/AuthContext";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { useChat } from "../../context/appstate/ChatContext";
 
@@ -54,16 +54,65 @@ function ChatTabIcon({ color, label, isActive, unreadTotal }) {
 const TabLayout = () => {
   const { colors, dark } = useTheme();
   const insets = useSafeAreaInsets();
-  const pathname = usePathname(); // Get current active route
-  const { currentUser } = useAuth(); // Get user state from AuthContext
-  const { unreadCounts } = useChat();
+  const pathname = usePathname();
+  const { currentUser } = useAuth();
+  const { unreadCounts, refreshChats, getTotalUnreadCount, conversations } = useChat();
   const router = useRouter();
   const { currentLanguage, t } = useLanguage();
+  const [totalUnreadChats, setTotalUnreadChats] = useState(0);
 
-  const totalUnreadChats = useMemo(() => {
-    if (!currentUser?.uid || !unreadCounts) return 0;
-    return Object.values(unreadCounts).reduce((sum, n) => sum + (Number(n) || 0), 0);
-  }, [currentUser?.uid, unreadCounts]);
+  // Calculate total unread messages from conversations directly
+  const calculateTotalUnread = useCallback(() => {
+    if (!currentUser?.uid || !conversations) return 0;
+    
+    const currentUserId = currentUser.uid || currentUser.id;
+    let total = 0;
+    
+    Object.values(conversations).forEach(chatMessages => {
+      if (!Array.isArray(chatMessages)) return;
+      
+      const unread = chatMessages.filter(msg => {
+        const isReceiver = String(msg.receiver).toLowerCase() === String(currentUserId).toLowerCase();
+        const isNotRead = !msg.read && msg.status !== 'read';
+        const isNotFromCurrentUser = String(msg.sender).toLowerCase() !== String(currentUserId).toLowerCase();
+        return isReceiver && isNotRead && isNotFromCurrentUser;
+      }).length;
+      
+      total += unread;
+    });
+    
+    return total;
+  }, [conversations, currentUser?.uid]);
+
+  // Update unread count when conversations change
+  useEffect(() => {
+    const total = calculateTotalUnread();
+    setTotalUnreadChats(total);
+  }, [conversations, calculateTotalUnread]);
+
+  // Also use unreadCounts as fallback
+  useEffect(() => {
+    if (unreadCounts && Object.keys(unreadCounts).length > 0) {
+      const total = Object.values(unreadCounts).reduce((sum, n) => sum + (Number(n) || 0), 0);
+      if (total !== totalUnreadChats) {
+        setTotalUnreadChats(total);
+      }
+    }
+  }, [unreadCounts, totalUnreadChats]);
+
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const refresh = async () => {
+        if (refreshChats) {
+          await refreshChats();
+          const total = calculateTotalUnread();
+          setTotalUnreadChats(total);
+        }
+      };
+      refresh();
+    }, [refreshChats, calculateTotalUnread])
+  );
 
   const [tabLabels, setTabLabels] = useState({
     home: "Home",
@@ -92,7 +141,6 @@ const TabLayout = () => {
           tabBarInactiveTintColor: colors.tertiary,
           tabBarShowLabel: false,
           tabBarStyle: {
-            // Keep the tab bar above the phone's bottom nav / gesture bar
             height: 60 + insets.bottom,
             paddingBottom: insets.bottom || 8,
             borderTopWidth: 0,
@@ -132,9 +180,7 @@ const TabLayout = () => {
           listeners={{
             tabPress: (e) => {
               if (!currentUser) {
-                e.preventDefault(); // Prevent navigation to Chat
-                // Push (not replace) so the sign-in screen can go "back" to the previous tab.
-                // Also pass returnTo so after successful login we can route to the tab the user intended.
+                e.preventDefault();
                 const returnTo = encodeURIComponent("/(tabs)/chat");
                 router.push(`/(auth)/sign-in?returnTo=${returnTo}`);
               }
@@ -174,7 +220,6 @@ const TabLayout = () => {
           }}
         />
       </Tabs>
-      {/* Status bar on tabs: use theme.dark to choose icon color */}
       <StatusBar style={dark ? "light" : "dark"} backgroundColor={colors.background} />
     </>
   );

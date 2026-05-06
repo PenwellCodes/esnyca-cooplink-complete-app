@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useEffect, useRef } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
-import { Platform, LogBox } from "react-native";
+import { Platform, LogBox, AppState, Vibration } from "react-native";
 import { useAuth } from "./AuthContext";
 import { apiRequest } from "../../utils/api";
 import { router } from "expo-router";
+import Toast from "react-native-toast-message";
 
 // Ignore Expo Go warning
 LogBox.ignoreLogs(['expo-notifications:']);
@@ -14,19 +15,26 @@ const NotificationsContext = createContext({});
 // Check if running in Expo Go
 const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
 
-// Only configure if not in Expo Go
+// Configure notification handler for foreground messages (WhatsApp style)
 if (!isExpoGo) {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (notification) => {
+      console.log("📱 Handling notification:", notification);
+      return {
+        shouldShowAlert: true,      // Show alert popup like WhatsApp
+        shouldPlaySound: true,      // Play sound
+        shouldSetBadge: true,       // Update badge count
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      };
+    },
   });
 }
 
 async function registerForPushNotificationsAsync() {
-  if (isExpoGo) return null;
+  if (isExpoGo) {
+    console.log("⚠️ Expo Go doesn't support push notifications");
+    return null;
+  }
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
@@ -34,6 +42,18 @@ async function registerForPushNotificationsAsync() {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#FF231F7C",
+      sound: "default",
+      showBadge: true,
+    });
+    
+    // Create a high priority channel for messages (WhatsApp style)
+    await Notifications.setNotificationChannelAsync("messages", {
+      name: "Messages",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250, 250, 250],
+      lightColor: "#25D366", // WhatsApp green color
+      sound: "default",
+      showBadge: true,
     });
   }
 
@@ -43,13 +63,20 @@ async function registerForPushNotificationsAsync() {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
-  if (finalStatus !== "granted") return null;
+  if (finalStatus !== "granted") {
+    console.log("❌ Notification permissions not granted");
+    return null;
+  }
 
   const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
-  if (!projectId) return null;
+  if (!projectId) {
+    console.log("❌ No project ID found");
+    return null;
+  }
 
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    console.log("✅ Expo push token:", tokenData?.data);
     return tokenData?.data || null;
   } catch (error) {
     console.log("Error getting push token:", error);
@@ -61,7 +88,11 @@ export const NotificationsProvider = ({ children }) => {
   const { currentUser } = useAuth();
   const notificationListener = useRef();
   const responseListener = useRef();
+  const [lastNotification, setLastNotification] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isInChat, setIsInChat] = useState(false);
 
+  // Register for push notifications
   useEffect(() => {
     const setup = async () => {
       if (!currentUser?.uid || isExpoGo) return;
@@ -72,7 +103,7 @@ export const NotificationsProvider = ({ children }) => {
           method: "POST",
           body: { token, userId: currentUser.uid, platform: Platform.OS },
         });
-        console.log("Push token registered");
+        console.log("✅ Push token registered successfully");
       } catch (error) {
         console.log("Push setup failed:", error?.message || error);
       }
@@ -80,26 +111,144 @@ export const NotificationsProvider = ({ children }) => {
     setup();
   }, [currentUser?.uid]);
 
-  useEffect(() => {
-    if (isExpoGo) return;
-
-    notificationListener.current = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        console.log("Notification received:", notification);
-      }
-    );
-
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        console.log("Notification tapped:", response);
-        const { data } = response.notification.request.content;
+  // Show WhatsApp-style toast notification (banner at top)
+  const showWhatsAppToast = (title, message, data) => {
+    console.log(`📱 [WhatsApp Style Toast] ${title}: ${message}`);
+    
+    // Vibrate like WhatsApp (double vibration pattern)
+    if (Platform.OS !== 'web') {
+      Vibration.vibrate([0, 500, 200, 500]);
+    }
+    
+    // Update unread count
+    setUnreadCount(prev => prev + 1);
+    
+    // Don't show toast if user is currently in the chat
+    if (isInChat && data?.senderUserId === data?.currentChatUserId) {
+      console.log("User is currently in this chat, skipping toast");
+      return;
+    }
+    
+    // Show WhatsApp-style toast banner
+    Toast.show({
+      type: 'info',
+      text1: title,
+      text2: message,
+      position: 'top',
+      visibilityTime: 4000,
+      autoHide: true,
+      topOffset: 50,
+      onPress: () => {
+        console.log("Toast pressed, navigating to chat");
         if (data?.chatId && data?.senderUserId) {
           router.push({
             pathname: `/(screens)/chatConversations/${data.senderUserId}`,
             params: {
               user: JSON.stringify({
                 uid: data.senderUserId,
+                displayName: data.userName || title,
+                profilePic: data.userAvatar || '',
+              }),
+            },
+          });
+        }
+      },
+    });
+  };
+
+  // Show WhatsApp-style alert (popup modal) - fallback for important notifications
+  const showWhatsAppAlert = (title, message, data) => {
+    console.log(`📱 [WhatsApp Style Alert] ${title}: ${message}`);
+    
+    // Vibrate like WhatsApp
+    if (Platform.OS !== 'web') {
+      Vibration.vibrate([0, 500, 200, 500]);
+    }
+    
+    // Update unread count
+    setUnreadCount(prev => prev + 1);
+    
+    // Don't show alert if user is currently in the chat
+    if (isInChat && data?.senderUserId === data?.currentChatUserId) {
+      console.log("User is currently in this chat, skipping alert");
+      return;
+    }
+    
+    // Show WhatsApp-style alert with Reply option
+    Alert.alert(
+      title,
+      message,
+      [
+        {
+          text: "Close",
+          style: "cancel",
+          onPress: () => console.log("Alert closed"),
+        },
+        {
+          text: "Reply",
+          onPress: () => {
+            console.log("Reply pressed, navigating to chat");
+            if (data?.chatId && data?.senderUserId) {
+              router.push({
+                pathname: `/(screens)/chatConversations/${data.senderUserId}`,
+                params: {
+                  user: JSON.stringify({
+                    uid: data.senderUserId,
+                    displayName: data.userName || title,
+                    profilePic: data.userAvatar || '',
+                  }),
+                },
+              });
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  // Listen for notifications when app is in foreground
+  useEffect(() => {
+    if (isExpoGo) {
+      console.log("⚠️ Push notifications not available in Expo Go");
+      return;
+    }
+
+    // When notification is received while app is open (foreground)
+    notificationListener.current = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        console.log("📱 Foreground notification received:", notification);
+        
+        const { title, body, data } = notification.request.content;
+        
+        // Extract sender name from title or data
+        const senderName = title || data?.userName || 'New message';
+        const messageBody = body || 'Sent you a message';
+        
+        // Use toast for normal messages (like WhatsApp banner)
+        showWhatsAppToast(senderName, messageBody, {
+          ...data,
+          currentChatUserId: data?.currentChatUserId,
+        });
+      }
+    );
+
+    // When user taps on notification (app in background or closed)
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        console.log("👆 Notification tapped:", response);
+        
+        const { data } = response.notification.request.content;
+        
+        if (data?.chatId && data?.senderUserId) {
+          // Navigate to the chat screen like WhatsApp
+          router.push({
+            pathname: `/(screens)/chatConversations/${data.senderUserId}`,
+            params: {
+              user: JSON.stringify({
+                uid: data.senderUserId,
                 displayName: data.userName || 'User',
+                profilePic: data.userAvatar || '',
               }),
             },
           });
@@ -107,7 +256,12 @@ export const NotificationsProvider = ({ children }) => {
       }
     );
 
-    // FIXED: Correct cleanup for expo-notifications
+    // Listen for app state changes
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      console.log('App state changed to:', nextAppState);
+    });
+
+    // Cleanup
     return () => {
       if (notificationListener.current) {
         Notifications.removeNotificationSubscription(notificationListener.current);
@@ -115,14 +269,90 @@ export const NotificationsProvider = ({ children }) => {
       if (responseListener.current) {
         Notifications.removeNotificationSubscription(responseListener.current);
       }
+      subscription.remove();
     };
-  }, []);
+  }, [isInChat]);
+
+  // Function to set whether user is currently in a chat
+  const setUserInChat = (inChat, chatUserId = null) => {
+    setIsInChat(inChat);
+    if (inChat && chatUserId) {
+      console.log(`User entered chat with ${chatUserId}`);
+    }
+  };
+
+  // Function to get unread count
+  const getUnreadCount = () => unreadCount;
+  
+  // Function to reset unread count
+  const resetUnreadCount = () => setUnreadCount(0);
+  
+  // Function to schedule a local notification (for testing)
+  const scheduleLocalNotification = async (title, body, data = {}) => {
+    if (isExpoGo) {
+      console.log("Local notifications not fully supported in Expo Go");
+      return;
+    }
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: null, // Show immediately
+      });
+      console.log("✅ Local notification scheduled");
+    } catch (error) {
+      console.error("Error scheduling local notification:", error);
+    }
+  };
+
+  // Function to test notification (for debugging)
+  const testNotification = () => {
+    showWhatsAppToast(
+      "Test Notification",
+      "This is a test message from your app",
+      { test: true }
+    );
+  };
 
   return (
-    <NotificationsContext.Provider value={{ isExpoGo }}>
+    <NotificationsContext.Provider value={{ 
+      isExpoGo,
+      lastNotification,
+      unreadCount,
+      getUnreadCount,
+      resetUnreadCount,
+      scheduleLocalNotification,
+      showWhatsAppAlert,
+      showWhatsAppToast,
+      setUserInChat,
+      testNotification,
+    }}>
       {children}
     </NotificationsContext.Provider>
   );
 };
 
-export const useNotifications = () => useContext(NotificationsContext);
+export const useNotifications = () => {
+  const context = useContext(NotificationsContext);
+  if (!context) {
+    console.warn("useNotifications must be used within a NotificationsProvider");
+    return {
+      isExpoGo: true,
+      lastNotification: null,
+      unreadCount: 0,
+      getUnreadCount: () => 0,
+      resetUnreadCount: () => {},
+      scheduleLocalNotification: async () => {},
+      showWhatsAppAlert: () => {},
+      showWhatsAppToast: () => {},
+      setUserInChat: () => {},
+      testNotification: () => {},
+    };
+  }
+  return context;
+};

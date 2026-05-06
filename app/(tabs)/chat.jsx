@@ -86,9 +86,23 @@ const AvatarWithInitials = ({ imageUrl, name, size = 48 }) => {
   );
 };
 
-const StoryAvatar = ({ imageUrl, name, size = 56, showNewHighlight = false }) => {
+// FIXED: StoryAvatar with better styling for Add Story button
+const StoryAvatar = ({ imageUrl, name, size = 56, showNewHighlight = false, isAddStory = false }) => {
   const [imageError, setImageError] = useState(false);
   const initials = getUserInitials(name);
+  
+  // Special styling for Add Story button
+  if (isAddStory) {
+    return (
+      <View style={[styles.statusBorder, styles.addStoryBorder, { width: size + 4, height: size + 4, borderRadius: (size + 4) / 2 }]}>
+        <View style={[styles.statusInner, { width: size, height: size, borderRadius: size / 2 }]}>
+          <View style={styles.addStoryInner}>
+            <Ionicons name="add-circle" size={size * 0.5} color="#007AFF" />
+          </View>
+        </View>
+      </View>
+    );
+  }
   
   if (showNewHighlight) {
     return (
@@ -287,7 +301,6 @@ const ChatList = () => {
     });
   }, [baseUserList, conversations, lastMessages, currentUser, translations.fileSent, translations.startConversation, getUnreadCount]);
 
-  // DEFINE groupedStories HERE - BEFORE using it
   const groupedStories = React.useMemo(() => {
     const groups = {};
     if (activeStories && activeStories.length > 0) {
@@ -395,26 +408,23 @@ const ChatList = () => {
 
       <View style={styles.statusListContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {/* FIXED: Add Story button with better styling */}
           {currentUser?.role === "cooperative" && (
             <TouchableOpacity
               style={styles.statusItem}
               onPress={() => router.push("/add-story")}
             >
-              <LinearGradient
-                colors={["#a8e0ff", "#8ee3f5"]}
-                style={styles.statusBorder}
-              >
-                <View style={styles.statusInner}>
-                  <Ionicons name="add-circle" size={24} color="#007AFF" />
-                </View>
-              </LinearGradient>
+              <StoryAvatar 
+                isAddStory={true}
+                size={56}
+              />
               <Text style={[styles.menuText, typography.small]}>
                 {translations.addStory}
               </Text>
             </TouchableOpacity>
           )}
           
-          {/* NOW groupedStories is defined and safe to use */}
+          {/* Render user story containers */}
           {Object.entries(groupedStories).map(([userId, stories]) => {
             const displayName = getStoryOwnerName(userId);
             const shortName = displayName.length > 12 ? `${displayName.substring(0, 10)}...` : displayName;
@@ -559,6 +569,19 @@ const styles = StyleSheet.create({
   statusSeenRing: { backgroundColor: "#e2e8f0", borderRadius: 30 },
   statusInner: { backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   statusImage: { width: "100%", height: "100%" },
+  // NEW: Add Story button specific styles
+  addStoryBorder: { 
+    backgroundColor: "#f0f0f0",
+    borderRadius: 30,
+  },
+  addStoryInner: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e8e8e8",
+    borderRadius: 28,
+  },
   menuText: { marginTop: 4, fontSize: 11, textAlign: "center", color: "#333", width: 65 },
   chatList: { paddingHorizontal: 16, paddingBottom: 16 },
   chatItem: { flexDirection: "row", alignItems: "center", marginVertical: 8, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#eee" },
