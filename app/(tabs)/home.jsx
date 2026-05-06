@@ -12,13 +12,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   useWindowDimensions,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "react-native-paper";
 import { typography } from "../../constants";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useAuth, loadingAuth } from "../../context/appstate/AuthContext";
+import { useAuth } from "../../context/appstate/AuthContext";
 import { searchScreensAndDatabase } from "../../utils/searchScreen";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -32,7 +33,7 @@ const Home = () => {
   const router = useRouter();
   const { currentUser } = useAuth();
   const [headlineIndex, setHeadlineIndex] = useState(0);
-  const textOpacity = useRef(new Animated.Value(1)).current; // Animation value for banner text opacity
+  const textOpacity = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState("");
   const [hasUnreadNews, setHasUnreadNews] = useState(false);
   const [newsHeadlines, setNewsHeadlines] = useState([]);
@@ -85,7 +86,6 @@ const Home = () => {
   };
 
   useEffect(() => {
-    // Only start animation if we have headlines
     if (newsHeadlines.length === 0) return;
 
     const interval = setInterval(() => {
@@ -105,10 +105,9 @@ const Home = () => {
         }
 
         if (fetchedNews.length > 0) {
-          // Extract titles from published news
           const headlines = fetchedNews
             .map((news) => news.Title || news.title)
-            .filter((title) => title && title.trim() !== ""); // Filter out empty titles
+            .filter((title) => title && title.trim() !== "");
 
           if (headlines.length > 0) {
             setNewsHeadlines(headlines);
@@ -121,7 +120,6 @@ const Home = () => {
           }));
           setNewsItems(bannerItems);
 
-          // Check for unread news using the first published item
           const latestNews = fetchedNews[0];
           const newsDate = latestNews.CreatedAt || latestNews.createdAt;
 
@@ -182,13 +180,12 @@ const Home = () => {
     },
   ];
 
-  const horizontalPadding = 16 * 2;
-  const cardGap = 12;
+  // FIX: Calculate card size based on screen width to fix gap issue
+  const horizontalPadding = 32; // 16 * 2 (left + right padding)
+  const cardGap = 8; // Reduced from 12 to 8 for smaller gap
   const cardsPerRow = 3;
-  const cardSize = Math.max(
-    78,
-    Math.floor((width - horizontalPadding - cardGap * (cardsPerRow - 1)) / cardsPerRow)
-  );
+  const cardSize = Math.floor((width - horizontalPadding - (cardGap * (cardsPerRow - 1))) / cardsPerRow);
+  
   const bannerItem = newsItems[headlineIndex % Math.max(newsItems.length, 1)];
   const bannerImage =
     bannerItem?.imageUrl ||
@@ -207,7 +204,6 @@ const Home = () => {
           results: JSON.stringify(results),
         },
       });
-      // Clear the search field after navigating
       setSearchQuery("");
     } catch (error) {
       console.error("Search error:", error);
@@ -220,103 +216,110 @@ const Home = () => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
     >
-      {/* Status Bar */}
-      <StatusBar style="dark" />
-
-      {/* App Name */}
-      <Text
-        style={[
-          styles.appName,
-          typography.robotoBold,
-          { color: colors.tertiary, marginTop: 16 },
-        ]}
-      >
-        {translations.appName}
-      </Text>
-
-      {/* Banner */}
-      <TouchableOpacity style={styles.bannerContainer} onPress={handleNewsPress} activeOpacity={0.9}>
-        <Image
-          source={{ uri: bannerImage }}
-          style={styles.bannerImage}
-        />
-        <View style={styles.bannerOverlay} />
-        <Animated.Text
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* App Name */}
+        <Text
           style={[
-            styles.bannerText,
+            styles.appName,
             typography.robotoBold,
-            typography.subtitle,
-            { color: "#ffff", opacity: textOpacity, fontWeight: "bolder" },
+            { color: colors.tertiary, marginTop: 16 },
           ]}
         >
-          {newsHeadlines[headlineIndex] ||
-            newsHeadlines[0] ||
-            "No news available"}
-        </Animated.Text>
-      </TouchableOpacity>
-      {/* Updated Search Box */}
-      <View style={[styles.searchContainer, { borderColor: colors.outline }]}>
-        <TextInput
-          placeholder={translations.search}
-          style={[styles.searchInput, { color: colors.onSurface }]}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-          placeholderTextColor={colors.onSurfaceVariant}
-        />
-        <TouchableOpacity onPress={handleSearch}>
-          <Ionicons name="search" size={28} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
+          {translations.appName}
+        </Text>
 
-      {/* Menu Items */}
-      <View style={styles.gridContainer}>
-        {menuItems.map((item) => (
-          <TouchableOpacity
-            key={item.name}
-            style={styles.menuItemContainer}
-            onPress={item.onPress || (() => router.push(item.route))}
+        {/* Banner */}
+        <TouchableOpacity style={styles.bannerContainer} onPress={handleNewsPress} activeOpacity={0.9}>
+          <Image
+            source={{ uri: bannerImage }}
+            style={styles.bannerImage}
+          />
+          <View style={styles.bannerOverlay} />
+          <Animated.Text
+            style={[
+              styles.bannerText,
+              typography.robotoBold,
+              typography.subtitle,
+              { color: "#ffff", opacity: textOpacity, fontWeight: "bolder" },
+            ]}
           >
-            <View
-              style={[
-                styles.menuItem,
-                {
-                  borderColor: "#000000",
-                  width: cardSize,
-                  height: cardSize,
-                },
-              ]}
-            >
-              <MaterialIcons
-                name={item.icon}
-                size={Math.max(30, Math.floor(cardSize * 0.42))}
-                color={colors.primary}
-              />
-              {item.hasNotification && (
-                <View
-                  style={[
-                    styles.notificationDot,
-                    { backgroundColor: colors.error },
-                  ]}
-                >
-                  <MaterialIcons name="notifications" size={16} color="white" />
-                </View>
-              )}
-            </View>
-            <Text
-              style={[
-                styles.menuText,
-                typography.robotoMedium,
-                typography.small,
-                { color: colors.tertiary },
-              ]}
-            >
-              {item.name}
-            </Text>
+            {newsHeadlines[headlineIndex] ||
+              newsHeadlines[0] ||
+              "No news available"}
+          </Animated.Text>
+        </TouchableOpacity>
+        
+        {/* Search Box */}
+        <View style={[styles.searchContainer, { borderColor: colors.outline }]}>
+          <TextInput
+            placeholder={translations.search}
+            style={[styles.searchInput, { color: colors.onSurface }]}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+            placeholderTextColor={colors.onSurfaceVariant}
+          />
+          <TouchableOpacity onPress={handleSearch}>
+            <Ionicons name="search" size={28} color={colors.primary} />
           </TouchableOpacity>
-        ))}
-      </View>
+        </View>
+
+        {/* Menu Items - FIXED GAP ISSUE */}
+        <View style={styles.gridContainer}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.name}
+              style={[
+                styles.menuItemContainer,
+                { 
+                  width: cardSize,
+                  // Add margin right except for last item in each row
+                  marginRight: (index + 1) % cardsPerRow === 0 ? 0 : cardGap,
+                }
+              ]}
+              onPress={item.onPress || (() => router.push(item.route))}
+            >
+              <View
+                style={[
+                  styles.menuItem,
+                  {
+                    borderColor: "#000000",
+                    width: cardSize,
+                    height: cardSize,
+                  },
+                ]}
+              >
+                <MaterialIcons
+                  name={item.icon}
+                  size={Math.max(30, Math.floor(cardSize * 0.42))}
+                  color={colors.primary}
+                />
+                {item.hasNotification && (
+                  <View
+                    style={[
+                      styles.notificationDot,
+                      { backgroundColor: colors.error },
+                    ]}
+                  >
+                    <MaterialIcons name="notifications" size={16} color="white" />
+                  </View>
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.menuText,
+                  typography.robotoMedium,
+                  typography.small,
+                  { color: colors.tertiary },
+                ]}
+              >
+                {item.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
@@ -371,16 +374,14 @@ const styles = StyleSheet.create({
     height: 50,
   },
   gridContainer: {
-    flex: 1,
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    alignContent: "space-between",
-    paddingBottom: 4,
+    justifyContent: "flex-start",
+    marginTop: 4,
   },
   menuItemContainer: {
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 16,
   },
   menuItem: {
     alignItems: "center",
@@ -389,7 +390,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   menuText: {
-    marginTop: 5,
+    marginTop: 8,
     textAlign: "center",
   },
   notificationDot: {

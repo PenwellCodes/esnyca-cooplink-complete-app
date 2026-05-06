@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../../context/appstate/LanguageContext";
 import { apiRequest } from "../../../utils/api";
 import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
+import { useNotifications } from "../../../context/appstate/NotificationsContext";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -109,6 +110,7 @@ const ChatScreen = () => {
   const { currentUser } = useAuth();
   const { conversations, markMessagesAsRead, setActiveChatId, sendMessage: sendChatMessage } =
     useChat();
+  const { setUserInChat } = useNotifications(); // Add this line
   const currentUserUid = currentUser?.uid || null;
   const targetUserUid = user?.uid || null;
   const chatId = buildDirectKey(currentUserUid, targetUserUid);
@@ -155,6 +157,17 @@ const ChatScreen = () => {
     failedPickDocument: "Failed to pick document",
     failedSendDocument: "Failed to send document",
   });
+
+  // Track when user enters/exits chat for notifications
+  useEffect(() => {
+    // User entered chat
+    setUserInChat(true, targetUserUid);
+    
+    return () => {
+      // User left chat
+      setUserInChat(false);
+    };
+  }, [targetUserUid, setUserInChat]);
 
   useEffect(() => {
     const loadTranslations = async () => {
