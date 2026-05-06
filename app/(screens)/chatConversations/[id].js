@@ -108,9 +108,14 @@ const ChatScreen = () => {
   const user = params.user ? JSON.parse(params.user) : null;
   const predefinedMessage = params.predefinedMessage;
   const { currentUser } = useAuth();
-  const { conversations, markMessagesAsRead, setActiveChatId, sendMessage: sendChatMessage } =
-    useChat();
-  const { setUserInChat } = useNotifications(); // Add this line
+  const { 
+    conversations, 
+    markMessagesAsRead, 
+    setActiveChatId, 
+    sendMessage: sendChatMessage,
+    refreshChats  // Add this
+  } = useChat();
+  const { setUserInChat } = useNotifications();
   const currentUserUid = currentUser?.uid || null;
   const targetUserUid = user?.uid || null;
   const chatId = buildDirectKey(currentUserUid, targetUserUid);
@@ -160,14 +165,38 @@ const ChatScreen = () => {
 
   // Track when user enters/exits chat for notifications
   useEffect(() => {
-    // User entered chat
     setUserInChat(true, targetUserUid);
-    
     return () => {
-      // User left chat
       setUserInChat(false);
     };
   }, [targetUserUid, setUserInChat]);
+
+  // ============================================
+  // NEW: Mark messages as read when viewing the chat
+  // ============================================
+  useEffect(() => {
+    const markCurrentChatAsRead = async () => {
+      if (!chatId || !currentUserUid) return;
+      
+      const chatMessages = conversations[chatId] || [];
+      const unreadMessages = chatMessages.filter(msg => {
+        const isReceiver = normalizeId(msg.receiver) === normalizeId(currentUserUid);
+        const isNotRead = !msg.read && msg.status !== 'read';
+        const isNotFromCurrentUser = normalizeId(msg.sender) !== normalizeId(currentUserUid);
+        return isReceiver && isNotRead && isNotFromCurrentUser;
+      });
+      
+      if (unreadMessages.length > 0) {
+        await markMessagesAsRead(chatId, chatMessages);
+        // Force refresh to update badge count
+        if (refreshChats) {
+          await refreshChats();
+        }
+      }
+    };
+    
+    markCurrentChatAsRead();
+  }, [chatId, currentUserUid, conversations, markMessagesAsRead, refreshChats]);
 
   useEffect(() => {
     const loadTranslations = async () => {
@@ -206,18 +235,6 @@ const ChatScreen = () => {
       }
     })();
   }, []);
-
-  useEffect(() => {
-    if (!chatId) return;
-    markMessagesAsRead(chatId, messages);
-  }, [messages, chatId]);
-
-  useEffect(() => {
-    if (!chatId) return;
-    if (messages.length > 0) {
-      markMessagesAsRead(chatId, messages);
-    }
-  }, [messages, chatId]);
 
   useEffect(() => {
     if (keyboardHeight <= 0) return;
