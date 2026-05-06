@@ -1,4 +1,3 @@
-const jwt = require('jsonwebtoken');
 const { sql, getPool } = require('../db');
 
 async function getUserById(id) {
@@ -16,57 +15,34 @@ async function getUserById(id) {
 }
 
 async function requireAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return res.status(401).json({ message: 'Authentication required' });
+  // PUBLIC MODE:
+  // This middleware no longer enforces JWT/authentication. It only provides
+  // backward-compatible `req.user` context for any routes that reference it.
+  const userId = String(req.headers['x-user-id'] || '').trim();
+  const requestedRole = String(req.headers['x-user-role'] || '').trim();
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded?.id) return res.status(401).json({ message: 'Invalid token' });
+  req.user = {
+    Id: userId || undefined,
+    // Default to `admin` so code paths like "current user vs admin" don't block.
+    Role: requestedRole || 'admin',
+  };
 
-    const user = await getUserById(decoded.id);
-    if (!user) return res.status(401).json({ message: 'User not found' });
-    if (user.Disabled) return res.status(403).json({ message: 'Account is disabled' });
-
-    req.user = user;
-    return next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
-  }
+  return next();
 }
 
 async function optionalAuth(req, _res, next) {
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) return next();
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded?.id) return next();
-    const user = await getUserById(decoded.id);
-    if (user && !user.Disabled) {
-      req.user = user;
-    }
-    return next();
-  } catch {
-    return next();
-  }
+  // Same as requireAuth in public mode.
+  return requireAuth(req, _res, next);
 }
 
 function requireAdmin(req, res, next) {
-  const role = String(req.user?.Role || '').toLowerCase();
-  if (role !== 'admin' && role !== 'superadmin') {
-    return res.status(403).json({ message: 'Admin access required' });
-  }
   return next();
 }
 
 function requireSelfOrAdmin(paramName = 'id') {
   return (req, res, next) => {
-    const role = String(req.user?.Role || '').toLowerCase();
-    if (role === 'admin' || role === 'superadmin') return next();
-    if (req.params[paramName] === req.user?.Id) return next();
-    return res.status(403).json({ message: 'Not authorized for this resource' });
+    // Public mode: no resource-level authorization checks.
+    return next();
   };
 }
 

@@ -65,9 +65,6 @@ export const AuthProvider = ({ children }) => {
   const saveSession = async ({ token, user }) => {
     const normalizedUser = normalizeUser(user);
     setCurrentUser(normalizedUser);
-    if (token) {
-      await AsyncStorage.setItem("authToken", token);
-    }
     await AsyncStorage.setItem("user", JSON.stringify(normalizedUser));
   };
 
@@ -130,9 +127,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+<<<<<<< HEAD
     await AsyncStorage.removeItem("authToken");
     await AsyncStorage.removeItem("token");
     await AsyncStorage.removeItem("jwtToken");
+=======
+>>>>>>> 60d420dcd55cb95ba0f677eeb91c22d3e5ff6b24
     await AsyncStorage.removeItem("user");
     setCurrentUser(null);
   };

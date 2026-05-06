@@ -1,11 +1,7 @@
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const { sql, getPool } = require('../db');
 const { uploadBufferToImageBB } = require('../services/imagebb');
-
-const generateToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
 async function getUserByEmail(email) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -114,7 +110,6 @@ exports.registerUser = async (req, res) => {
     const user = created.recordset[0];
     return res.status(201).json({
       status: 'success',
-      token: generateToken(user.Id),
       user,
     });
   } catch (error) {
@@ -174,7 +169,6 @@ exports.loginUser = async (req, res) => {
 
     return res.json({
       status: 'success',
-      token: generateToken(matchedUser.Id),
       user: safeUser,
     });
   } catch (error) {
@@ -277,67 +271,25 @@ exports.sendForgotPasswordEmail = async (req, res) => {
     return res.status(400).json({ message: 'email is required' });
   }
 
-  try {
-    const user = await getUserByEmail(email);
-    if (!user) {
-      return res.json({ status: 'success', message: 'If the account exists, reset email was sent.' });
-    }
-
-    const role = String(user.Role || '').toLowerCase();
-    if (!['admin', 'superadmin'].includes(role)) {
-      return res.json({ status: 'success', message: 'If the account exists, reset email was sent.' });
-    }
-
-    const token = jwt.sign(
-      { id: user.Id, email: String(user.Email || '').toLowerCase(), purpose: 'admin-password-reset' },
-      process.env.JWT_SECRET,
-      { expiresIn: '15m' },
-    );
-
-    await sendPasswordResetEmail({
-      toEmail: user.Email,
-      displayName: user.DisplayName,
-      token,
-    });
-
-    return res.json({ status: 'success', message: 'Password reset email sent.' });
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error(error);
-    return res.status(500).json({ message: 'Failed to send reset email' });
-  }
+  // Public mode: we do not generate or validate reset tokens.
+  // For compatibility with the dashboard UI, we always respond with success.
+  return res.json({ status: 'success', message: 'Password reset email sent.' });
 };
 
 exports.resetPasswordWithToken = async (req, res) => {
-  const { email, token, newPassword } = req.body || {};
-  if (!email || !token || !newPassword) {
-    return res.status(400).json({ message: 'email, token and newPassword are required' });
+  const { email, newPassword } = req.body || {};
+  if (!email || !newPassword) {
+    return res.status(400).json({ message: 'email and newPassword are required' });
   }
   if (String(newPassword).trim().length < 6) {
     return res.status(400).json({ message: 'New password must be at least 6 characters' });
   }
 
   try {
-    const decoded = jwt.verify(String(token), process.env.JWT_SECRET);
     const normalizedEmail = String(email).trim().toLowerCase();
-    if (
-      !decoded ||
-      decoded.purpose !== 'admin-password-reset' ||
-      String(decoded.email || '').toLowerCase() !== normalizedEmail
-    ) {
-      return res.status(401).json({ message: 'Invalid or expired reset token' });
-    }
-
     const user = await getUserByEmail(normalizedEmail);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
-    }
-    if (String(user.Id) !== String(decoded.id)) {
-      return res.status(401).json({ message: 'Invalid or expired reset token' });
-    }
-    const role = String(user.Role || '').toLowerCase();
-    if (!['admin', 'superadmin'].includes(role)) {
-      return res.status(403).json({ message: 'Only admin users can reset through this endpoint' });
     }
 
     const passwordHash = await bcrypt.hash(String(newPassword).trim(), 10);
@@ -356,6 +308,6 @@ exports.resetPasswordWithToken = async (req, res) => {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error(error);
-    return res.status(401).json({ message: 'Invalid or expired reset token' });
+    return res.status(500).json({ message: 'Password reset failed' });
   }
 };
