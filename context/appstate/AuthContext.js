@@ -15,7 +15,17 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const hydrate = async () => {
       const savedUser = await AsyncStorage.getItem("user");
-      if (savedUser) {
+      const authToken =
+        (await AsyncStorage.getItem("authToken")) ||
+        (await AsyncStorage.getItem("token")) ||
+        (await AsyncStorage.getItem("jwtToken")) ||
+        null;
+
+      if (!authToken && savedUser) {
+        // Chats and protected routes now require auth; avoid stale "logged in" state.
+        await AsyncStorage.removeItem("user");
+        setCurrentUser(null);
+      } else if (savedUser) {
         setCurrentUser(normalizeUser(JSON.parse(savedUser)));
       } else {
         setCurrentUser(null);
@@ -121,6 +131,8 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     await AsyncStorage.removeItem("authToken");
+    await AsyncStorage.removeItem("token");
+    await AsyncStorage.removeItem("jwtToken");
     await AsyncStorage.removeItem("user");
     setCurrentUser(null);
   };

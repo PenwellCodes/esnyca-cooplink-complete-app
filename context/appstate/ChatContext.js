@@ -15,6 +15,10 @@ const CHAT_SYNC_TIMEOUT_MS = 450000;
 const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
 const STORY_REPLY_META_PREFIX = "story_preview:";
 
+function normalizeId(value) {
+  return value == null ? "" : String(value).trim().toLowerCase();
+}
+
 function encodeStoryPreview(storyPreview) {
   if (!storyPreview) return null;
   try {
@@ -37,6 +41,15 @@ function decodeStoryPreview(fileName) {
   }
 }
 
+function getMessageTimeMs(message) {
+  if (!message) return 0;
+  try {
+    return message.timestamp?.toDate?.()?.getTime?.() ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 function openChatFromKey(chatKey, currentUserUid, userMap) {
   try {
     if (chatKey === GLOBAL_GROUP_CHAT_KEY) {
@@ -56,7 +69,8 @@ function openChatFromKey(chatKey, currentUserUid, userMap) {
     }
 
     const parts = String(chatKey).split("_");
-    const otherUid = parts.find((id) => id !== currentUserUid);
+    const me = normalizeId(currentUserUid);
+    const otherUid = parts.find((id) => normalizeId(id) !== me);
     if (!otherUid) {
       router.push("/(tabs)/chat");
       return;
@@ -127,7 +141,9 @@ export const ChatProvider = ({ children }) => {
 
   const buildDirectKey = (a, b) => {
     if (!a || !b) return null;
-    return String(a) > String(b) ? `${a}_${b}` : `${b}_${a}`;
+    const aa = normalizeId(a);
+    const bb = normalizeId(b);
+    return aa > bb ? `${aa}_${bb}` : `${bb}_${aa}`;
   };
 
   const toTimestamp = (value) => ({
@@ -139,14 +155,14 @@ export const ChatProvider = ({ children }) => {
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
 
     refreshPromiseRef.current = (async () => {
-      const userUid = currentUserId;
+      const userUid = normalizeId(currentUserId);
       try {
         const allUsers = await apiRequest("/users", {
           timeoutMs: CHAT_SYNC_TIMEOUT_MS,
         });
         const normalizedUsers = (allUsers || []).map((item) => ({
           id: item.Id || item.id,
-          uid: item.Id || item.id,
+          uid: normalizeId(item.Id || item.id),
           email: item.Email || "",
           displayName: item.DisplayName || "",
           role: item.Role || "",
@@ -168,21 +184,33 @@ export const ChatProvider = ({ children }) => {
 
         const nextUserMap = {};
         normalizedUsers.forEach((u) => {
-          nextUserMap[u.uid] = u;
+          nextUserMap[normalizeId(u.uid)] = u;
         });
         setUserMap(nextUserMap);
 
         let chats = [];
         try {
-          chats = await apiRequest(`/chats`, {
-            timeoutMs: CHAT_SYNC_TIMEOUT_MS,
-          });
-        } catch (error) {
-          // Fallback: some deployments intermittently fail user-filtered chat fetch.
-          // Fetch all chats and filter by participants below.
-          chats = await apiRequest(`/chats`, {
-            timeoutMs: CHAT_SYNC_TIMEOUT_MS,
-          });
+          chats = await apiRequest(
+            `/chats?userId=${encodeURIComponent(String(userUid))}`,
+            {
+              timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+            }
+          );
+        } catch (_errorWithUserId) {
+          try {
+            // Some deployments expect userId, others infer it from token.
+            chats = await apiRequest(`/chats`, {
+              timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+            });
+          } catch (fallbackError) {
+            // Keep existing chat state and avoid bubbling noisy refresh errors.
+            console.log(
+              "Chat refresh warning:",
+              fallbackError?.message || fallbackError
+            );
+            setLoadingChats(false);
+            return;
+          }
         }
 
         const chatPayloads = await Promise.all(
@@ -211,7 +239,9 @@ export const ChatProvider = ({ children }) => {
         for (const payload of chatPayloads) {
           if (!payload) continue;
           const { chat, participants, messagesRaw } = payload;
-          const participantIds = (participants || []).map((p) => p.UserId);
+          const participantIds = (participants || []).map((p) =>
+            normalizeId(p.UserId)
+          );
           if (!participantIds.includes(userUid)) continue;
           let chatKey = chat.Id;
           if (chat.IsGroup) {
@@ -221,8 +251,6 @@ export const ChatProvider = ({ children }) => {
           } else {
             continue;
           }
-          nextChatIdMap[chatKey] = chat.Id;
-
           const messages = (messagesRaw || [])
             .map((m) => ({
               id: m.Id,
@@ -248,13 +276,26 @@ export const ChatProvider = ({ children }) => {
             }))
             .reverse();
 
-          nextConversations[chatKey] = messages;
-          if (messages.length > 0) {
-            nextLastMessages[chatKey] = messages[messages.length - 1].timestamp;
+          const existingMessages = nextConversations[chatKey] || [];
+          const existingLatestMs = getMessageTimeMs(
+            existingMessages[existingMessages.length - 1]
+          );
+          const incomingLatestMs = getMessageTimeMs(messages[messages.length - 1]);
+          const shouldReplace =
+            !existingMessages.length || incomingLatestMs >= existingLatestMs;
+
+          if (shouldReplace) {
+            nextConversations[chatKey] = messages;
+            nextChatIdMap[chatKey] = chat.Id;
+            if (messages.length > 0) {
+              nextLastMessages[chatKey] = messages[messages.length - 1].timestamp;
+            } else {
+              delete nextLastMessages[chatKey];
+            }
+            nextUnread[chatKey] = messages.filter(
+              (msg) => !msg.read && msg.sender !== userUid
+            ).length;
           }
-          nextUnread[chatKey] = messages.filter(
-            (msg) => !msg.read && msg.sender !== userUid
-          ).length;
         }
 
         const noChatsResolved =
@@ -265,6 +306,11 @@ export const ChatProvider = ({ children }) => {
         }
 
         setConversations((prev) => {
+          const hasIncomingData = Object.keys(nextConversations).length > 0;
+          if (!hasIncomingData && Object.keys(prev).length > 0) {
+            // Preserve previously loaded chats if backend temporarily returns no rows.
+            return prev;
+          }
           const picked = pickNewIncomingToast(
             prev,
             nextConversations,
@@ -273,7 +319,7 @@ export const ChatProvider = ({ children }) => {
           );
           if (picked && AppState.currentState === "active") {
             const { latest, chatKey } = picked;
-            const sender = nextUserMap[latest.sender];
+            const sender = nextUserMap[normalizeId(latest.sender)];
             const title = sender?.displayName || "New message";
             let preview = (latest.text || "").trim();
             if (!preview && latest.fileUrl) preview = "📎 Attachment";
@@ -295,9 +341,11 @@ export const ChatProvider = ({ children }) => {
           return nextConversations;
         });
 
-        setLastMessages(nextLastMessages);
-        setUnreadCounts(nextUnread);
-        setChatIdMap(nextChatIdMap);
+        if (Object.keys(nextConversations).length > 0) {
+          setLastMessages(nextLastMessages);
+          setUnreadCounts(nextUnread);
+          setChatIdMap(nextChatIdMap);
+        }
         setLoadingChats(false);
       } finally {
         refreshPromiseRef.current = null;
@@ -320,6 +368,7 @@ export const ChatProvider = ({ children }) => {
 
     refreshChatState().catch((error) => {
       // Keep chat UI usable even if periodic refresh fails.
+      // Do not wipe existing in-memory chats on transient backend issues.
       console.log("Chat refresh warning:", error?.message || error);
       setLoadingChats(false);
     });
@@ -334,7 +383,7 @@ export const ChatProvider = ({ children }) => {
   const markMessagesAsRead = async (chatId, messages) => {
     try {
       const unreadMessages = messages.filter(
-        (msg) => !msg.read && msg.sender !== currentUserId
+        (msg) => !msg.read && normalizeId(msg.sender) !== normalizeId(currentUserId)
       );
       if (!unreadMessages.length) return;
 
@@ -379,7 +428,10 @@ export const ChatProvider = ({ children }) => {
       try {
         let chats = [];
         try {
-          chats = await apiRequest(`/chats`, { timeoutMs: CHAT_SYNC_TIMEOUT_MS });
+          chats = await apiRequest(
+            `/chats?userId=${encodeURIComponent(String(currentUserId))}`,
+            { timeoutMs: CHAT_SYNC_TIMEOUT_MS }
+          );
         } catch {
           // Fallback when user-filtered chats endpoint is unstable.
           chats = await apiRequest(`/chats`, { timeoutMs: CHAT_SYNC_TIMEOUT_MS });
@@ -393,8 +445,8 @@ export const ChatProvider = ({ children }) => {
           const ids = (participants || []).map((p) => String(p.UserId));
           if (
             ids.length === 2 &&
-            ids.includes(String(currentUserId)) &&
-            ids.includes(String(otherUserId))
+            ids.map(normalizeId).includes(normalizeId(currentUserId)) &&
+            ids.map(normalizeId).includes(normalizeId(otherUserId))
           ) {
             setChatIdMap((prev) => ({ ...prev, [chatKey]: chat.Id }));
             return { chatKey, chatId: chat.Id };
@@ -522,6 +574,7 @@ export const ChatProvider = ({ children }) => {
 
     refreshChatState().catch((error) => {
       // Avoid surfacing non-fatal background sync failures as hard errors in UI.
+      // Sent message already lives in context state; keep it visible.
       console.log("Background chat refresh warning:", error?.message || error);
     });
     return created;

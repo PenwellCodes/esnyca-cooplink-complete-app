@@ -30,6 +30,67 @@ import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
 
+// Helper function to truncate long names
+const truncateName = (name, maxLength = 18) => {
+  if (!name) return "Chat";
+  if (name.length <= maxLength) return name;
+  return `${name.substring(0, maxLength)}...`;
+};
+
+// Helper function to get user initials
+const getUserInitials = (displayName) => {
+  if (!displayName) return "?";
+  const nameParts = displayName.split(" ");
+  if (nameParts.length >= 2) {
+    return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
+  }
+  return displayName.substring(0, 2).toUpperCase();
+};
+
+// Avatar component with initials fallback
+const HeaderAvatar = ({ imageUrl, name, size = 40 }) => {
+  const [imageError, setImageError] = useState(false);
+  const initials = getUserInitials(name);
+
+  if (imageUrl && !imageError) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        style={[styles.headerAvatar, { width: size, height: size, borderRadius: size / 2 }]}
+        onError={() => setImageError(true)}
+      />
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.headerInitialsAvatar,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: "#007AFF",
+        },
+      ]}
+    >
+      <Text style={[styles.headerInitialsText, { fontSize: size * 0.4 }]}>
+        {initials}
+      </Text>
+    </View>
+  );
+};
+
+const normalizeId = (value) =>
+  value == null ? "" : String(value).trim().toLowerCase();
+
+const buildDirectKey = (a, b) => {
+  const aa = normalizeId(a);
+  const bb = normalizeId(b);
+  if (!aa || !bb) return null;
+  return aa > bb ? `${aa}_${bb}` : `${bb}_${aa}`;
+};
+
 const parseStoryPreviewParam = (rawValue) => {
   if (!rawValue) return null;
   try {
@@ -50,12 +111,7 @@ const ChatScreen = () => {
     useChat();
   const currentUserUid = currentUser?.uid || null;
   const targetUserUid = user?.uid || null;
-  const chatId =
-    currentUserUid && targetUserUid
-      ? currentUserUid > targetUserUid
-        ? `${currentUserUid}_${targetUserUid}`
-        : `${targetUserUid}_${currentUserUid}`
-      : null;
+  const chatId = buildDirectKey(currentUserUid, targetUserUid);
 
   // State for text messages and local messages
   const [messageText, setMessageText] = useState(predefinedMessage || "");
@@ -143,7 +199,6 @@ const ChatScreen = () => {
     markMessagesAsRead(chatId, messages);
   }, [messages, chatId]);
 
-  // Add this useEffect to mark messages as read when the chat is opened
   useEffect(() => {
     if (!chatId) return;
     if (messages.length > 0) {
@@ -250,12 +305,11 @@ const ChatScreen = () => {
   const pickDocuments = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*", // Allow all file types
+        type: "*/*",
         copyToCacheDirectory: true,
       });
 
       if (result.assets && result.assets.length > 0) {
-        // Handle the new DocumentPicker response format
         const file = result.assets[0];
         await sendDocument(file);
       }
@@ -374,31 +428,6 @@ const ChatScreen = () => {
       setSelectedImage(null);
     } catch (error) {
       console.error("Error sending image:", error);
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
-    }
-  };
-
-  const sendFile = async () => {
-    const result = await pickFile();
-    if (!result) return;
-    setUploading(true);
-    setUploadProgress(0);
-
-    try {
-      const { uri, name } = result;
-      const fileName = name || uri.split("/").pop();
-      const downloadURL = await uploadFile(uri, fileName);
-      await sendChatMessage({
-        chatKey: chatId,
-        receiverUserId: user.uid,
-        type: "file",
-        fileUrl: downloadURL,
-        fileName,
-      });
-    } catch (error) {
-      console.error("Error sending file:", error);
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -571,7 +600,6 @@ const ChatScreen = () => {
         </LinearGradient>
       );
     }
-    // Treat audio messages as downloadable files (recording disabled)
     if (item.type === "audio") {
       return (
         <LinearGradient
@@ -674,18 +702,36 @@ const ChatScreen = () => {
           { backgroundColor: colors.background, flex: 1 },
         ]}
       >
-        <View style={[styles.header, { marginTop: 35 }]}>
+        {/* FIXED HEADER - with proper name truncation and initials */}
+        <View style={[styles.header, { marginTop: insets.top || 35, paddingTop: 8 }]}>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
           >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Image
-            source={{ uri: user?.profilePic || placeholderAvatar }}
-            style={styles.headerAvatar}
-          />
-          <Text style={styles.headerTitle}>{user?.displayName || "Chat"}</Text>
+          
+          <View style={styles.headerInfo}>
+            <HeaderAvatar
+              imageUrl={user?.profilePic}
+              name={user?.displayName}
+              size={40}
+            />
+            <View style={styles.headerTextContainer}>
+              <Text
+                style={styles.headerTitle}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {truncateName(user?.displayName, 18)}
+              </Text>
+              {user?.role === "cooperative" && (
+                <Text style={styles.headerRole} numberOfLines={1}>
+                  Cooperative
+                </Text>
+              )}
+            </View>
+          </View>
         </View>
 
         {messages.length === 0 ? (
@@ -802,23 +848,57 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
     backgroundColor: "#007AFF",
-    paddingVertical: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 60,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  headerInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
   },
   headerAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: "white",
+  },
+  headerInitialsAvatar: {
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: "white",
+  },
+  headerInitialsText: {
+    color: "white",
+    fontWeight: "bold",
+  },
+  headerTextContainer: {
+    flex: 1,
+    justifyContent: "center",
   },
   headerTitle: {
     color: "white",
-    fontSize: 18,
-    marginLeft: 10,
+    fontSize: 16,
+    fontWeight: "bold",
   },
-  backButton: {
-    marginRight: 10,
-    padding: 5,
+  headerRole: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 11,
+    marginTop: 2,
   },
   emptyContainer: {
     flex: 1,

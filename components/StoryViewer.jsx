@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +21,7 @@ import { useStories } from '../context/appstate/StoriesContext';
 const { width } = Dimensions.get('window');
 const STORY_DURATION = 5000;
 
-const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
+const StoryViewer = ({ stories, isVisible, onClose, onReply }) => {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
   const { currentUser } = useAuth();
@@ -30,6 +31,63 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const [isPaused, setIsPaused] = useState(false);
   const [showDeleteOption, setShowDeleteOption] = useState(false);
+  const [storyOwnerName, setStoryOwnerName] = useState('');
+  const [loadingName, setLoadingName] = useState(false);
+  const [ownerAvatar, setOwnerAvatar] = useState('');
+
+  const currentStory = stories[currentIndex];
+
+  // Fetch story owner name and avatar when story changes
+  useEffect(() => {
+    const fetchOwnerInfo = async () => {
+      if (!currentStory) return;
+      
+      if (currentStory.userId === currentUser?.uid) {
+        setStoryOwnerName('You');
+        setOwnerAvatar(currentUser?.profilePic || '');
+        return;
+      }
+      
+      setLoadingName(true);
+      try {
+        // Fetch all users to find the name and avatar
+        const response = await fetch('http://207.180.254.163:4000/api/users');
+        if (response.ok) {
+          const allUsers = await response.json();
+          const foundUser = allUsers.find(u => 
+            u.Id === currentStory.userId || 
+            u.id === currentStory.userId || 
+            u.uid === currentStory.userId ||
+            u.userId === currentStory.userId
+          );
+          
+          if (foundUser) {
+            const userName = foundUser.displayName || foundUser.name || foundUser.fullName || foundUser.username || foundUser.userName || foundUser.DisplayName;
+            const userAvatar = foundUser.profilePic || foundUser.avatar || foundUser.profilePicture || foundUser.imageUrl;
+            setStoryOwnerName(userName || 'User');
+            setOwnerAvatar(userAvatar || '');
+          } else {
+            const shortId = currentStory.userId.substring(0, 6);
+            setStoryOwnerName(`User ${shortId}`);
+            setOwnerAvatar('');
+          }
+        } else {
+          const shortId = currentStory.userId.substring(0, 6);
+          setStoryOwnerName(`User ${shortId}`);
+          setOwnerAvatar('');
+        }
+      } catch (error) {
+        console.error('Error fetching user info:', error);
+        const shortId = currentStory.userId.substring(0, 6);
+        setStoryOwnerName(`User ${shortId}`);
+        setOwnerAvatar('');
+      } finally {
+        setLoadingName(false);
+      }
+    };
+    
+    fetchOwnerInfo();
+  }, [currentStory, currentUser]);
 
   useEffect(() => {
     if (isVisible) {
@@ -68,7 +126,6 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
 
   const handleReply = () => {
     if (replyText.trim()) {
-      const currentStory = stories[currentIndex];
       const replyData = {
         text: replyText.trim(),
         storyPreview: {
@@ -78,7 +135,7 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
         }
       };
       
-      onReply(stories[currentIndex], replyData);
+      onReply(currentStory, replyData);
       setReplyText('');
       startProgress();
     }
@@ -89,9 +146,7 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
     progressAnim.stopAnimation();
   };
 
-  const handleInputBlur = () => {
-    // Don't resume automatically on blur, let the send action handle it
-  };
+  const handleInputBlur = () => {};
 
   const togglePause = () => {
     setIsPaused(!isPaused);
@@ -103,7 +158,7 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
   };
 
   const handleLongPress = () => {
-    if (stories[currentIndex]?.userId === currentUser.uid) {
+    if (currentStory?.userId === currentUser?.uid) {
       setShowDeleteOption(true);
       setIsPaused(true);
       progressAnim.stopAnimation();
@@ -112,7 +167,7 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
 
   const handleDeleteStory = async () => {
     try {
-      await deleteStory(stories[currentIndex].id, stories[currentIndex].imageURL);
+      await deleteStory(currentStory.id);
       Alert.alert("Success", "Story deleted successfully");
       onClose();
     } catch (error) {
@@ -121,10 +176,21 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
     }
   };
 
+  const getUserInitials = () => {
+    if (storyOwnerName === 'You') return 'U';
+    if (!storyOwnerName || storyOwnerName === 'User') return '?';
+    const nameParts = storyOwnerName.split(' ');
+    if (nameParts.length >= 2) {
+      return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
+    }
+    return storyOwnerName.substring(0, 2).toUpperCase();
+  };
+
   return (
     <Modal visible={isVisible} animationType="fade" transparent={false}>
       <View style={styles.container}>
-        <View style={[styles.progressContainer, { top: Math.max(insets.top, 12) + 44 }]}>
+        {/* Progress bars at the very top */}
+        <View style={[styles.progressContainer, { top: insets.top + 10 }]}>
           {stories.map((_, index) => (
             <View key={index} style={styles.progressBar}>
               <Animated.View
@@ -143,47 +209,54 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
           ))}
         </View>
 
-        <TouchableOpacity style={[styles.closeButton, { top: Math.max(insets.top, 12) + 8 }]} onPress={onClose}>
-          <Ionicons name="close" size={28} color="white" />
-        </TouchableOpacity>
+        {/* Header with user info and close button */}
+        <View style={[styles.headerContainer, { top: insets.top + 45 }]}>
+          <View style={styles.userInfoContainer}>
+            {loadingName ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <>
+                {ownerAvatar ? (
+                  <Image source={{ uri: ownerAvatar }} style={styles.userAvatar} />
+                ) : (
+                  <View style={styles.userAvatarPlaceholder}>
+                    <Text style={styles.userAvatarText}>{getUserInitials()}</Text>
+                  </View>
+                )}
+                <Text style={styles.userName}>{storyOwnerName}</Text>
+              </>
+            )}
+          </View>
+          
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Ionicons name="close" size={28} color="white" />
+          </TouchableOpacity>
+        </View>
 
-        <View
-          style={[
-            styles.contentWrapper,
-            stories[currentIndex]?.userId !== currentUser?.uid && {
-              paddingBottom: 40,
-            },
-          ]}
-        >
+        {/* Story Content */}
+        <View style={styles.contentWrapper}>
           <TouchableOpacity 
             activeOpacity={1}
             onPress={togglePause}
             onLongPress={handleLongPress}
             style={styles.contentContainer}
           >
-            {stories[currentIndex]?.imageURL ? (
+            {currentStory?.imageURL ? (
               <Image
-                source={{ uri: stories[currentIndex].imageURL }}
+                source={{ uri: currentStory.imageURL }}
                 style={styles.storyImage}
                 resizeMode="contain"
               />
             ) : null}
             
-            {stories[currentIndex]?.caption && (
+            {currentStory?.caption && (
               <View style={styles.captionContainer}>
                 <Text style={styles.captionText}>
-                  {stories[currentIndex].caption}
+                  {currentStory.caption}
                 </Text>
               </View>
             )}
           </TouchableOpacity>
-
-          {/* Only show username if it exists */}
-          {userName && (
-            <Text style={styles.userName}>
-              {userName?.length > 8 ? `${userName.substring(0, 8)}...` : userName}
-            </Text>
-          )}
         </View>
 
         {showDeleteOption && (
@@ -197,19 +270,19 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply, userName }) => {
           </View>
         )}
 
-        {/* Only show reply container if user is not the story owner */}
-        {stories[currentIndex]?.userId !== currentUser?.uid && (
+        {/* Reply Container - Only show if user is not the story owner */}
+        {currentStory?.userId !== currentUser?.uid && (
           <View
             style={[
               styles.replyContainer,
               {
-                bottom: keyboardHeight + Math.max(insets.bottom, 12),
+                bottom: keyboardHeight + Math.max(insets.bottom, 20),
               },
             ]}
           >
             <TextInput
               style={styles.replyInput}
-              placeholder="Reply to story..."
+              placeholder={`Reply to ${storyOwnerName === 'You' ? 'this story' : storyOwnerName}...`}
               placeholderTextColor="#999"
               value={replyText}
               onChangeText={setReplyText}
@@ -234,17 +307,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'black',
   },
-  closeButton: {
-    position: 'absolute',
-    right: 20,
-    zIndex: 2,
-  },
   progressContainer: {
     flexDirection: 'row',
     position: 'absolute',
     left: 10,
     right: 10,
-    zIndex: 1,
+    zIndex: 10,
   },
   progressBar: {
     flex: 1,
@@ -256,36 +324,62 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: 'white',
   },
-  storyImage: {
-    flex: 1,
-    width: '100%',
-  },
-  header: {
+  headerContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    paddingTop: 40,
+    paddingHorizontal: 15,
+    zIndex: 20,
+  },
+  userInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 25,
+  },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  userAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  userAvatarText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   userName: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    padding: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  closeButton: {
+    padding: 8,
   },
   contentWrapper: {
     flex: 1,
-    position: 'relative',
   },
   contentContainer: {
     flex: 1,
     justifyContent: 'center',
+  },
+  storyImage: {
+    flex: 1,
+    width: '100%',
   },
   captionContainer: {
     position: 'absolute',
@@ -303,14 +397,14 @@ const styles = StyleSheet.create({
   },
   replyContainer: {
     position: 'absolute',
-    left: 8,
-    right: 8,
+    left: 10,
+    right: 10,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 12,
     backgroundColor: 'rgba(0,0,0,0.92)',
-    borderRadius: 14,
+    borderRadius: 25,
     zIndex: 20,
   },
   replyInput: {
@@ -331,25 +425,32 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+    zIndex: 30,
   },
   deleteButton: {
     backgroundColor: 'red',
-    padding: 10,
-    borderRadius: 5,
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 10,
+    width: 150,
+    alignItems: 'center',
   },
   deleteButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: 'bold',
   },
   cancelButton: {
     backgroundColor: 'gray',
-    padding: 10,
-    borderRadius: 5,
+    padding: 12,
+    borderRadius: 8,
+    width: 150,
+    alignItems: 'center',
   },
   cancelButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

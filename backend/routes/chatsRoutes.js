@@ -34,6 +34,35 @@ router.post('/', async (req, res) => {
   try {
     const pool = await getPool();
 
+    if (!isGroup && participants.length === 2) {
+      const existing = await pool
+        .request()
+        .input('UserA', sql.UniqueIdentifier, participants[0])
+        .input('UserB', sql.UniqueIdentifier, participants[1])
+        .query(`
+          SELECT TOP 1 c.Id, c.IsGroup, c.CreatedAt
+          FROM dbo.Chats c
+          INNER JOIN dbo.ChatParticipants p1 ON p1.ChatId = c.Id
+          INNER JOIN dbo.ChatParticipants p2 ON p2.ChatId = c.Id
+          WHERE c.IsGroup = 0
+            AND p1.UserId = @UserA
+            AND p2.UserId = @UserB
+            AND (
+              SELECT COUNT(1)
+              FROM dbo.ChatParticipants cp
+              WHERE cp.ChatId = c.Id
+            ) = 2
+          ORDER BY c.CreatedAt DESC
+        `);
+
+      if (existing.recordset?.length) {
+        return res.status(200).json({
+          ...existing.recordset[0],
+          Participants: participants,
+        });
+      }
+    }
+
     const tx = new sql.Transaction(pool);
     await tx.begin();
 
@@ -72,7 +101,7 @@ router.post('/', async (req, res) => {
 });
 
 /* =========================
-   GET CHATS (FIXED)
+   GET CHATS
 ========================= */
 router.get('/', async (req, res) => {
   const requestedUserId = req.query.userId ? String(req.query.userId) : null;
@@ -113,7 +142,6 @@ router.get('/', async (req, res) => {
     return res.json(result.recordset);
   } catch (err) {
     console.error('🔥 GET /api/chats ERROR:', err);
-
     return res.status(500).json({
       message: err.message,
       stack: err.stack,
@@ -186,7 +214,7 @@ router.post('/:chatId/participants', async (req, res) => {
 });
 
 /* =========================
-   SEND MESSAGE
+   SEND MESSAGE (WITH PUSH NOTIFICATIONS)
 ========================= */
 router.post('/:chatId/messages', async (req, res) => {
   const { chatId } = req.params;
@@ -214,6 +242,18 @@ router.post('/:chatId/messages', async (req, res) => {
   try {
     const pool = await getPool();
 
+    // Get sender info for notification
+    const senderInfo = await pool
+      .request()
+      .input('UserId', sql.UniqueIdentifier, String(senderUserId))
+      .query(`
+        SELECT DisplayName, ProfilePicUrl
+        FROM dbo.Users
+        WHERE Id = @UserId
+      `);
+
+    const senderName = senderInfo.recordset[0]?.DisplayName || 'Someone';
+
     const created = await pool
       .request()
       .input('ChatId', sql.UniqueIdentifier, chatId)
@@ -236,6 +276,46 @@ router.post('/:chatId/messages', async (req, res) => {
       `);
 
     const createdMessage = created.recordset[0];
+
+    // SEND PUSH NOTIFICATION TO RECEIVER
+    if (receiverUserId && senderUserId !== receiverUserId) {
+      let notificationBody = '';
+      
+      switch (type) {
+        case 'image':
+          notificationBody = '📷 Sent you an image';
+          break;
+        case 'file':
+          notificationBody = '📎 Sent you a file';
+          break;
+        case 'story_reply':
+          notificationBody = `💬 Replied to your story: ${text || ''}`;
+          break;
+        case 'text':
+        default:
+          notificationBody = text?.length > 100 
+            ? `${text.substring(0, 100)}...` 
+            : text || 'Sent you a message';
+          break;
+      }
+
+      // Send push notification
+      await sendPushToUsers([receiverUserId], {
+        title: senderName,
+        body: notificationBody,
+        data: {
+          chatId: chatId,
+          messageId: createdMessage.Id,
+          senderUserId: senderUserId,
+          type: type,
+          chatType: 'direct',
+        },
+        sound: 'default',
+        priority: 'high',
+      });
+
+      console.log(`📱 Push notification sent to ${receiverUserId} from ${senderName}`);
+    }
 
     return res.status(201).json(createdMessage);
   } catch (err) {
@@ -290,7 +370,7 @@ router.post('/:chatId/messages/:messageId/read', async (req, res) => {
   try {
     const pool = await getPool();
 
-    const updated = await pool
+    await pool
       .request()
       .input('ChatId', sql.UniqueIdentifier, chatId)
       .input('Id', sql.UniqueIdentifier, messageId)

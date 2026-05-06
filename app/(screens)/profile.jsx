@@ -12,25 +12,29 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ← Fixed Import
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router'; // Add this import
+import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/appstate/AuthContext';
 import { useLanguage } from '../../context/appstate/LanguageContext';
-import { useTheme, Snackbar } from "react-native-paper";  // Add this import
+import { useTheme } from "react-native-paper";
 import { apiRequest } from "../../utils/api";
 import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
+const PROFILE_PIC_STORAGE_KEY = '@user_profile_pic';
+
 const Profile = () => {
-  const router = useRouter(); // Add this
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
-  const { colors } = useTheme();  // Add theme hook
-  const { currentUser } = useAuth();
+  const { colors } = useTheme();
+  const { currentUser, refreshUser } = useAuth();
   const { currentLanguage, t } = useLanguage();
+
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState(null);
   const [newPhotoUri, setNewPhotoUri] = useState(null);
@@ -38,13 +42,18 @@ const Profile = () => {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [locationName, setLocationName] = useState('');
   const [mapType, setMapType] = useState('standard');
+
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
   const [inputPositions, setInputPositions] = useState({});
+  const [localProfilePic, setLocalProfilePic] = useState('');
+
   const navigation = useNavigation();
   const scrollViewRef = useRef(null);
 
+  // Translations
   const [translations, setTranslations] = useState({
     updateProfile: "Update Profile",
     tapToChangePhoto: "Tap to change profile photo",
@@ -84,6 +93,7 @@ const Profile = () => {
     passwordMismatch: "New password and confirm password do not match.",
   });
 
+  // Load translations
   useEffect(() => {
     const loadTranslations = async () => {
       setTranslations({
@@ -117,26 +127,31 @@ const Profile = () => {
         success: await t("Success"),
         failedGetLocationDetails: await t("Failed to get location details"),
         failedLoadProfileData: await t("Failed to load profile data"),
-        failedPickImage: await t(
-          "There was an issue picking the image. Please try again."
-        ),
+        failedPickImage: await t("There was an issue picking the image. Please try again."),
         failedUploadProfilePhoto: await t("Failed to upload profile photo"),
         profileUpdatedSuccessfully: await t("Profile updated successfully"),
-        failedUpdateProfile: await t(
-          "Failed to update profile. Please check your input data."
-        ),
-        passwordFieldsRequired: await t(
-          "Current password and new password are required to change password."
-        ),
-        passwordMismatch: await t(
-          "New password and confirm password do not match."
-        ),
+        failedUpdateProfile: await t("Failed to update profile. Please check your input data."),
+        passwordFieldsRequired: await t("Current password and new password are required to change password."),
+        passwordMismatch: await t("New password and confirm password do not match."),
       });
     };
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Add this useEffect for authentication check
+  // Load local profile pic
+  useEffect(() => {
+    const loadProfilePicLocally = async () => {
+      try {
+        const savedPic = await AsyncStorage.getItem(PROFILE_PIC_STORAGE_KEY);
+        if (savedPic) setLocalProfilePic(savedPic);
+      } catch (error) {
+        console.error('Error loading profile pic locally:', error);
+      }
+    };
+    loadProfilePicLocally();
+  }, []);
+
+  // Redirect if not logged in
   useEffect(() => {
     if (!currentUser) {
       const returnTo = encodeURIComponent("/(screens)/profile");
@@ -144,20 +159,16 @@ const Profile = () => {
     }
   }, [currentUser]);
 
-  // If not authenticated, return null to prevent rendering the protected content
   if (!currentUser) return null;
 
+  // Request location
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          translations.permissionDeniedTitle,
-          translations.permissionDeniedBody
-        );
+        Alert.alert(translations.permissionDeniedTitle, translations.permissionDeniedBody);
         return;
       }
-
       let currentLocation = await Location.getCurrentPositionAsync({});
       setLocation({
         latitude: currentLocation.coords.latitude,
@@ -168,41 +179,25 @@ const Profile = () => {
     })();
   }, []);
 
-  const handleMapLongPress = async (e) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    try {
-      const [address] = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude
-      });
-      
-      const locationDetails = {
-        latitude,
-        longitude,
-        name: address
-          ? `${address.street || ""} ${address.city || ""} ${address.region || ""}`
-          : `${translations.selected} Location`,
-      };
-      
-      setSelectedLocation(locationDetails);
-      setLocationName(locationDetails.name);
-      
-      setUserData(prev => ({
-        ...prev,
-        location: locationDetails
-      }));
-    } catch (error) {
-      console.error('Error getting location details:', error);
-      Alert.alert(translations.error, translations.failedGetLocationDetails);
-    }
-  };
-
+  // Fetch user data
   useEffect(() => {
     const fetchUserData = async () => {
       setIsLoading(true);
       try {
         if (!currentUser?.id) return;
+
         const profile = await apiRequest(`/users/${currentUser.id}`);
+
+        const profilePicUrl = profile.ProfilePicUrl || 
+                             profile.profilePicUrl || 
+                             profile.ProfilePic || 
+                             profile.profilePic || "";
+
+        if (profilePicUrl) {
+          await AsyncStorage.setItem(PROFILE_PIC_STORAGE_KEY, profilePicUrl);
+          setLocalProfilePic(profilePicUrl);
+        }
+
         setUserData({
           id: profile.Id || profile.id,
           displayName: profile.DisplayName || profile.displayName || "",
@@ -210,14 +205,7 @@ const Profile = () => {
           role: profile.Role || profile.role || currentUser.role || "individual",
           phoneNumber: profile.PhoneNumber || profile.phoneNumber || "",
           content: profile.Content || profile.content || "",
-          profilePic:
-            profile.ProfilePicUrl ||
-            profile.profilePicUrl ||
-            profile.ProfilePic ||
-            profile.profilePic ||
-            "",
-          locationLat: profile.LocationLat ?? profile.locationLat ?? null,
-          locationLng: profile.LocationLng ?? profile.locationLng ?? null,
+          profilePic: profilePicUrl || localProfilePic,
         });
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -227,7 +215,7 @@ const Profile = () => {
       }
     };
 
-    fetchUserData();
+    if (currentUser?.id) fetchUserData();
   }, [currentUser?.id]);
 
   const pickImage = async () => {
@@ -239,12 +227,8 @@ const Profile = () => {
         quality: 0.6,
       });
 
-      if (!result.canceled && result.assets && result.assets[0].uri) {
-        const uri = result.assets[0].uri;
-        console.log("Image URI:", uri);
-        setNewPhotoUri(uri);
-      } else {
-        console.log("Image picking canceled or failed");
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setNewPhotoUri(result.assets[0].uri);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -253,21 +237,22 @@ const Profile = () => {
   };
 
   const uploadProfilePhoto = async () => {
-    if (!newPhotoUri || !userData?.displayName) return null;
-
+    if (!newPhotoUri) return null;
     try {
-      const fileName = `${userData.displayName}_${Date.now()}.jpg`;
+      const fileName = `${userData?.displayName || 'profile'}_${Date.now()}.jpg`;
       const formData = new FormData();
       formData.append("image", {
         uri: newPhotoUri,
         name: fileName,
         type: "image/jpeg",
       });
+
       const uploadResult = await apiRequest("/upload", {
         method: "POST",
         body: formData,
         timeoutMs: 60000,
       });
+
       return uploadResult?.imageUrl || null;
     } catch (error) {
       console.error("Error uploading photo:", error);
@@ -278,101 +263,128 @@ const Profile = () => {
 
   const updateProfile = async () => {
     if (!userData) return;
-
     setIsLoading(true);
+
     try {
       const updatedFields = {};
 
       if (userData.displayName) updatedFields.displayName = userData.displayName;
       if (userData.phoneNumber) updatedFields.phoneNumber = userData.phoneNumber;
-      if (userData.content) updatedFields.content = userData.content; // Add content field
+      if (userData.content) updatedFields.content = userData.content;
       if (userData.email) updatedFields.email = userData.email.trim().toLowerCase();
-      if (userData.location?.latitude) {
-        updatedFields.locationLat = userData.location.latitude;
-      }
-      if (userData.location?.longitude) {
-        updatedFields.locationLng = userData.location.longitude;
-      }
-      
+
+      if (selectedLocation?.latitude) updatedFields.locationLat = selectedLocation.latitude;
+      if (selectedLocation?.longitude) updatedFields.locationLng = selectedLocation.longitude;
+
+      // Profile Picture Fix
+      let newProfilePicUrl = null;
       if (newPhotoUri) {
-        const profilePic = await uploadProfilePhoto();
-        if (!profilePic) {
-          throw new Error("Image upload failed");
+        newProfilePicUrl = await uploadProfilePhoto();
+        if (newProfilePicUrl) {
+          updatedFields.profilePicUrl = newProfilePicUrl;
+          await AsyncStorage.setItem(PROFILE_PIC_STORAGE_KEY, newProfilePicUrl);
         }
-        updatedFields.profilePicUrl = profilePic;
+      } else if (userData.profilePic || localProfilePic) {
+        updatedFields.profilePicUrl = userData.profilePic || localProfilePic;
       }
 
-      const currentPasswordValue = currentPassword.trim();
-      const newPasswordValue = newPassword.trim();
-      const confirmNewPasswordValue = confirmNewPassword.trim();
-      const hasAnyPasswordInput =
-        currentPasswordValue || newPasswordValue || confirmNewPasswordValue;
-      if (hasAnyPasswordInput) {
-        if (!currentPasswordValue || !newPasswordValue) {
+      // Password
+      const currPass = currentPassword.trim();
+      const newPass = newPassword.trim();
+      const confirmPass = confirmNewPassword.trim();
+
+      if (currPass || newPass || confirmPass) {
+        if (!currPass || !newPass) {
           Alert.alert(translations.error, translations.passwordFieldsRequired);
           setIsLoading(false);
           return;
         }
-        if (newPasswordValue !== confirmNewPasswordValue) {
+        if (newPass !== confirmPass) {
           Alert.alert(translations.error, translations.passwordMismatch);
           setIsLoading(false);
           return;
         }
-        updatedFields.currentPassword = currentPasswordValue;
-        updatedFields.password = newPasswordValue;
-        updatedFields.newPassword = newPasswordValue;
+        updatedFields.currentPassword = currPass;
+        updatedFields.password = newPass;
       }
 
-      const updatedUser = await apiRequest(`/users/${userData.id}`, {
-        method: "PUT",
-        body: updatedFields,
-      });
+      if (Object.keys(updatedFields).length > 0) {
+        await apiRequest(`/users/${userData.id}`, {
+          method: "PUT",
+          body: updatedFields,
+        });
+      }
 
-      setUserData((prev) => ({
+      const finalProfilePic = newProfilePicUrl || userData.profilePic || localProfilePic || "";
+
+      setUserData(prev => ({
         ...prev,
-        email: updatedUser?.Email || updatedUser?.email || prev?.email || "",
-        profilePic:
-          updatedUser?.ProfilePicUrl ||
-          updatedUser?.profilePicUrl ||
-          updatedFields.profilePicUrl ||
-          prev?.profilePic ||
-          "",
+        displayName: userData.displayName,
+        email: userData.email,
+        phoneNumber: userData.phoneNumber,
+        content: userData.content,
+        profilePic: finalProfilePic,
       }));
+
       setNewPhotoUri(null);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmNewPassword("");
 
+      if (refreshUser) await refreshUser();
+
       Alert.alert(translations.success, translations.profileUpdatedSuccessfully);
       navigation.goBack();
+
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert(
-        translations.error,
-        error?.message || translations.failedUpdateProfile
-      );
+      Alert.alert(translations.error, error?.message || translations.failedUpdateProfile);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleMapLongPress = async (e) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    try {
+      const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const name = address
+        ? `${address.street || ""} ${address.city || ""} ${address.region || ""}`.trim()
+        : `${translations.selected} Location`;
+
+      const locationDetails = { latitude, longitude, name };
+      setSelectedLocation(locationDetails);
+      setLocationName(name);
+      setUserData(prev => ({ ...prev, location: locationDetails }));
+    } catch (error) {
+      console.error('Error getting location details:', error);
+      Alert.alert(translations.error, translations.failedGetLocationDetails);
+    }
+  };
+
   const handleInputLayout = (key) => (event) => {
     const { y } = event.nativeEvent.layout;
-    setInputPositions((prev) => ({ ...prev, [key]: y }));
+    setInputPositions(prev => ({ ...prev, [key]: y }));
   };
 
   const scrollToInput = (key) => {
     const y = inputPositions[key];
-    if (typeof y !== "number") return;
-    setTimeout(() => {
+    if (typeof y === "number") {
       scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
-    }, 120);
+    }
+  };
+
+  const getDisplayProfilePic = () => {
+    if (newPhotoUri) return newPhotoUri;
+    if (userData?.profilePic) return userData.profilePic;
+    if (localProfilePic) return localProfilePic;
+    return null;
   };
 
   if (!userData) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#191970" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>{translations.loadingProfileData}</Text>
       </View>
     );
@@ -382,7 +394,6 @@ const Profile = () => {
     <KeyboardAvoidingView
       style={[styles.keyboardRoot, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      enabled
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 24}
     >
       <ScrollView
@@ -390,240 +401,202 @@ const Profile = () => {
         style={[styles.scrollContainer, { backgroundColor: colors.background }]}
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingBottom:
-              40 + keyboardHeight + Math.max(insets.bottom, 12),
-          },
+          { paddingBottom: 40 + keyboardHeight + Math.max(insets.bottom, 12) },
         ]}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
-        automaticallyAdjustKeyboardInsets
       >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.header, { color: colors.primary }]}>
-          {translations.updateProfile}
-        </Text>
-
-        <TouchableOpacity onPress={pickImage}>
-          <Image 
-            source={
-              newPhotoUri 
-                ? { uri: newPhotoUri }
-                : userData.profilePic 
-                  ? { uri: userData.profilePic }
-                  : require('../../assets/images/default_cooperative.png')
-            } 
-            style={styles.profileImage} 
-          />
-        </TouchableOpacity>
-        <Text style={[styles.photoText, { color: colors.primary }]}>
-          {translations.tapToChangePhoto}
-        </Text>
-
-        <View style={styles.inputContainer} onLayout={handleInputLayout("email")}>
-          <Text style={[styles.inputLabel, { color: colors.primary }]}>
-            {translations.email}
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+          <Text style={[styles.header, { color: colors.primary }]}>
+            {translations.updateProfile}
           </Text>
-          <TextInput
-            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
-            placeholder={translations.enterEmail}
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={userData?.email || ''}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onFocus={() => scrollToInput("email")}
-            onChangeText={(text) => setUserData(prev => ({ ...prev, email: text }))}
-          />
-        </View>
 
-        {currentUser?.role === 'individual' ? (
-          <>
+          <TouchableOpacity onPress={pickImage}>
+            <Image
+              source={
+                getDisplayProfilePic()
+                  ? { uri: getDisplayProfilePic() }
+                  : require('../../assets/images/default_cooperative.png')
+              }
+              style={styles.profileImage}
+            />
+          </TouchableOpacity>
+
+          <Text style={[styles.photoText, { color: colors.primary }]}>
+            {translations.tapToChangePhoto}
+          </Text>
+
+          {/* Email */}
+          <View style={styles.inputContainer} onLayout={handleInputLayout("email")}>
+            <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.email}</Text>
+            <TextInput
+              style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+              placeholder={translations.enterEmail}
+              placeholderTextColor={colors.onSurfaceVariant}
+              value={userData.email || ''}
+              onFocus={() => scrollToInput("email")}
+              onChangeText={(text) => setUserData(prev => ({ ...prev, email: text }))}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
+
+          {currentUser?.role === 'individual' ? (
             <View style={styles.inputContainer} onLayout={handleInputLayout("displayName")}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>
-                {translations.name}
-              </Text>
+              <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.name}</Text>
               <TextInput
                 style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
                 placeholder={translations.enterYourName}
                 placeholderTextColor={colors.onSurfaceVariant}
-                value={userData?.displayName || ''}
+                value={userData.displayName || ''}
                 onFocus={() => scrollToInput("displayName")}
                 onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
               />
             </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.inputContainer} onLayout={handleInputLayout("coopName")}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>
-                {translations.cooperativeName}
-              </Text>
-              <TextInput
-                style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
-                placeholder={translations.enterCooperativeName}
-                placeholderTextColor={colors.onSurfaceVariant}
-                value={userData?.displayName || ''}
-                onFocus={() => scrollToInput("coopName")}
-                onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
-              />
-            </View>
-
-            <View style={styles.inputContainer} onLayout={handleInputLayout("phoneNumber")}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>
-                {translations.phoneNumber}
-              </Text>
-              <TextInput
-                style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
-                placeholder={translations.enterPhoneNumber}
-                placeholderTextColor={colors.onSurfaceVariant}
-                value={userData?.phoneNumber || ''}
-                onFocus={() => scrollToInput("phoneNumber")}
-                onChangeText={(text) => setUserData(prev => ({ ...prev, phoneNumber: text }))}
-              />
-            </View>
-
-            <View style={styles.inputContainer} onLayout={handleInputLayout("content")}>
-              <Text style={[styles.inputLabel, { color: colors.primary }]}>
-                {translations.productService}
-              </Text>
-              <TextInput
-                style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
-                placeholder={translations.enterProductService}
-                placeholderTextColor={colors.onSurfaceVariant}
-                value={userData?.content || ''}
-                onFocus={() => scrollToInput("content")}
-                onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
-              />
-            </View>
-
-            <Text style={[styles.sectionTitle, { color: colors.primary }]}>
-              {translations.location}
-            </Text>
-            {location && (
-              <View style={styles.mapContainer}>
-                <TouchableOpacity 
-                  style={styles.mapTypeButton}
-                  onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
-                >
-                  <Text style={styles.mapTypeButtonText}>
-                    {mapType === 'standard'
-                      ? translations.satelliteView
-                      : translations.standardView}
-                  </Text>
-                </TouchableOpacity>
-
-                <MapView
-                  style={styles.map}
-                  initialRegion={location}
-                  mapType={mapType}
-                  onLongPress={handleMapLongPress}
-                >
-                  {selectedLocation && (
-                    <Marker
-                      coordinate={{
-                        latitude: selectedLocation.latitude,
-                        longitude: selectedLocation.longitude
-                      }}
-                      title={locationName}
-                    />
-                  )}
-                </MapView>
-                {selectedLocation && (
-                  <Text style={styles.locationText}>
-                    {translations.selected}: {locationName}
-                  </Text>
-                )}
-              </View>
-            )}
-          </>
-        )}
-
-        <View style={styles.inputContainer} onLayout={handleInputLayout("currentPassword")}>
-          <Text style={[styles.inputLabel, { color: colors.primary }]}>
-            {translations.currentPassword}
-          </Text>
-          <TextInput
-            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
-            placeholder={translations.enterCurrentPassword}
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={currentPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            onFocus={() => scrollToInput("currentPassword")}
-            onChangeText={setCurrentPassword}
-          />
-        </View>
-
-        <View style={styles.inputContainer} onLayout={handleInputLayout("newPassword")}>
-          <Text style={[styles.inputLabel, { color: colors.primary }]}>
-            {translations.newPassword}
-          </Text>
-          <TextInput
-            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
-            placeholder={translations.enterNewPassword}
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={newPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            onFocus={() => scrollToInput("newPassword")}
-            onChangeText={setNewPassword}
-          />
-        </View>
-
-        <View style={styles.inputContainer} onLayout={handleInputLayout("confirmNewPassword")}>
-          <Text style={[styles.inputLabel, { color: colors.primary }]}>
-            {translations.confirmNewPassword}
-          </Text>
-          <TextInput
-            style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
-            placeholder={translations.reEnterNewPassword}
-            placeholderTextColor={colors.onSurfaceVariant}
-            value={confirmNewPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            onFocus={() => scrollToInput("confirmNewPassword")}
-            onChangeText={setConfirmNewPassword}
-          />
-        </View>
-
-        <TouchableOpacity 
-          style={[styles.updateButton, { backgroundColor: colors.primary, marginTop: 20 }]} 
-          onPress={updateProfile} 
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#FFF" />
           ) : (
-            <Text style={styles.updateButtonText}>
-              {translations.updateProfileButton}
-            </Text>
+            <>
+              <View style={styles.inputContainer} onLayout={handleInputLayout("coopName")}>
+                <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.cooperativeName}</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+                  placeholder={translations.enterCooperativeName}
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={userData.displayName || ''}
+                  onFocus={() => scrollToInput("coopName")}
+                  onChangeText={(text) => setUserData(prev => ({ ...prev, displayName: text }))}
+                />
+              </View>
+
+              <View style={styles.inputContainer} onLayout={handleInputLayout("phoneNumber")}>
+                <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.phoneNumber}</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+                  placeholder={translations.enterPhoneNumber}
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={userData.phoneNumber || ''}
+                  onFocus={() => scrollToInput("phoneNumber")}
+                  onChangeText={(text) => setUserData(prev => ({ ...prev, phoneNumber: text }))}
+                />
+              </View>
+
+              <View style={styles.inputContainer} onLayout={handleInputLayout("content")}>
+                <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.productService}</Text>
+                <TextInput
+                  style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+                  placeholder={translations.enterProductService}
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  value={userData.content || ''}
+                  onFocus={() => scrollToInput("content")}
+                  onChangeText={(text) => setUserData(prev => ({ ...prev, content: text }))}
+                />
+              </View>
+
+              <Text style={[styles.sectionTitle, { color: colors.primary }]}>{translations.location}</Text>
+              {location && (
+                <View style={styles.mapContainer}>
+                  <TouchableOpacity
+                    style={styles.mapTypeButton}
+                    onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
+                  >
+                    <Text style={styles.mapTypeButtonText}>
+                      {mapType === 'standard' ? translations.satelliteView : translations.standardView}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <MapView
+                    style={styles.map}
+                    initialRegion={location}
+                    mapType={mapType}
+                    onLongPress={handleMapLongPress}
+                  >
+                    {selectedLocation && (
+                      <Marker
+                        coordinate={{
+                          latitude: selectedLocation.latitude,
+                          longitude: selectedLocation.longitude,
+                        }}
+                        title={locationName}
+                      />
+                    )}
+                  </MapView>
+
+                  {selectedLocation && (
+                    <Text style={styles.locationText}>
+                      {translations.selected}: {locationName}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </>
           )}
-        </TouchableOpacity>
-      </View>
+
+          {/* Password Fields */}
+          <View style={styles.inputContainer} onLayout={handleInputLayout("currentPassword")}>
+            <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.currentPassword}</Text>
+            <TextInput
+              style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+              placeholder={translations.enterCurrentPassword}
+              placeholderTextColor={colors.onSurfaceVariant}
+              value={currentPassword}
+              secureTextEntry
+              onFocus={() => scrollToInput("currentPassword")}
+              onChangeText={setCurrentPassword}
+            />
+          </View>
+
+          <View style={styles.inputContainer} onLayout={handleInputLayout("newPassword")}>
+            <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.newPassword}</Text>
+            <TextInput
+              style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+              placeholder={translations.enterNewPassword}
+              placeholderTextColor={colors.onSurfaceVariant}
+              value={newPassword}
+              secureTextEntry
+              onFocus={() => scrollToInput("newPassword")}
+              onChangeText={setNewPassword}
+            />
+          </View>
+
+          <View style={styles.inputContainer} onLayout={handleInputLayout("confirmNewPassword")}>
+            <Text style={[styles.inputLabel, { color: colors.primary }]}>{translations.confirmNewPassword}</Text>
+            <TextInput
+              style={[styles.input, { borderColor: colors.primary, color: colors.onSurface }]}
+              placeholder={translations.reEnterNewPassword}
+              placeholderTextColor={colors.onSurfaceVariant}
+              value={confirmNewPassword}
+              secureTextEntry
+              onFocus={() => scrollToInput("confirmNewPassword")}
+              onChangeText={setConfirmNewPassword}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.updateButton, { backgroundColor: colors.primary, marginTop: 20 }]}
+            onPress={updateProfile}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Text style={styles.updateButtonText}>{translations.updateProfileButton}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  keyboardRoot: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 30,
-  },
+  keyboardRoot: { flex: 1 },
+  scrollContainer: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
+  container: { flex: 1, alignItems: 'center', padding: 20, paddingBottom: 40 },
+  header: { fontSize: 28, fontWeight: 'bold', marginBottom: 30 },
+  profileImage: { width: 100, height: 100, borderRadius: 50, marginBottom: 10 },
+  photoText: { marginBottom: 20 },
+  inputContainer: { width: '100%', marginBottom: 15 },
+  inputLabel: { fontSize: 16, fontWeight: '600', marginBottom: 8, paddingLeft: 2 },
   input: {
     width: '100%',
     height: 50,
@@ -632,29 +605,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingLeft: 15,
     fontSize: 16,
-    marginBottom: 20,
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 10,
-  },
-  photoText: {
-    marginBottom: 20,
-  },
-  verifyButton: {
-    backgroundColor: '#191970',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  verifyButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   updateButton: {
     paddingVertical: 15,
@@ -663,68 +613,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
-  updateButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  mapContainer: {
-    width: '100%',
-    height: 200,
-    marginBottom: 20,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    alignSelf: 'flex-start',
-  },
-  locationText: {
-    marginTop: 5,
-    fontSize: 14,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
+  updateButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  mapContainer: { width: '100%', height: 200, marginBottom: 20, borderRadius: 8, overflow: 'hidden' },
+  map: { width: '100%', height: '100%' },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, alignSelf: 'flex-start' },
+  locationText: { marginTop: 5, fontSize: 14 },
   mapTypeButton: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255,255,255,0.8)',
     padding: 8,
     borderRadius: 5,
     zIndex: 1,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
-  mapTypeButtonText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  inputContainer: {
-    width: '100%',
-    marginBottom: 15,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    paddingLeft: 2,
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
-    fontSize: 16,
-  }
+  mapTypeButtonText: { fontSize: 12, fontWeight: 'bold' },
+  loadingText: { marginTop: 10, color: '#666', fontSize: 16 },
 });
 
 export default Profile;

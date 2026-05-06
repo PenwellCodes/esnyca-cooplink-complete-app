@@ -21,7 +21,17 @@ async function buildHeaders(customHeaders = {}, includeAuth = true) {
   const headers = { ...customHeaders };
 
   if (includeAuth) {
-    const token = await AsyncStorage.getItem("authToken");
+    let token = await AsyncStorage.getItem("authToken");
+    if (!token) {
+      // Backward compatibility for older app sessions.
+      token =
+        (await AsyncStorage.getItem("token")) ||
+        (await AsyncStorage.getItem("jwtToken")) ||
+        null;
+      if (token) {
+        await AsyncStorage.setItem("authToken", token);
+      }
+    }
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }

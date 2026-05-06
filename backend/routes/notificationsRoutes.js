@@ -1,18 +1,28 @@
+// backend/routes/notifications.js
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
-const { registerUserPushToken } = require('../services/pushNotifications');
+const { savePushToken } = require('../services/pushNotifications');
 
 const router = express.Router();
+router.use(requireAuth);
 
-router.post('/register-token', requireAuth, async (req, res) => {
-  const token = String(req.body?.token || '').trim();
-  if (!token) return res.status(400).json({ message: 'token is required' });
-
+// Register push token
+router.post('/register-token', async (req, res) => {
   try {
-    await registerUserPushToken(req.user.Id, token);
-    return res.json({ success: true });
+    const { token, platform } = req.body;
+    const userId = req.user.Id;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
+    }
+    
+    await savePushToken(userId, token, platform || 'unknown');
+    
+    console.log(`✅ Push token registered for user ${userId}`);
+    res.json({ success: true });
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to register push token' });
+    console.error('Error registering token:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

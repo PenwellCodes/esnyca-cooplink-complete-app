@@ -1,29 +1,32 @@
-import React, { createContext, useContext, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
-import { Platform } from "react-native";
+import { Platform, LogBox } from "react-native";
 import { useAuth } from "./AuthContext";
 import { apiRequest } from "../../utils/api";
+import { router } from "expo-router";
+
+// Ignore Expo Go warning
+LogBox.ignoreLogs(['expo-notifications:']);
 
 const NotificationsContext = createContext({});
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Check if running in Expo Go
+const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
+
+// Only configure if not in Expo Go
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
 
 async function registerForPushNotificationsAsync() {
-  // Expo Go (SDK 53+) does not support remote push notifications.
-  // Detect Expo Go using both appOwnership and executionEnvironment for compatibility.
-  const isExpoGo =
-    Constants.appOwnership === "expo" ||
-    Constants.executionEnvironment === "storeClient";
-  if (isExpoGo) {
-    return null;
-  }
+  if (isExpoGo) return null;
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
@@ -42,28 +45,34 @@ async function registerForPushNotificationsAsync() {
   }
   if (finalStatus !== "granted") return null;
 
-  const projectId =
-    Constants?.expoConfig?.extra?.eas?.projectId ||
-    Constants?.easConfig?.projectId;
+  const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
   if (!projectId) return null;
 
-  const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-  return tokenData?.data || null;
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    return tokenData?.data || null;
+  } catch (error) {
+    console.log("Error getting push token:", error);
+    return null;
+  }
 }
 
 export const NotificationsProvider = ({ children }) => {
   const { currentUser } = useAuth();
+  const notificationListener = useRef();
+  const responseListener = useRef();
 
   useEffect(() => {
     const setup = async () => {
-      if (!currentUser?.uid) return;
+      if (!currentUser?.uid || isExpoGo) return;
       try {
         const token = await registerForPushNotificationsAsync();
         if (!token) return;
         await apiRequest("/notifications/register-token", {
           method: "POST",
-          body: { token },
+          body: { token, userId: currentUser.uid, platform: Platform.OS },
         });
+        console.log("Push token registered");
       } catch (error) {
         console.log("Push setup failed:", error?.message || error);
       }
@@ -71,8 +80,46 @@ export const NotificationsProvider = ({ children }) => {
     setup();
   }, [currentUser?.uid]);
 
+  useEffect(() => {
+    if (isExpoGo) return;
+
+    notificationListener.current = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        console.log("Notification received:", notification);
+      }
+    );
+
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        console.log("Notification tapped:", response);
+        const { data } = response.notification.request.content;
+        if (data?.chatId && data?.senderUserId) {
+          router.push({
+            pathname: `/(screens)/chatConversations/${data.senderUserId}`,
+            params: {
+              user: JSON.stringify({
+                uid: data.senderUserId,
+                displayName: data.userName || 'User',
+              }),
+            },
+          });
+        }
+      }
+    );
+
+    // FIXED: Correct cleanup for expo-notifications
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, []);
+
   return (
-    <NotificationsContext.Provider value={{}}>
+    <NotificationsContext.Provider value={{ isExpoGo }}>
       {children}
     </NotificationsContext.Provider>
   );

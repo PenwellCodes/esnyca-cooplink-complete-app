@@ -16,11 +16,53 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { typography, images } from "../../constants"; // Add this import at the top
+import { typography, images } from "../../constants";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
+import { useChat } from "../../context/appstate/ChatContext";
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
+
+// Helper function to get user initials
+const getUserInitials = (displayName) => {
+  if (!displayName || displayName === 'User') return '?';
+  const nameParts = displayName.split(' ');
+  if (nameParts.length >= 2) {
+    return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
+  }
+  return displayName.substring(0, 2).toUpperCase();
+};
+
+// Avatar component that shows image or initials
+const AvatarWithInitials = ({ imageUrl, name, size = 90 }) => {
+  const [imageError, setImageError] = useState(false);
+  const initials = getUserInitials(name);
+  const initialsSize = size * 0.35;
+  
+  if (imageUrl && !imageError) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        style={[styles.profilePic, { width: size, height: size, borderRadius: size / 2 }]}
+        onError={() => setImageError(true)}
+        resizeMode="cover"
+      />
+    );
+  }
+  
+  return (
+    <View style={[styles.initialsAvatar, { 
+      width: size, 
+      height: size, 
+      borderRadius: size / 2,
+      backgroundColor: '#007AFF'
+    }]}>
+      <Text style={[styles.initialsText, { fontSize: initialsSize }]}>
+        {initials}
+      </Text>
+    </View>
+  );
+};
 
 const CooperativeUsersScreen = () => {
   const insets = useSafeAreaInsets();
@@ -29,6 +71,7 @@ const CooperativeUsersScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { currentLanguage, t } = useLanguage();
+  const { conversations, refreshChats } = useChat();
   const highlightId = params.highlightId;
   const [users, setUsers] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState("All");
@@ -49,8 +92,6 @@ const CooperativeUsersScreen = () => {
     contact: "Contact",
     location: "Location",
     noProductService: "No product/service information available",
-    startChatPredefinedMessage:
-      "Hello 👋 there , can you share more about your cooperative 🥰",
   });
 
   useEffect(() => {
@@ -66,9 +107,6 @@ const CooperativeUsersScreen = () => {
         location: await t("Location"),
         noProductService: await t(
           "No product/service information available"
-        ),
-        startChatPredefinedMessage: await t(
-          "Hello 👋 there , can you share more about your cooperative 🥰"
         ),
       });
     };
@@ -119,7 +157,6 @@ const CooperativeUsersScreen = () => {
 
   useEffect(() => {
     if (highlightId && users.length > 0) {
-      // Sort users to put highlighted user first
       const sortedUsers = [...users].sort((a, b) => {
         if (a.id === highlightId) return -1;
         if (b.id === highlightId) return 1;
@@ -130,11 +167,9 @@ const CooperativeUsersScreen = () => {
   }, [highlightId, users.length]);
 
   useEffect(() => {
-    // If we have a highlightId, scroll to that cooperative
     if (highlightId) {
       const index = users.findIndex((user) => user.id === highlightId);
       if (index !== -1) {
-        // Set the region to match the highlighted cooperative
         const user = users[index];
         setSelectedRegion(user.region || "All");
       }
@@ -167,14 +202,26 @@ const CooperativeUsersScreen = () => {
     setUsers(filtered);
   }, [searchQuery, allUsers]);
 
+  // Check if there's an existing conversation with this user
+  const hasExistingConversation = (userId) => {
+    if (!currentUser || !conversations) return false;
+    
+    const currentUserId = currentUser.uid || currentUser.id;
+    const chatKey = [currentUserId, userId].sort().join('_');
+    const chatMessages = conversations[chatKey] || [];
+    
+    return chatMessages.length > 0;
+  };
+
   // Open the bottom drawer to show the cooperative's bio
   const openDrawer = (user) => {
     setSelectedUser(user);
     setDrawerVisible(true);
   };
+
+  // Start chat without default message
   const startChat = (user) => {
     if (!currentUser) {
-      // Encode the return path with the highlight parameter
       const returnTo = encodeURIComponent(
         `/cooperatives?highlightId=${user.id}`,
       );
@@ -182,19 +229,27 @@ const CooperativeUsersScreen = () => {
       return;
     }
 
-    const predefinedMessage = translations.startChatPredefinedMessage;
     const userId = user.uid || user.id;
     if (!userId) {
       console.warn("Cannot start chat without a valid user id");
       return;
     }
+    
+    // Check if there's an existing conversation
+    const hasConversation = hasExistingConversation(userId);
+    
     console.log("startChat userId:", userId, "user:", user);
+    console.log("Has existing conversation:", hasConversation);
+    
     try {
+      // If there's an existing conversation, don't send a default message
+      // Just navigate to the chat screen without a predefined message
       router.push({
         pathname: `/(screens)/chatConversations/${userId}`,
         params: {
           user: JSON.stringify(user),
-          predefinedMessage,
+          // Only send predefinedMessage if there's NO existing conversation
+          ...(!hasConversation && { predefinedMessage: "" }),
         },
       });
     } catch (error) {
@@ -211,15 +266,15 @@ const CooperativeUsersScreen = () => {
         highlightId === item.id && {
           borderColor: colors.primary,
           borderWidth: 2,
-          backgroundColor: `${colors.primary}10`, // Add slight highlight color
+          backgroundColor: `${colors.primary}10`,
         },
       ]}
     >
       <View style={styles.leftColumn}>
-        <Image
-          source={{ uri: item.profilePic || images.defaultAvatar }}
-          style={styles.profilePic}
-          resizeMode="cover"
+        <AvatarWithInitials
+          imageUrl={item.profilePic}
+          name={item.displayName}
+          size={90}
         />
         <TouchableOpacity
           style={styles.chatButton}
@@ -307,6 +362,7 @@ const CooperativeUsersScreen = () => {
         renderItem={renderUserCard}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
       />
 
       <Portal>
@@ -399,9 +455,20 @@ const styles = StyleSheet.create({
   profilePic: {
     width: 90,
     height: 90,
-    borderRadius: 6,
+    borderRadius: 45,
     borderWidth: 1,
     borderColor: "#ccc",
+  },
+  initialsAvatar: {
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: '#007AFF',
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  initialsText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   chatButton: {
     flexDirection: "row",
