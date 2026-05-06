@@ -21,7 +21,6 @@ async function buildHeaders(customHeaders = {}, includeAuth = true) {
   const headers = { ...customHeaders };
 
   if (includeAuth) {
-<<<<<<< HEAD
     let token = await AsyncStorage.getItem("authToken");
     if (!token) {
       // Backward compatibility for older app sessions.
@@ -35,24 +34,6 @@ async function buildHeaders(customHeaders = {}, includeAuth = true) {
     }
     if (token) {
       headers.Authorization = `Bearer ${token}`;
-=======
-    const storedUser = await AsyncStorage.getItem("user");
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        const userId = String(user?.uid || user?.Id || user?.id || "").trim();
-        const role = String(user?.role || user?.Role || "").trim();
-
-        if (userId) {
-          headers["x-user-id"] = userId;
-        }
-        if (role) {
-          headers["x-user-role"] = role;
-        }
-      } catch {
-        // Ignore malformed user payloads and send request without auth headers.
-      }
->>>>>>> 60d420dcd55cb95ba0f677eeb91c22d3e5ff6b24
     }
   }
 
