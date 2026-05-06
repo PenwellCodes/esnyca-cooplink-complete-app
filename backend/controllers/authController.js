@@ -40,6 +40,47 @@ async function verifyWithFirebase(email, password) {
   }
 }
 
+function buildTemporaryPassword() {
+  return `Tmp#${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+async function sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail) {
+  await axios.post(
+    `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(
+      firebaseWebApiKey,
+    )}`,
+    {
+      requestType: 'PASSWORD_RESET',
+      email: normalizedEmail,
+    },
+  );
+}
+
+async function createFirebaseUserIfMissing(firebaseWebApiKey, normalizedEmail) {
+  try {
+    await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(
+        firebaseWebApiKey,
+      )}`,
+      {
+        email: normalizedEmail,
+        password: buildTemporaryPassword(),
+        returnSecureToken: true,
+      },
+    );
+    return true;
+  } catch (error) {
+    const errorCode =
+      error?.response?.data?.error?.message ||
+      error?.response?.data?.error?.errors?.[0]?.message ||
+      '';
+    if (errorCode === 'EMAIL_EXISTS') {
+      return true;
+    }
+    return false;
+  }
+}
+
 exports.registerUser = async (req, res) => {
   const {
     email,
@@ -278,15 +319,7 @@ exports.sendForgotPasswordEmail = async (req, res) => {
         .json({ message: 'FIREBASE_WEB_API_KEY is not configured on server' });
     }
 
-    await axios.post(
-      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(
-        firebaseWebApiKey,
-      )}`,
-      {
-        requestType: 'PASSWORD_RESET',
-        email: normalizedEmail,
-      },
-    );
+    await sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail);
 
     return res.json({
       status: 'success',
@@ -298,7 +331,27 @@ exports.sendForgotPasswordEmail = async (req, res) => {
       error?.response?.data?.error?.errors?.[0]?.message ||
       '';
 
-    // Avoid account enumeration by returning success for unknown emails too.
+    // If user exists in SQL but not yet in Firebase, create and resend.
+    if (errorCode === 'EMAIL_NOT_FOUND') {
+      const existingSqlUser = await getUserByEmail(email);
+      if (existingSqlUser) {
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const firebaseWebApiKey = process.env.FIREBASE_WEB_API_KEY;
+        const created = await createFirebaseUserIfMissing(
+          firebaseWebApiKey,
+          normalizedEmail,
+        );
+        if (created) {
+          await sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail);
+          return res.json({
+            status: 'success',
+            message: 'Password reset email sent. Check your inbox.',
+          });
+        }
+      }
+    }
+
+    // Avoid account enumeration by returning success for unknown/non-existing users too.
     if (errorCode === 'EMAIL_NOT_FOUND') {
       return res.json({
         status: 'success',
