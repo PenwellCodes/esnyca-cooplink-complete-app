@@ -157,30 +157,16 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async ({ step, email, token, newPassword }) => {
     try {
-      if (step === "request") {
-        const data = await apiRequest("/auth/forgot-password/email", {
-          method: "POST",
-          includeAuth: false,
-          body: { email: String(email || "").trim().toLowerCase() },
-        });
-        return {
-          success: true,
-          message: data?.message || "Reset email sent. Check your inbox.",
-        };
-      }
-
-      const data = await apiRequest("/auth/forgot-password/reset", {
+      const data = await apiRequest("/auth/forgot-password/email", {
         method: "POST",
         includeAuth: false,
         body: {
           email: String(email || "").trim().toLowerCase(),
-          token: String(token || "").trim(),
-          newPassword: String(newPassword || ""),
         },
       });
       return {
         success: true,
-        message: data?.message || "Password reset successful.",
+        message: data?.message || "Reset email sent. Check your inbox.",
       };
     } catch (error) {
       return { success: false, error: error.message };

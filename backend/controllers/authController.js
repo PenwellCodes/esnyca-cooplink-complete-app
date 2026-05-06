@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 const { sql, getPool } = require('../db');
 const { uploadBufferToImageBB } = require('../services/imagebb');
 
@@ -17,6 +17,27 @@ async function getUserByEmail(email) {
       ORDER BY UpdatedAt DESC, CreatedAt DESC
     `);
   return result.recordset?.[0] || null;
+}
+
+async function verifyWithFirebase(email, password) {
+  const firebaseWebApiKey = process.env.FIREBASE_WEB_API_KEY;
+  if (!firebaseWebApiKey) return false;
+
+  try {
+    await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(
+        firebaseWebApiKey,
+      )}`,
+      {
+        email: String(email || '').trim().toLowerCase(),
+        password: String(password || ''),
+        returnSecureToken: true,
+      },
+    );
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 exports.registerUser = async (req, res) => {
@@ -160,7 +181,29 @@ exports.loginUser = async (req, res) => {
     }
 
     if (!matchedUser) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      const firebaseOk = await verifyWithFirebase(normalizedEmail, password);
+      if (!firebaseOk) {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      // Password was accepted by Firebase (e.g. after forgot-password reset).
+      // Sync SQL hash so future logins can validate directly in SQL.
+      const fallbackUser = users[0];
+      if (!fallbackUser) {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      const passwordHash = await bcrypt.hash(String(password), 10);
+      await pool
+        .request()
+        .input('Id', sql.UniqueIdentifier, fallbackUser.Id)
+        .input('PasswordHash', sql.NVarChar(255), passwordHash)
+        .query(`
+          UPDATE dbo.Users
+          SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @Id
+        `);
+      matchedUser = { ...fallbackUser, PasswordHash: passwordHash };
     }
 
     // Do not return PasswordHash
@@ -219,95 +262,59 @@ exports.getForgotPasswordQuestions = async (req, res) => {
   }
 };
 
-async function sendPasswordResetEmail({ toEmail, displayName, token }) {
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpPort = Number(process.env.SMTP_PORT || 587);
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
-  const fromEmail = process.env.SMTP_FROM || smtpUser;
-
-  if (!smtpHost || !smtpUser || !smtpPass || !fromEmail) {
-    throw new Error('SMTP is not configured on server');
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-  });
-
-  const resetBaseUrl = process.env.DASHBOARD_RESET_URL || '';
-  const resetLink = resetBaseUrl
-    ? `${resetBaseUrl}?token=${encodeURIComponent(token)}&email=${encodeURIComponent(toEmail)}`
-    : '';
-
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-      <h2>Esnyca Admin Password Reset</h2>
-      <p>Hello ${displayName || 'Admin'},</p>
-      <p>Use this reset token to change your dashboard password:</p>
-      <p style="font-size: 18px; font-weight: bold;">${token}</p>
-      <p>This token expires in 15 minutes.</p>
-      ${resetLink ? `<p>Reset link: <a href="${resetLink}">${resetLink}</a></p>` : ''}
-    </div>
-  `;
-
-  await transporter.sendMail({
-    from: fromEmail,
-    to: toEmail,
-    subject: 'Esnyca Admin Password Reset',
-    text: `Use this reset token to change your dashboard password: ${token}. It expires in 15 minutes.`,
-    html,
-  });
-}
-
 exports.sendForgotPasswordEmail = async (req, res) => {
   const { email } = req.body || {};
   if (!email) {
     return res.status(400).json({ message: 'email is required' });
   }
 
-  // Public mode: we do not generate or validate reset tokens.
-  // For compatibility with the dashboard UI, we always respond with success.
-  return res.json({ status: 'success', message: 'Password reset email sent.' });
+  try {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const firebaseWebApiKey = process.env.FIREBASE_WEB_API_KEY;
+
+    if (!firebaseWebApiKey) {
+      return res
+        .status(500)
+        .json({ message: 'FIREBASE_WEB_API_KEY is not configured on server' });
+    }
+
+    await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(
+        firebaseWebApiKey,
+      )}`,
+      {
+        requestType: 'PASSWORD_RESET',
+        email: normalizedEmail,
+      },
+    );
+
+    return res.json({
+      status: 'success',
+      message: 'Password reset email sent. Check your inbox.',
+    });
+  } catch (error) {
+    const errorCode =
+      error?.response?.data?.error?.message ||
+      error?.response?.data?.error?.errors?.[0]?.message ||
+      '';
+
+    // Avoid account enumeration by returning success for unknown emails too.
+    if (errorCode === 'EMAIL_NOT_FOUND') {
+      return res.json({
+        status: 'success',
+        message: 'Password reset email sent. Check your inbox.',
+      });
+    }
+
+    // eslint-disable-next-line no-console
+    console.error(error);
+    return res.status(500).json({ message: 'Failed to send password reset email' });
+  }
 };
 
 exports.resetPasswordWithToken = async (req, res) => {
-  const { email, newPassword } = req.body || {};
-  if (!email || !newPassword) {
-    return res.status(400).json({ message: 'email and newPassword are required' });
-  }
-  if (String(newPassword).trim().length < 6) {
-    return res.status(400).json({ message: 'New password must be at least 6 characters' });
-  }
-
-  try {
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const user = await getUserByEmail(normalizedEmail);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const passwordHash = await bcrypt.hash(String(newPassword).trim(), 10);
-    const pool = await getPool();
-    await pool
-      .request()
-      .input('Id', sql.UniqueIdentifier, user.Id)
-      .input('PasswordHash', sql.NVarChar(255), passwordHash)
-      .query(`
-        UPDATE dbo.Users
-        SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
-        WHERE Id = @Id
-      `);
-
-    return res.json({ status: 'success', message: 'Password reset successful' });
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error(error);
-    return res.status(500).json({ message: 'Password reset failed' });
-  }
+  return res.status(410).json({
+    message:
+      'Direct token reset is disabled. Use the reset link sent to your email by Firebase.',
+  });
 };
