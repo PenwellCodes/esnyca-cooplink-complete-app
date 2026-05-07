@@ -76,6 +76,14 @@ function buildTemporaryPassword() {
 
 async function sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail) {
   try {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4000';
+    const resetUrl = `${frontendUrl}/confirm-password-reset`;
+
+    // eslint-disable-next-line no-console
+    console.log(`Sending Firebase reset email to: ${normalizedEmail}`);
+    // eslint-disable-next-line no-console
+    console.log(`Reset URL configured: ${resetUrl}`);
+
     await axios.post(
       `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(
         firebaseWebApiKey,
@@ -85,7 +93,7 @@ async function sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail) {
         email: normalizedEmail,
         // Custom action code settings for Esnyca App branding
         actionCodeSettings: {
-          url: `${process.env.FRONTEND_URL || 'http://localhost:4000'}/confirm-password-reset`,
+          url: resetUrl,
           handleCodeInApp: false,
           dynamicLinkDomain: undefined,
         },
