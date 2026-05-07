@@ -86,7 +86,6 @@ const SignIn = () => {
       setSnackbarStyle({ backgroundColor: "green" });
       setSnackbarVisible(true);
       setTimeout(() => {
-        // If returnTo is provided, decode and navigate to it, otherwise go to home
         if (returnTo) {
           router.replace(decodeURIComponent(returnTo));
         } else {

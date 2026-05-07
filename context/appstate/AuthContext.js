@@ -75,8 +75,18 @@ export const AuthProvider = ({ children }) => {
         includeAuth: false,
         body: { email: email.trim().toLowerCase(), password },
       });
+
+      // Mobile app only allows non-admin users (individuals, cooperatives)
+      const userRole = String(data?.user?.Role || data?.user?.role || '').toLowerCase();
+      if (userRole === 'admin' || userRole === 'superadmin') {
+        return { success: false, error: 'Admin users must use the dashboard app.' };
+      }
+
       await saveSession({ token: data?.token, user: data?.user });
-      return { success: true };
+      return {
+        success: true,
+        user: data?.user,
+      };
     } catch (error) {
       return { success: false, error: error.message };
     }

@@ -351,9 +351,14 @@ exports.loginUser = async (req, res) => {
     // eslint-disable-next-line no-unused-vars
     const { PasswordHash, ...safeUser } = matchedUser;
 
+    const normalizedRole = String(safeUser.Role || safeUser.role || '').trim().toLowerCase();
+    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
+
     return res.json({
       status: 'success',
       user: safeUser,
+      role: normalizedRole,
+      isAdmin,
     });
   } catch (error) {
     // eslint-disable-next-line no-console
