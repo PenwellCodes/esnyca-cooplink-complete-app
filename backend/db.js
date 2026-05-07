@@ -1,3 +1,5 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const sql = require('mssql');
 
 // Use env vars when available; fall back to current defaults.

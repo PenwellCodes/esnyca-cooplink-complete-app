@@ -267,11 +267,18 @@ exports.loginUser = async (req, res) => {
     return res.status(400).json({ message: 'email and password are required' });
   }
 
-  try {
-    const normalizedEmail = String(email).trim().toLowerCase();
-    // eslint-disable-next-line no-console
-    console.log(`Login attempt for: ${normalizedEmail}`);
+  const normalizedEmail = String(email).trim().toLowerCase();
+  // eslint-disable-next-line no-console
+  console.log(`Login attempt for: ${normalizedEmail}`);
 
+  let sqlUser = null;
+  let sqlAuthSuccess = false;
+  let sqlConnectionFailed = false;
+
+  // Step 1: Try SQL authentication first
+  try {
+    // eslint-disable-next-line no-console
+    console.log('Trying SQL authentication...');
     const pool = await getPool();
     const result = await pool
       .request()
@@ -290,89 +297,107 @@ exports.loginUser = async (req, res) => {
     // eslint-disable-next-line no-console
     console.log(`Found ${users.length} users in SQL for ${normalizedEmail}`);
 
-    if (users.length === 0) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
+    if (users.length > 0) {
+      sqlUser = users[0]; // Use the most recent user
 
-    // In case multiple rows exist for the same email in legacy data,
-    // authenticate against the first row whose hash matches.
-    let matchedUser = null;
-    for (const candidate of users) {
-      if (!candidate?.PasswordHash) {
+      // Try to authenticate with SQL password
+      if (sqlUser.PasswordHash) {
+        sqlAuthSuccess = await bcrypt.compare(password, sqlUser.PasswordHash);
         // eslint-disable-next-line no-console
-        console.log(`User ${candidate.Id} has no password hash`);
-        continue;
-      }
-      // eslint-disable-next-line no-await-in-loop
-      const ok = await bcrypt.compare(password, candidate.PasswordHash);
-      if (ok) {
-        matchedUser = candidate;
-        break;
+        console.log(`SQL authentication result: ${sqlAuthSuccess ? 'SUCCESS' : 'FAILED'}`);
+      } else {
+        // eslint-disable-next-line no-console
+        console.log(`SQL user ${sqlUser.Id} has no password hash`);
       }
     }
-
+  } catch (sqlError) {
+    sqlConnectionFailed = true;
     // eslint-disable-next-line no-console
-    console.log(`SQL authentication result: ${matchedUser ? 'SUCCESS' : 'FAILED'}`);
+    console.warn('SQL Server connection failed, will use Firebase as fallback:', sqlError.message);
+  }
 
-    if (!matchedUser) {
-      // eslint-disable-next-line no-console
-      console.log(`Trying Firebase authentication for ${normalizedEmail}`);
-      const firebaseOk = await verifyWithFirebase(normalizedEmail, password);
-      // eslint-disable-next-line no-console
-      console.log(`Firebase authentication result: ${firebaseOk ? 'SUCCESS' : 'FAILED'}`);
-
-      if (!firebaseOk) {
-        return res.status(401).json({ message: 'Invalid email or password' });
-      }
-
-      // Password was accepted by Firebase (e.g. after forgot-password reset).
-      // Sync SQL hash so future logins can validate directly in SQL.
-      const fallbackUser = users[0];
-      if (!fallbackUser) {
-        return res.status(401).json({ message: 'Invalid email or password' });
-      }
-
-      try {
-        const passwordHash = await bcrypt.hash(String(password), 10);
-        await pool
-          .request()
-          .input('Id', sql.UniqueIdentifier, fallbackUser.Id)
-          .input('PasswordHash', sql.NVarChar(255), passwordHash)
-          .query(`
-            UPDATE dbo.Users
-            SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
-            WHERE Id = @Id
-          `);
-        matchedUser = { ...fallbackUser, PasswordHash: passwordHash };
-        // eslint-disable-next-line no-console
-        console.log(`Password synced to SQL for user: ${normalizedEmail}`);
-      } catch (syncError) {
-        // If sync fails, still allow login since Firebase auth succeeded
-        // eslint-disable-next-line no-console
-        console.error(`Failed to sync password to SQL for ${normalizedEmail}:`, syncError.message);
-        // Create a temporary user object for login without password hash
-        matchedUser = { ...fallbackUser, PasswordHash: null };
-      }
-    }
+  // Step 2: If SQL auth succeeded, use SQL user
+  if (sqlAuthSuccess && sqlUser) {
+    const normalizedRole = String(sqlUser.Role || sqlUser.role || '').trim().toLowerCase();
+    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
 
     // Do not return PasswordHash
     // eslint-disable-next-line no-unused-vars
-    const { PasswordHash, ...safeUser } = matchedUser;
-
-    const normalizedRole = String(safeUser.Role || safeUser.role || '').trim().toLowerCase();
-    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
+    const { PasswordHash, ...safeUser } = sqlUser;
 
     return res.json({
       status: 'success',
       user: safeUser,
       role: normalizedRole,
       isAdmin,
+      authMethod: 'sql',
     });
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error(error);
-    return res.status(500).json({ message: 'Login failed' });
   }
+
+  // Step 3: Try Firebase authentication (either SQL failed or no SQL user found)
+  // eslint-disable-next-line no-console
+  console.log(`Trying Firebase authentication for ${normalizedEmail}`);
+  const firebaseOk = await verifyWithFirebase(normalizedEmail, password);
+  // eslint-disable-next-line no-console
+  console.log(`Firebase authentication result: ${firebaseOk ? 'SUCCESS' : 'FAILED'}`);
+
+  if (!firebaseOk) {
+    return res.status(401).json({ message: 'Invalid email or password' });
+  }
+
+  // Step 4: Firebase auth succeeded, now handle user data
+  let finalUser = sqlUser;
+
+  // If we have SQL user but no password hash (or connection failed), sync the password
+  if (sqlUser && !sqlConnectionFailed) {
+    try {
+      const passwordHash = await bcrypt.hash(String(password), 10);
+      const pool = await getPool();
+      await pool
+        .request()
+        .input('Id', sql.UniqueIdentifier, sqlUser.Id)
+        .input('PasswordHash', sql.NVarChar(255), passwordHash)
+        .query(`
+          UPDATE dbo.Users
+          SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @Id
+        `);
+      finalUser = { ...sqlUser, PasswordHash: passwordHash };
+      // eslint-disable-next-line no-console
+      console.log(`Password synced to SQL for user: ${normalizedEmail}`);
+    } catch (syncError) {
+      // If sync fails, still allow login since Firebase auth succeeded
+      // eslint-disable-next-line no-console
+      console.error(`Failed to sync password to SQL for ${normalizedEmail}:`, syncError.message);
+      finalUser = { ...sqlUser, PasswordHash: null };
+    }
+  } else if (!sqlUser) {
+    // No SQL user found, create a minimal user object for Firebase-only auth
+    finalUser = {
+      Id: `firebase-${Date.now()}`, // Temporary ID
+      Email: normalizedEmail,
+      Role: 'individual', // Default role
+      DisplayName: normalizedEmail.split('@')[0], // Use email prefix as display name
+      PasswordHash: null, // No SQL hash for Firebase-only users
+    };
+    // eslint-disable-next-line no-console
+    console.log(`Created temporary user object for Firebase-only auth: ${normalizedEmail}`);
+  }
+
+  const normalizedRole = String(finalUser.Role || finalUser.role || '').trim().toLowerCase();
+  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
+
+  // Do not return PasswordHash
+  // eslint-disable-next-line no-unused-vars
+  const { PasswordHash, ...safeUser } = finalUser;
+
+  return res.json({
+    status: 'success',
+    user: safeUser,
+    role: normalizedRole,
+    isAdmin,
+    authMethod: sqlConnectionFailed ? 'firebase_fallback' : 'firebase',
+  });
 };
 
 exports.getForgotPasswordQuestions = async (req, res) => {
@@ -555,4 +580,145 @@ exports.resetPasswordWithToken = async (req, res) => {
     console.error('Password reset error:', errorCode || error.message);
     return res.status(400).json({ message: 'Invalid or expired reset code' });
   }
+};
+
+exports.loginUser = async (req, res) => {
+  // eslint-disable-next-line no-console
+  console.log('🔐 LOGIN REQUEST RECEIVED:', req.body);
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'email and password are required' });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  // eslint-disable-next-line no-console
+  console.log(`Login attempt for: ${normalizedEmail}`);
+
+  let sqlUser = null;
+  let sqlAuthSuccess = false;
+  let sqlConnectionFailed = false;
+
+  // Step 1: Try SQL authentication first
+  try {
+    // eslint-disable-next-line no-console
+    console.log('Trying SQL authentication...');
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('Email', sql.NVarChar(320), normalizedEmail)
+      .query(`
+        SELECT
+          Id, Email, PasswordHash, Role, DisplayName, ProfilePicUrl,
+          PhoneNumber, Region, RegistrationNumber, PhysicalAddress, Content,
+          CompanyAddress, LocationLat, LocationLng, CreatedAt, UpdatedAt
+        FROM dbo.Users
+        WHERE LOWER(Email) = LOWER(@Email)
+        ORDER BY UpdatedAt DESC, CreatedAt DESC
+      `);
+
+    const users = result.recordset || [];
+    // eslint-disable-next-line no-console
+    console.log(`Found ${users.length} users in SQL for ${normalizedEmail}`);
+
+    if (users.length > 0) {
+      sqlUser = users[0]; // Use the most recent user
+
+      // Try to authenticate with SQL password
+      if (sqlUser.PasswordHash) {
+        sqlAuthSuccess = await bcrypt.compare(password, sqlUser.PasswordHash);
+        // eslint-disable-next-line no-console
+        console.log(`SQL authentication result: ${sqlAuthSuccess ? 'SUCCESS' : 'FAILED'}`);
+      } else {
+        // eslint-disable-next-line no-console
+        console.log(`SQL user ${sqlUser.Id} has no password hash`);
+      }
+    }
+  } catch (sqlError) {
+    sqlConnectionFailed = true;
+    // eslint-disable-next-line no-console
+    console.warn('SQL Server connection failed, will use Firebase as fallback:', sqlError.message);
+  }
+
+  // Step 2: If SQL auth succeeded, use SQL user
+  if (sqlAuthSuccess && sqlUser) {
+    const normalizedRole = String(sqlUser.Role || sqlUser.role || '').trim().toLowerCase();
+    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
+
+    // Do not return PasswordHash
+    // eslint-disable-next-line no-unused-vars
+    const { PasswordHash, ...safeUser } = sqlUser;
+
+    return res.json({
+      status: 'success',
+      user: safeUser,
+      role: normalizedRole,
+      isAdmin,
+      authMethod: 'sql',
+    });
+  }
+
+  // Step 3: Try Firebase authentication (either SQL failed or no SQL user found)
+  // eslint-disable-next-line no-console
+  console.log(`Trying Firebase authentication for ${normalizedEmail}`);
+  const firebaseOk = await verifyWithFirebase(normalizedEmail, password);
+  // eslint-disable-next-line no-console
+  console.log(`Firebase authentication result: ${firebaseOk ? 'SUCCESS' : 'FAILED'}`);
+
+  if (!firebaseOk) {
+    return res.status(401).json({ message: 'Invalid email or password' });
+  }
+
+  // Step 4: Firebase auth succeeded, now handle user data
+  let finalUser = sqlUser;
+
+  // If we have SQL user but no password hash (or connection failed), sync the password
+  if (sqlUser && !sqlConnectionFailed) {
+    try {
+      const passwordHash = await bcrypt.hash(String(password), 10);
+      const pool = await getPool();
+      await pool
+        .request()
+        .input('Id', sql.UniqueIdentifier, sqlUser.Id)
+        .input('PasswordHash', sql.NVarChar(255), passwordHash)
+        .query(`
+          UPDATE dbo.Users
+          SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @Id
+        `);
+      finalUser = { ...sqlUser, PasswordHash: passwordHash };
+      // eslint-disable-next-line no-console
+      console.log(`Password synced to SQL for user: ${normalizedEmail}`);
+    } catch (syncError) {
+      // If sync fails, still allow login since Firebase auth succeeded
+      // eslint-disable-next-line no-console
+      console.error(`Failed to sync password to SQL for ${normalizedEmail}:`, syncError.message);
+      finalUser = { ...sqlUser, PasswordHash: null };
+    }
+  } else if (!sqlUser) {
+    // No SQL user found, create a minimal user object for Firebase-only auth
+    finalUser = {
+      Id: `firebase-${Date.now()}`, // Temporary ID
+      Email: normalizedEmail,
+      Role: 'individual', // Default role
+      DisplayName: normalizedEmail.split('@')[0], // Use email prefix as display name
+      PasswordHash: null, // No SQL hash for Firebase-only users
+    };
+    // eslint-disable-next-line no-console
+    console.log(`Created temporary user object for Firebase-only auth: ${normalizedEmail}`);
+  }
+
+  const normalizedRole = String(finalUser.Role || finalUser.role || '').trim().toLowerCase();
+  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'superadmin';
+
+  // Do not return PasswordHash
+  // eslint-disable-next-line no-unused-vars
+  const { PasswordHash, ...safeUser } = finalUser;
+
+  return res.json({
+    status: 'success',
+    user: safeUser,
+    role: normalizedRole,
+    isAdmin,
+    authMethod: sqlConnectionFailed ? 'firebase_fallback' : 'firebase',
+  });
 };
