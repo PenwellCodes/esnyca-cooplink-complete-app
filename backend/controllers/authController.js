@@ -312,11 +312,26 @@ exports.sendForgotPasswordEmail = async (req, res) => {
   try {
     const normalizedEmail = String(email).trim().toLowerCase();
     const firebaseWebApiKey = process.env.FIREBASE_WEB_API_KEY;
+    const existingSqlUser = await getUserByEmail(normalizedEmail);
 
     if (!firebaseWebApiKey) {
       return res
         .status(500)
         .json({ message: 'FIREBASE_WEB_API_KEY is not configured on server' });
+    }
+
+    if (!existingSqlUser) {
+      return res.status(404).json({ message: 'No account found for that email' });
+    }
+
+    const created = await createFirebaseUserIfMissing(
+      firebaseWebApiKey,
+      normalizedEmail,
+    );
+    if (!created) {
+      return res
+        .status(500)
+        .json({ message: 'Failed to prepare Firebase reset account' });
     }
 
     await sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail);
@@ -331,31 +346,10 @@ exports.sendForgotPasswordEmail = async (req, res) => {
       error?.response?.data?.error?.errors?.[0]?.message ||
       '';
 
-    // If user exists in SQL but not yet in Firebase, create and resend.
-    if (errorCode === 'EMAIL_NOT_FOUND') {
-      const existingSqlUser = await getUserByEmail(email);
-      if (existingSqlUser) {
-        const normalizedEmail = String(email).trim().toLowerCase();
-        const firebaseWebApiKey = process.env.FIREBASE_WEB_API_KEY;
-        const created = await createFirebaseUserIfMissing(
-          firebaseWebApiKey,
-          normalizedEmail,
-        );
-        if (created) {
-          await sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail);
-          return res.json({
-            status: 'success',
-            message: 'Password reset email sent. Check your inbox.',
-          });
-        }
-      }
-    }
-
-    // Avoid account enumeration by returning success for unknown/non-existing users too.
-    if (errorCode === 'EMAIL_NOT_FOUND') {
-      return res.json({
-        status: 'success',
-        message: 'Password reset email sent. Check your inbox.',
+    if (errorCode === 'OPERATION_NOT_ALLOWED') {
+      return res.status(500).json({
+        message:
+          'Firebase Email/Password sign-in is disabled. Enable it in Firebase Authentication.',
       });
     }
 
