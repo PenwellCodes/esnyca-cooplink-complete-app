@@ -261,6 +261,9 @@ exports.loginUser = async (req, res) => {
 
   try {
     const normalizedEmail = String(email).trim().toLowerCase();
+    // eslint-disable-next-line no-console
+    console.log(`Login attempt for: ${normalizedEmail}`);
+
     const pool = await getPool();
     const result = await pool
       .request()
@@ -276,6 +279,9 @@ exports.loginUser = async (req, res) => {
       `);
 
     const users = result.recordset || [];
+    // eslint-disable-next-line no-console
+    console.log(`Found ${users.length} users in SQL for ${normalizedEmail}`);
+
     if (users.length === 0) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
@@ -284,7 +290,11 @@ exports.loginUser = async (req, res) => {
     // authenticate against the first row whose hash matches.
     let matchedUser = null;
     for (const candidate of users) {
-      if (!candidate?.PasswordHash) continue;
+      if (!candidate?.PasswordHash) {
+        // eslint-disable-next-line no-console
+        console.log(`User ${candidate.Id} has no password hash`);
+        continue;
+      }
       // eslint-disable-next-line no-await-in-loop
       const ok = await bcrypt.compare(password, candidate.PasswordHash);
       if (ok) {
@@ -293,8 +303,16 @@ exports.loginUser = async (req, res) => {
       }
     }
 
+    // eslint-disable-next-line no-console
+    console.log(`SQL authentication result: ${matchedUser ? 'SUCCESS' : 'FAILED'}`);
+
     if (!matchedUser) {
+      // eslint-disable-next-line no-console
+      console.log(`Trying Firebase authentication for ${normalizedEmail}`);
       const firebaseOk = await verifyWithFirebase(normalizedEmail, password);
+      // eslint-disable-next-line no-console
+      console.log(`Firebase authentication result: ${firebaseOk ? 'SUCCESS' : 'FAILED'}`);
+
       if (!firebaseOk) {
         return res.status(401).json({ message: 'Invalid email or password' });
       }
@@ -306,17 +324,27 @@ exports.loginUser = async (req, res) => {
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 
-      const passwordHash = await bcrypt.hash(String(password), 10);
-      await pool
-        .request()
-        .input('Id', sql.UniqueIdentifier, fallbackUser.Id)
-        .input('PasswordHash', sql.NVarChar(255), passwordHash)
-        .query(`
-          UPDATE dbo.Users
-          SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
-          WHERE Id = @Id
-        `);
-      matchedUser = { ...fallbackUser, PasswordHash: passwordHash };
+      try {
+        const passwordHash = await bcrypt.hash(String(password), 10);
+        await pool
+          .request()
+          .input('Id', sql.UniqueIdentifier, fallbackUser.Id)
+          .input('PasswordHash', sql.NVarChar(255), passwordHash)
+          .query(`
+            UPDATE dbo.Users
+            SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
+            WHERE Id = @Id
+          `);
+        matchedUser = { ...fallbackUser, PasswordHash: passwordHash };
+        // eslint-disable-next-line no-console
+        console.log(`Password synced to SQL for user: ${normalizedEmail}`);
+      } catch (syncError) {
+        // If sync fails, still allow login since Firebase auth succeeded
+        // eslint-disable-next-line no-console
+        console.error(`Failed to sync password to SQL for ${normalizedEmail}:`, syncError.message);
+        // Create a temporary user object for login without password hash
+        matchedUser = { ...fallbackUser, PasswordHash: null };
+      }
     }
 
     // Do not return PasswordHash
@@ -456,8 +484,62 @@ exports.sendForgotPasswordEmail = async (req, res) => {
 };
 
 exports.resetPasswordWithToken = async (req, res) => {
-  return res.status(410).json({
-    message:
-      'Direct token reset is disabled. Use the reset link sent to your email by Firebase.',
-  });
+  const { oobCode, newPassword } = req.body;
+
+  if (!oobCode || !newPassword) {
+    return res.status(400).json({ message: 'oobCode and newPassword are required' });
+  }
+
+  try {
+    // First, confirm the password reset with Firebase
+    const firebaseResponse = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:resetPassword?key=${process.env.FIREBASE_WEB_API_KEY}`,
+      {
+        oobCode,
+        newPassword,
+      },
+    );
+
+    if (firebaseResponse.data.email) {
+      const email = firebaseResponse.data.email;
+      // eslint-disable-next-line no-console
+      console.log(`Password reset confirmed for Firebase user: ${email}`);
+
+      // Now sync the new password to SQL database
+      const { user } = await getUserByEmailSafe(email);
+      if (user) {
+        try {
+          const passwordHash = await bcrypt.hash(String(newPassword), 10);
+          const pool = await getPool();
+          await pool
+            .request()
+            .input('Id', sql.UniqueIdentifier, user.Id)
+            .input('PasswordHash', sql.NVarChar(255), passwordHash)
+            .query(`
+              UPDATE dbo.Users
+              SET PasswordHash = @PasswordHash, UpdatedAt = SYSUTCDATETIME()
+              WHERE Id = @Id
+            `);
+          // eslint-disable-next-line no-console
+          console.log(`Password synced to SQL for user: ${email}`);
+        } catch (syncError) {
+          // eslint-disable-next-line no-console
+          console.error(`Failed to sync password to SQL for ${email}:`, syncError.message);
+          // Continue anyway since Firebase was updated
+        }
+      }
+
+      return res.json({
+        status: 'success',
+        message: 'Password reset successfully',
+      });
+    } else {
+      return res.status(400).json({ message: 'Invalid reset code' });
+    }
+  } catch (error) {
+    const errorCode = error?.response?.data?.error?.message || '';
+    // eslint-disable-next-line no-console
+    console.error('Password reset error:', errorCode || error.message);
+    return res.status(400).json({ message: 'Invalid or expired reset code' });
+  }
 };
