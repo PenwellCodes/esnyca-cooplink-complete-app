@@ -15,12 +15,9 @@
     },
 
     "scheme": "myapp",
-
     "platforms": ["ios", "android"],
 
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
 
     "ios": {
       "buildNumber": "42",
@@ -36,7 +33,6 @@
     "android": {
       "versionCode": 18,
       "softwareKeyboardLayoutMode": "resize",
-      "usesCleartextTraffic": true,
 
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
@@ -65,7 +61,7 @@
     "extra": {
       "apiBaseUrl": "https://fragrant-mode-69da.lihawu95.workers.dev/api",
       "eas": {
-        "projectId": "3b2807cf-6a12-461b-abc3-cf7338f0ce72"
+        "projectId": "3b2807cf-6a12-461b-abc3-7c5d-4892ca5eb3b9"
       }
     },
 
@@ -82,34 +78,42 @@
           }
         }
       ],
+
       [
         "expo-image-picker",
         {
           "photosPermission": "The app accesses your photos to let you share them with your friends."
         }
       ],
+
       [
         "expo-audio",
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
         }
       ],
+
       [
         "expo-document-picker",
         {
           "iCloudContainerEnvironment": "Production"
         }
       ],
+
       [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
           "color": "#007AFF",
-          "sounds": ["./assets/notification.wav"],
+
+        
+          "sounds": [],
+
           "androidMode": "default",
           "androidCollapsible": true
         }
       ],
+
       "expo-router",
       "expo-secure-store",
       "expo-asset",
@@ -119,7 +123,7 @@
     "runtimeVersion": "5.3.0",
 
     "updates": {
-      "url": "https://u.expo.dev/3b2807cf-6a12-461b-abc3-cf7338f0ce72"
+      "url": "https://u.expo.dev/3b2807cf-6a12-461b-abc3-7c5d-4892ca5eb3b9"
     }
   }
 }
