@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const path = require('path');
 const { uploadBufferToImageBB } = require('./services/imagebb');
 const { requireAuth } = require('./middleware/auth');
 const { startAutoGitPull } = require('./services/autoGitPull');
@@ -11,7 +12,18 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Serve reset password page
+app.get('/reset-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
+});
+
+// Serve password reset confirmation page
+app.get('/confirm-password-reset', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'confirm-password-reset.html'));
+});
 
 app.get('/', (req, res) => {
   res.json({ ok: true, message: 'server is running' });
