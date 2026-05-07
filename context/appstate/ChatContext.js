@@ -428,6 +428,40 @@ export const ChatProvider = ({ children }) => {
     return total;
   }, [unreadCounts]);
 
+  // NEW: Force refresh unread counts directly from conversations
+  const forceRefreshUnreadCounts = useCallback(async () => {
+    if (!currentUserId) return {};
+    
+    try {
+      // Force refresh the entire chat state first
+      await refreshChatState();
+      
+      // Calculate unread counts directly from conversations
+      const userUid = normalizeId(currentUserId);
+      const newUnreadCounts = {};
+      
+      Object.keys(conversations).forEach(chatKey => {
+        const chatMessages = conversations[chatKey] || [];
+        const unread = chatMessages.filter(msg => {
+          const isReceiver = normalizeId(msg.receiver) === userUid;
+          const isNotRead = !msg.read && msg.status !== 'read';
+          const isNotFromCurrentUser = normalizeId(msg.sender) !== userUid;
+          return isReceiver && isNotRead && isNotFromCurrentUser;
+        }).length;
+        
+        if (unread > 0) {
+          newUnreadCounts[chatKey] = unread;
+        }
+      });
+      
+      setUnreadCounts(newUnreadCounts);
+      return newUnreadCounts;
+    } catch (error) {
+      console.error("Error forcing refresh unread counts:", error);
+      return {};
+    }
+  }, [currentUserId, conversations, refreshChatState]);
+
   const ensureDirectChat = async (otherUserId) => {
     const chatKey = buildDirectKey(currentUserId, otherUserId);
     if (chatIdMap[chatKey]) return { chatKey, chatId: chatIdMap[chatKey] };
@@ -611,8 +645,9 @@ export const ChatProvider = ({ children }) => {
         unreadCounts,
         ensureDirectChat,
         sendMessage,
-        refreshChats,           // NEW: Added
-        getTotalUnreadCount,    // NEW: Added
+        refreshChats,
+        getTotalUnreadCount,
+        forceRefreshUnreadCounts, // NEW: Added
       }}
     >
       {children}

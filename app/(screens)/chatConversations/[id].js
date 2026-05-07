@@ -113,7 +113,8 @@ const ChatScreen = () => {
     markMessagesAsRead, 
     setActiveChatId, 
     sendMessage: sendChatMessage,
-    refreshChats  // Add this
+    refreshChats,
+    forceRefreshUnreadCounts
   } = useChat();
   const { setUserInChat } = useNotifications();
   const currentUserUid = currentUser?.uid || null;
@@ -172,7 +173,7 @@ const ChatScreen = () => {
   }, [targetUserUid, setUserInChat]);
 
   // ============================================
-  // NEW: Mark messages as read when viewing the chat
+  // Mark messages as read when viewing the chat
   // ============================================
   useEffect(() => {
     const markCurrentChatAsRead = async () => {
@@ -192,11 +193,14 @@ const ChatScreen = () => {
         if (refreshChats) {
           await refreshChats();
         }
+        if (forceRefreshUnreadCounts) {
+          await forceRefreshUnreadCounts();
+        }
       }
     };
     
     markCurrentChatAsRead();
-  }, [chatId, currentUserUid, conversations, markMessagesAsRead, refreshChats]);
+  }, [chatId, currentUserUid, conversations, markMessagesAsRead, refreshChats, forceRefreshUnreadCounts]);
 
   useEffect(() => {
     const loadTranslations = async () => {

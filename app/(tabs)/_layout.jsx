@@ -56,12 +56,17 @@ const TabLayout = () => {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const { currentUser } = useAuth();
-  const { unreadCounts, refreshChats, getTotalUnreadCount, conversations } = useChat();
+  const { 
+    conversations, 
+    refreshChats, 
+    forceRefreshUnreadCounts,
+    unreadCounts 
+  } = useChat();
   const router = useRouter();
   const { currentLanguage, t } = useLanguage();
   const [totalUnreadChats, setTotalUnreadChats] = useState(0);
 
-  // Calculate total unread messages from conversations directly
+  // Calculate total unread messages directly from conversations
   const calculateTotalUnread = useCallback(() => {
     if (!currentUser?.uid || !conversations) return 0;
     
@@ -106,12 +111,15 @@ const TabLayout = () => {
       const refresh = async () => {
         if (refreshChats) {
           await refreshChats();
+          if (forceRefreshUnreadCounts) {
+            await forceRefreshUnreadCounts();
+          }
           const total = calculateTotalUnread();
           setTotalUnreadChats(total);
         }
       };
       refresh();
-    }, [refreshChats, calculateTotalUnread])
+    }, [refreshChats, forceRefreshUnreadCounts, calculateTotalUnread])
   );
 
   const [tabLabels, setTabLabels] = useState({
