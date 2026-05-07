@@ -5,18 +5,48 @@ const { uploadBufferToImageBB } = require('../services/imagebb');
 
 async function getUserByEmail(email) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  const pool = await getPool();
-  const result = await pool
-    .request()
-    .input('Email', sql.NVarChar(320), normalizedEmail)
-    .query(`
-      SELECT TOP 1
-        Id, Email, Role, DisplayName, RegistrationNumber, PasswordHash, CreatedAt, UpdatedAt
-      FROM dbo.Users
-      WHERE LOWER(Email) = LOWER(@Email)
-      ORDER BY UpdatedAt DESC, CreatedAt DESC
-    `);
-  return result.recordset?.[0] || null;
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('Email', sql.NVarChar(320), normalizedEmail)
+      .query(`
+        SELECT TOP 1
+          Id, Email, Role, DisplayName, RegistrationNumber, PasswordHash, CreatedAt, UpdatedAt
+        FROM dbo.Users
+        WHERE LOWER(Email) = LOWER(@Email)
+        ORDER BY UpdatedAt DESC, CreatedAt DESC
+      `);
+    return result.recordset?.[0] || null;
+  } catch (error) {
+    // Database connection failed - return null to allow Firebase fallback
+    // eslint-disable-next-line no-console
+    console.warn('SQL Server connection failed, will use Firebase as fallback:', error.message);
+    return null;
+  }
+}
+
+async function getUserByEmailSafe(email) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input('Email', sql.NVarChar(320), normalizedEmail)
+      .query(`
+        SELECT TOP 1
+          Id, Email, Role, DisplayName, RegistrationNumber, PasswordHash, CreatedAt, UpdatedAt
+        FROM dbo.Users
+        WHERE LOWER(Email) = LOWER(@Email)
+        ORDER BY UpdatedAt DESC, CreatedAt DESC
+      `);
+    return { user: result.recordset?.[0] || null, dbError: false };
+  } catch (error) {
+    // Database connection failed; continue using Firebase fallback.
+    // eslint-disable-next-line no-console
+    console.warn('SQL Server connection failed, continuing with Firebase fallback:', error.message);
+    return { user: null, dbError: true };
+  }
 }
 
 async function verifyWithFirebase(email, password) {
@@ -45,15 +75,29 @@ function buildTemporaryPassword() {
 }
 
 async function sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail) {
-  await axios.post(
-    `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(
-      firebaseWebApiKey,
-    )}`,
-    {
-      requestType: 'PASSWORD_RESET',
-      email: normalizedEmail,
-    },
-  );
+  try {
+    await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(
+        firebaseWebApiKey,
+      )}`,
+      {
+        requestType: 'PASSWORD_RESET',
+        email: normalizedEmail,
+        // Custom action code settings for Esnyca App branding
+        actionCodeSettings: {
+          url: `${process.env.FRONTEND_URL || 'http://localhost:4000'}/confirm-password-reset`,
+          handleCodeInApp: false,
+          dynamicLinkDomain: undefined,
+        },
+      },
+    );
+    // eslint-disable-next-line no-console
+    console.log(`Firebase reset email request sent for: ${normalizedEmail}`);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(`Firebase reset email failed for ${normalizedEmail}:`, error.message);
+    throw error;
+  }
 }
 
 async function createFirebaseUserIfMissing(firebaseWebApiKey, normalizedEmail) {
@@ -68,15 +112,43 @@ async function createFirebaseUserIfMissing(firebaseWebApiKey, normalizedEmail) {
         returnSecureToken: true,
       },
     );
+    // eslint-disable-next-line no-console
+    console.log(`Firebase user created for ${normalizedEmail}`);
     return true;
   } catch (error) {
     const errorCode =
       error?.response?.data?.error?.message ||
       error?.response?.data?.error?.errors?.[0]?.message ||
       '';
+    // eslint-disable-next-line no-console
+    console.log(`Firebase user creation attempt for ${normalizedEmail}: ${errorCode}`);
     if (errorCode === 'EMAIL_EXISTS') {
       return true;
     }
+    // eslint-disable-next-line no-console
+    console.error(`Firebase user creation failed for ${normalizedEmail}:`, errorCode || error.message);
+    return false;
+  }
+}
+
+async function checkFirebaseUserExists(firebaseWebApiKey, normalizedEmail) {
+  try {
+    const response = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${encodeURIComponent(
+        firebaseWebApiKey,
+      )}`,
+      {
+        identifier: normalizedEmail,
+        continueUri: 'http://localhost',
+      },
+    );
+    const exists = Boolean(response?.data?.registered);
+    // eslint-disable-next-line no-console
+    console.log(`Firebase user check for ${normalizedEmail}: ${exists ? 'EXISTS' : 'NOT_FOUND'}`);
+    return exists;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(`Firebase user check failed for ${normalizedEmail}:`, error.message);
     return false;
   }
 }
@@ -312,7 +384,13 @@ exports.sendForgotPasswordEmail = async (req, res) => {
   try {
     const normalizedEmail = String(email).trim().toLowerCase();
     const firebaseWebApiKey = process.env.FIREBASE_WEB_API_KEY;
-    const existingSqlUser = await getUserByEmail(normalizedEmail);
+    
+    // eslint-disable-next-line no-console
+    console.log(`Processing forgot password for: ${normalizedEmail}`);
+    // eslint-disable-next-line no-console
+    console.log(`Firebase API Key configured: ${firebaseWebApiKey ? 'YES' : 'NO'}`);
+    
+    const { user: existingSqlUser, dbError } = await getUserByEmailSafe(normalizedEmail);
 
     if (!firebaseWebApiKey) {
       return res
@@ -320,21 +398,35 @@ exports.sendForgotPasswordEmail = async (req, res) => {
         .json({ message: 'FIREBASE_WEB_API_KEY is not configured on server' });
     }
 
-    if (!existingSqlUser) {
-      return res.status(404).json({ message: 'No account found for that email' });
-    }
-
-    const created = await createFirebaseUserIfMissing(
+    const firebaseUserExists = await checkFirebaseUserExists(
       firebaseWebApiKey,
       normalizedEmail,
     );
-    if (!created) {
-      return res
-        .status(500)
-        .json({ message: 'Failed to prepare Firebase reset account' });
+
+    // eslint-disable-next-line no-console
+    console.log(`SQL user found: ${existingSqlUser ? 'YES' : 'NO'}, Firebase user found: ${firebaseUserExists ? 'YES' : 'NO'}, DB error: ${dbError ? 'YES' : 'NO'}`);
+
+    // If we know the email is absent from both SQL and Firebase, return 404.
+    if (!existingSqlUser && !firebaseUserExists && !dbError) {
+      return res.status(404).json({ message: 'No account found for that email' });
+    }
+
+    if (existingSqlUser && !firebaseUserExists) {
+      const created = await createFirebaseUserIfMissing(
+        firebaseWebApiKey,
+        normalizedEmail,
+      );
+      if (!created) {
+        return res
+          .status(500)
+          .json({ message: 'Failed to prepare Firebase reset account' });
+      }
     }
 
     await sendFirebaseResetEmail(firebaseWebApiKey, normalizedEmail);
+
+    // eslint-disable-next-line no-console
+    console.log(`Password reset email sent successfully for: ${normalizedEmail}`);
 
     return res.json({
       status: 'success',
@@ -351,6 +443,10 @@ exports.sendForgotPasswordEmail = async (req, res) => {
         message:
           'Firebase Email/Password sign-in is disabled. Enable it in Firebase Authentication.',
       });
+    }
+
+    if (errorCode === 'EMAIL_NOT_FOUND') {
+      return res.status(404).json({ message: 'No account found for that email' });
     }
 
     // eslint-disable-next-line no-console
