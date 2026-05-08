@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -21,6 +21,8 @@ import StoryViewer from "../../components/StoryViewer";
 import { useNavigation } from "@react-navigation/native";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
+
+const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -173,7 +175,8 @@ const ChatList = () => {
     lastMessages, 
     loadingChats,
     markMessagesAsRead,
-    refreshChats 
+    refreshChats,
+    unreadCounts,
   } = useChat();
   const { currentLanguage, t } = useLanguage();
   
@@ -183,6 +186,7 @@ const ChatList = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedUserStories, setSelectedUserStories] = useState({ stories: [], userName: '' });
   const [isStoryViewerVisible, setIsStoryViewerVisible] = useState(false);
+  const lastRefreshRef = useRef(0);
   
   const [translations, setTranslations] = useState({
     chat: "Chat",
@@ -358,7 +362,7 @@ const ChatList = () => {
     router.push({
       pathname: `/(screens)/chatConversations/${item.uid}`,
       params: {
-        user: JSON.stringify(item),
+        userId: item.uid,
         predefinedMessage: " ",
       },
     });
@@ -367,15 +371,12 @@ const ChatList = () => {
   useFocusEffect(
     useCallback(() => {
       const refreshData = async () => {
-        setRefreshing(true);
-        await Promise.all([
-          refreshChats && refreshChats(),
-          refreshStories && refreshStories()
-        ]);
-        setRefreshing(false);
+        if (refreshStories) {
+          await refreshStories();
+        }
       };
       refreshData();
-    }, [refreshChats, refreshStories])
+    }, [refreshStories])
   );
 
   if (loadingChats) {
@@ -511,34 +512,13 @@ const ChatList = () => {
           </Text>
           <Text style={styles.lastMessage}>Group chat</Text>
         </View>
-      </TouchableOpacity>
-
-      <FlatList
-        data={chatList}
-        keyExtractor={(item) => item.uid}
-        refreshing={refreshing}
-        onRefresh={async () => {
-          setRefreshing(true);
-          await Promise.all([
-            refreshChats && refreshChats(),
-            refreshStories && refreshStories()
-          ]);
-          setRefreshing(false);
-        }}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.chatItem}
-            onPress={() => handleChatPress(item)}
-          >
-            <AvatarWithInitials
-              imageUrl={item.profilePic}
-              name={item.displayName}
-              size={48}
-            />
-            <View style={styles.chatInfo}>
-              <Text style={[styles.username, { color: colors.tertiary }]}>
-                {item.displayName}
-              </Text>
+        {Number(unreadCounts?.[GLOBAL_GROUP_CHAT_KEY] || 0) > 0 && (
+          <View style={styles.unreadBadge}>
+            <Text style={styles.unreadText}>
+              {unreadCounts[GLOBAL_GROUP_CHAT_KEY] > 99 ? '99+' : unreadCounts[GLOBAL_GROUP_CHAT_KEY]}
+            </Text>
+          </View>
+        )}
               <Text style={styles.lastMessage} numberOfLines={1}>
                 {item.lastMessage}
               </Text>

@@ -105,9 +105,11 @@ const parseStoryPreviewParam = (rawValue) => {
 const ChatScreen = () => {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const user = params.user ? JSON.parse(params.user) : null;
+  const userId = params.userId || params.id;
   const predefinedMessage = params.predefinedMessage;
   const { currentUser } = useAuth();
+  const { userMap } = useChat();
+  const user = userMap ? userMap[normalizeId(userId)] : null;
   const { 
     conversations, 
     markMessagesAsRead, 
@@ -118,7 +120,7 @@ const ChatScreen = () => {
   } = useChat();
   const { setUserInChat } = useNotifications();
   const currentUserUid = currentUser?.uid || null;
-  const targetUserUid = user?.uid || null;
+  const targetUserUid = user?.uid || userId;
   const chatId = buildDirectKey(currentUserUid, targetUserUid);
 
   // State for text messages and local messages
@@ -718,7 +720,12 @@ const ChatScreen = () => {
   if (!currentUserUid || !targetUserUid || !chatId) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={{ color: 'red', fontSize: 16, textAlign: 'center' }}>
+          Unable to load chat. Please go back and try again.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+          <Text style={{ color: '#007AFF', fontSize: 16 }}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }

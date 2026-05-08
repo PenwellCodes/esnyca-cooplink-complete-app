@@ -60,50 +60,55 @@ const TabLayout = () => {
     conversations, 
     refreshChats, 
     forceRefreshUnreadCounts,
-    unreadCounts 
+    unreadCounts,
+    loadingChats,
+    isChatReady,
+    getTotalUnreadCount,
   } = useChat();
   const router = useRouter();
   const { currentLanguage, t } = useLanguage();
-  const [totalUnreadChats, setTotalUnreadChats] = useState(0);
+  const [totalUnreadChats, setTotalUnreadChats] = useState(null);
 
-  // Calculate total unread messages directly from conversations
   const calculateTotalUnread = useCallback(() => {
-    if (!currentUser?.uid || !conversations) return 0;
-    
-    const currentUserId = currentUser.uid || currentUser.id;
-    let total = 0;
-    
-    Object.values(conversations).forEach(chatMessages => {
-      if (!Array.isArray(chatMessages)) return;
-      
-      const unread = chatMessages.filter(msg => {
-        const isReceiver = String(msg.receiver).toLowerCase() === String(currentUserId).toLowerCase();
-        const isNotRead = !msg.read && msg.status !== 'read';
-        const isNotFromCurrentUser = String(msg.sender).toLowerCase() !== String(currentUserId).toLowerCase();
-        return isReceiver && isNotRead && isNotFromCurrentUser;
-      }).length;
-      
-      total += unread;
-    });
-    
-    return total;
-  }, [conversations, currentUser?.uid]);
+    return getTotalUnreadCount();
+  }, [getTotalUnreadCount]);
 
-  // Update unread count when conversations change
   useEffect(() => {
+    if (!currentUser) {
+      setTotalUnreadChats(0);
+      return;
+    }
+
+    if (loadingChats || !isChatReady) {
+      setTotalUnreadChats(null);
+      return;
+    }
+
     const total = calculateTotalUnread();
     setTotalUnreadChats(total);
-  }, [conversations, calculateTotalUnread]);
+  }, [currentUser, loadingChats, isChatReady, calculateTotalUnread]);
 
-  // Also use unreadCounts as fallback
   useEffect(() => {
-    if (unreadCounts && Object.keys(unreadCounts).length > 0) {
-      const total = Object.values(unreadCounts).reduce((sum, n) => sum + (Number(n) || 0), 0);
-      if (total !== totalUnreadChats) {
-        setTotalUnreadChats(total);
-      }
+    const total = calculateTotalUnread();
+    if (!loadingChats && isChatReady) {
+      setTotalUnreadChats(total);
     }
-  }, [unreadCounts, totalUnreadChats]);
+  }, [unreadCounts, conversations, loadingChats, isChatReady, calculateTotalUnread]);
+
+  // Background unread refresh for the nav badge
+  useEffect(() => {
+    if (!currentUser) return undefined;
+
+    const intervalId = setInterval(() => {
+      if (forceRefreshUnreadCounts) {
+        forceRefreshUnreadCounts().catch((error) => {
+          console.log("Chat badge refresh failed:", error?.message || error);
+        });
+      }
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [currentUser, forceRefreshUnreadCounts]);
 
   // Refresh when screen comes into focus
   useFocusEffect(
@@ -121,6 +126,21 @@ const TabLayout = () => {
       refresh();
     }, [refreshChats, forceRefreshUnreadCounts, calculateTotalUnread])
   );
+
+  // Refresh on mount
+  useEffect(() => {
+    const refresh = async () => {
+      if (refreshChats) {
+        await refreshChats();
+        if (forceRefreshUnreadCounts) {
+          await forceRefreshUnreadCounts();
+        }
+        const total = calculateTotalUnread();
+        setTotalUnreadChats(total);
+      }
+    };
+    refresh();
+  }, []); // Empty dependency array for mount only
 
   const [tabLabels, setTabLabels] = useState({
     home: "Home",
@@ -210,6 +230,15 @@ const TabLayout = () => {
                 isActive={pathname === "/settings"}
               />
             ),
+          }}
+          listeners={{
+            tabPress: (e) => {
+              if (!currentUser) {
+                e.preventDefault();
+                const returnTo = encodeURIComponent("/(tabs)/settings");
+                router.push(`/(auth)/sign-in?returnTo=${returnTo}`);
+              }
+            },
           }}
         />
         <Tabs.Screen

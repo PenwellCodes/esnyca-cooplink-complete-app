@@ -7,57 +7,45 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "scheme": "myapp",
-
     "platforms": [
       "ios",
       "android"
     ],
-
     "assetBundlePatterns": [
       "**/*"
     ],
-
     "ios": {
       "buildNumber": "42",
       "supportsTablet": true,
-
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
         ]
       },
-
       "config": {
         "googleMapsApiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
       }
     },
-
     "android": {
       "versionCode": 18,
       "softwareKeyboardLayoutMode": "resize",
-       "usesCleartextTraffic": true,
-
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-
       "package": "com.youthcorner.app",
-
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
         }
       },
-
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -68,17 +56,13 @@
         "android.permission.VIBRATE"
       ]
     },
-
     "extra": {
       "apiBaseUrl": "https://fragrant-mode-69da.lihawu95.workers.dev/api",
-
       "eas": {
         "projectId": "3b2807cf-6a12-461b-abc3-cf7338f0ce72"
       }
     },
-
     "owner": "lihawu",
-
     "plugins": [
       [
         "expo-build-properties",
@@ -90,28 +74,24 @@
           }
         }
       ],
-
       [
         "expo-image-picker",
         {
           "photosPermission": "The app accesses your photos to let you share them with your friends."
         }
       ],
-
       [
         "expo-audio",
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
         }
       ],
-
       [
         "expo-document-picker",
         {
           "iCloudContainerEnvironment": "Production"
         }
       ],
-
       [
         "expo-notifications",
         {
@@ -124,17 +104,14 @@
           "androidCollapsible": true
         }
       ],
-
       "expo-router",
       "expo-secure-store",
       "expo-asset",
       "expo-font"
     ],
-
     "runtimeVersion": "5.3.0",
-
     "updates": {
-      "url": "https://u.expo.dev/3b2807cf-6a12-461b-abc3-7c5d-4892ca5eb3b9"
+      "url": "https://u.expo.dev/3b2807cf-6a12-461b-abc3-cf7338f0ce72"
     }
   }
 }
