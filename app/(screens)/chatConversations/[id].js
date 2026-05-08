@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Keyboard,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../../context/appstate/ChatContext";
@@ -128,6 +130,7 @@ const ChatScreen = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [pendingStoryReply, setPendingStoryReply] = useState(() =>
@@ -144,12 +147,6 @@ const ChatScreen = () => {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
   const { currentLanguage, t } = useLanguage();
-
-  const kbOffset = keyboardHeight;
-  const inputBarReserve =
-    56 +
-    Math.max(insets.bottom, 8) +
-    (Platform.OS === "android" ? keyboardHeight : kbOffset);
 
   const [translations, setTranslations] = useState({
     permissionRequiredTitle: "Permission Required",
@@ -172,9 +169,7 @@ const ChatScreen = () => {
     };
   }, [targetUserUid, setUserInChat]);
 
-  // ============================================
   // Mark messages as read when viewing the chat
-  // ============================================
   useEffect(() => {
     const markCurrentChatAsRead = async () => {
       if (!chatId || !currentUserUid) return;
@@ -189,7 +184,6 @@ const ChatScreen = () => {
       
       if (unreadMessages.length > 0) {
         await markMessagesAsRead(chatId, chatMessages);
-        // Force refresh to update badge count
         if (refreshChats) {
           await refreshChats();
         }
@@ -201,6 +195,21 @@ const ChatScreen = () => {
     
     markCurrentChatAsRead();
   }, [chatId, currentUserUid, conversations, markMessagesAsRead, refreshChats, forceRefreshUnreadCounts]);
+
+  // Keyboard listeners to track when keyboard is visible
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      setIsKeyboardVisible(true);
+    });
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const loadTranslations = async () => {
@@ -240,13 +249,29 @@ const ChatScreen = () => {
     })();
   }, []);
 
+  // FIXED: Scroll to bottom when keyboard opens (WhatsApp behavior)
   useEffect(() => {
-    if (keyboardHeight <= 0) return;
-    const timer = setTimeout(() => {
+    if (isKeyboardVisible && messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [isKeyboardVisible, messages.length]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (messages.length > 0 && !isKeyboardVisible) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages.length]);
+
+  const scrollToBottom = () => {
+    if (messages.length > 0) {
       flatListRef.current?.scrollToEnd({ animated: true });
-    }, 120);
-    return () => clearTimeout(timer);
-  }, [keyboardHeight]);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!chatId || !currentUserUid || !targetUserUid) return;
@@ -266,7 +291,12 @@ const ChatScreen = () => {
       status: "sending",
     };
     setLocalMessages((prev) => [...prev, tempMessage]);
-    flatListRef.current?.scrollToEnd({ animated: true });
+    setMessageText("");
+    
+    // Scroll to bottom immediately after sending
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
 
     try {
       const created = await sendChatMessage({
@@ -276,7 +306,6 @@ const ChatScreen = () => {
         type: storyPreview ? "story_reply" : "text",
         storyPreview,
       });
-      setMessageText("");
       setPendingStoryReply(null);
       if (created?.Id || created?.id) {
         setLocalMessages((prev) =>
@@ -370,7 +399,7 @@ const ChatScreen = () => {
     };
 
     setLocalMessages((prev) => [...prev, tempMessage]);
-    flatListRef.current?.scrollToEnd({ animated: true });
+    scrollToBottom();
     setUploading(true);
 
     try {
@@ -427,7 +456,7 @@ const ChatScreen = () => {
     };
 
     setLocalMessages((prev) => [...prev, tempMessage]);
-    flatListRef.current?.scrollToEnd({ animated: true });
+    scrollToBottom();
     setUploading(true);
 
     try {
@@ -730,144 +759,98 @@ const ChatScreen = () => {
           headerShown: false,
         }}
       />
-      <View
-        style={[
-          styles.container,
-          { backgroundColor: colors.background, flex: 1 },
-        ]}
-      >
-        {/* FIXED HEADER - with proper name truncation and initials */}
+      <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
+        {/* Header */}
         <View style={[styles.header, { marginTop: insets.top || 35, paddingTop: 8 }]}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           
           <View style={styles.headerInfo}>
-            <HeaderAvatar
-              imageUrl={user?.profilePic}
-              name={user?.displayName}
-              size={40}
-            />
+            <HeaderAvatar imageUrl={user?.profilePic} name={user?.displayName} size={40} />
             <View style={styles.headerTextContainer}>
-              <Text
-                style={styles.headerTitle}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
+              <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
                 {truncateName(user?.displayName, 18)}
               </Text>
               {user?.role === "cooperative" && (
-                <Text style={styles.headerRole} numberOfLines={1}>
-                  Cooperative
-                </Text>
+                <Text style={styles.headerRole} numberOfLines={1}>Cooperative</Text>
               )}
             </View>
           </View>
         </View>
 
-        {messages.length === 0 ? (
-          <View
-            style={[
-              styles.emptyContainer,
-              { paddingBottom: inputBarReserve },
-            ]}
-          >
-            <Text style={styles.emptyText}>
-              {translations.startConversation}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            style={{ flex: 1 }}
-            data={messages}
-            keyExtractor={(item) => item.id}
-            renderItem={renderMessage}
-            contentContainerStyle={{
-              padding: 10,
-              paddingBottom: 16 + inputBarReserve,
-            }}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-          />
-        )}
-
-        {uploading && (
-          <View style={styles.uploadingOverlay}>
-            <Text style={styles.uploadProgressText}>
-              {Math.floor(uploadProgress)}%
-            </Text>
-          </View>
-        )}
-
-        <View
-          style={[
-            styles.inputContainer,
-            {
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: kbOffset,
-              paddingBottom: Math.max(insets.bottom, 8),
-              backgroundColor: colors.background,
-            },
+        {/* FIXED: Messages List with proper padding at bottom */}
+        <FlatList
+          ref={flatListRef}
+          style={{ flex: 1 }}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={[
+            styles.messagesList,
+            { paddingBottom: isKeyboardVisible ? 10 : 80 }
           ]}
+          onContentSizeChange={() => {
+            if (!isKeyboardVisible && messages.length > 0) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+          onLayout={() => {
+            if (messages.length > 0 && !isKeyboardVisible) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+        />
+
+        {/* Input Container - FIXED: Proper WhatsApp behavior */}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
         >
-          <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
-            <Ionicons name="image-outline" size={24} color="#007AFF" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={pickDocuments}
-            style={styles.attachmentButton}
-          >
-            <Ionicons name="attach-outline" size={24} color="#007AFF" />
-          </TouchableOpacity>
-
-          <TextInput
-            placeholder={translations.typeMessage}
-            value={messageText}
-            onChangeText={setMessageText}
-            style={[
-              styles.input,
-              {
-                borderColor: colors.outline,
-                color: colors.onSurface,
-              },
-            ]}
-            placeholderTextColor={colors.onSurfaceVariant}
-          />
-          <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
-            <Ionicons name="send" size={24} color="#007AFF" />
-          </TouchableOpacity>
-        </View>
-        {pendingStoryReply && (
-          <View style={[styles.pendingStoryReply, { bottom: kbOffset + 64 }]}>
-            <View style={styles.pendingStoryReplyLeft}>
-              {pendingStoryReply.imageURL ? (
-                <Image
-                  source={{ uri: pendingStoryReply.imageURL }}
-                  style={styles.pendingStoryReplyImage}
-                />
-              ) : null}
-              <View style={styles.pendingStoryReplyTextWrap}>
-                <Text style={styles.pendingStoryReplyTitle}>
-                  Replying to this status
-                </Text>
-                {!!pendingStoryReply.caption && (
-                  <Text style={styles.pendingStoryReplyCaption} numberOfLines={1}>
-                    {pendingStoryReply.caption}
-                  </Text>
-                )}
+          {pendingStoryReply && (
+            <View style={styles.pendingStoryReply}>
+              <View style={styles.pendingStoryReplyLeft}>
+                {pendingStoryReply.imageURL ? (
+                  <Image source={{ uri: pendingStoryReply.imageURL }} style={styles.pendingStoryReplyImage} />
+                ) : null}
+                <View style={styles.pendingStoryReplyTextWrap}>
+                  <Text style={styles.pendingStoryReplyTitle}>Replying to this status</Text>
+                  {!!pendingStoryReply.caption && (
+                    <Text style={styles.pendingStoryReplyCaption} numberOfLines={1}>
+                      {pendingStoryReply.caption}
+                    </Text>
+                  )}
+                </View>
               </View>
+              <TouchableOpacity onPress={() => setPendingStoryReply(null)}>
+                <Ionicons name="close-circle" size={20} color="#666" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => setPendingStoryReply(null)}>
-              <Ionicons name="close-circle" size={20} color="#666" />
+          )}
+
+          <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
+            <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
+              <Ionicons name="image-outline" size={24} color="#007AFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={pickDocuments} style={styles.attachmentButton}>
+              <Ionicons name="attach-outline" size={24} color="#007AFF" />
+            </TouchableOpacity>
+
+            <TextInput
+              placeholder={translations.typeMessage}
+              value={messageText}
+              onChangeText={setMessageText}
+              style={[styles.input, { borderColor: colors.outline, color: colors.onSurface, backgroundColor: colors.surface }]}
+              placeholderTextColor={colors.onSurfaceVariant}
+              multiline
+            />
+            
+            <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
+              <Ionicons name="send" size={24} color="#007AFF" />
             </TouchableOpacity>
           </View>
-        )}
+        </KeyboardAvoidingView>
       </View>
     </>
   );
@@ -934,14 +917,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#777",
+  messagesList: {
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    flexGrow: 1,
   },
   messageBubble: {
     padding: 10,
@@ -952,6 +931,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
     maxWidth: "70%",
+    marginVertical: 5,
   },
   timestamp: {
     fontSize: 10,
@@ -976,21 +956,26 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "#ccc",
+    borderTopColor: "#e0e0e0",
   },
   attachmentButton: {
-    marginHorizontal: 5,
+    marginRight: 10,
+    padding: 5,
   },
   input: {
     flex: 1,
     padding: 10,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 20,
+    fontSize: 16,
+    maxHeight: 100,
   },
   sendButton: {
     marginLeft: 10,
+    padding: 5,
   },
   uploadingOverlay: {
     position: "absolute",
@@ -998,6 +983,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
+    zIndex: 100,
   },
   uploadProgressText: {
     marginTop: 8,
@@ -1024,17 +1010,16 @@ const styles = StyleSheet.create({
     color: "white",
   },
   pendingStoryReply: {
-    position: "absolute",
-    left: 10,
-    right: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "rgba(255,255,255,0.96)",
+    backgroundColor: "rgba(0,0,0,0.05)",
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#d9d9d9",
     padding: 8,
+    marginHorizontal: 10,
+    marginBottom: 5,
   },
   pendingStoryReplyLeft: {
     flexDirection: "row",

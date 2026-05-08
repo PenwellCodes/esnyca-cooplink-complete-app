@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
@@ -86,12 +87,10 @@ const AvatarWithInitials = ({ imageUrl, name, size = 48 }) => {
   );
 };
 
-// FIXED: StoryAvatar with better styling for Add Story button
 const StoryAvatar = ({ imageUrl, name, size = 56, showNewHighlight = false, isAddStory = false }) => {
   const [imageError, setImageError] = useState(false);
   const initials = getUserInitials(name);
   
-  // Special styling for Add Story button
   if (isAddStory) {
     return (
       <View style={[styles.statusBorder, styles.addStoryBorder, { width: size + 4, height: size + 4, borderRadius: (size + 4) / 2 }]}>
@@ -183,6 +182,8 @@ const ChatList = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedUserStories, setSelectedUserStories] = useState({ stories: [], userName: '' });
   const [isStoryViewerVisible, setIsStoryViewerVisible] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   
   const [translations, setTranslations] = useState({
     chat: "Chat",
@@ -209,6 +210,21 @@ const ChatList = () => {
     loadTranslations();
   }, [currentLanguage, t]);
   
+  // Set a timeout to force stop loading after 8 seconds
+  useEffect(() => {
+    if (loadingChats && !hasLoadedOnce) {
+      const timer = setTimeout(() => {
+        console.log("Loading timeout - forcing stop");
+        setLoadingTimeout(true);
+        setHasLoadedOnce(true);
+      }, 8000);
+      return () => clearTimeout(timer);
+    } else if (!loadingChats) {
+      setHasLoadedOnce(true);
+      setLoadingTimeout(false);
+    }
+  }, [loadingChats, hasLoadedOnce]);
+
   useEffect(() => {
     const fetchAllUserInfo = async () => {
       if (!activeStories || activeStories.length === 0) {
@@ -364,24 +380,68 @@ const ChatList = () => {
     });
   };
 
+  // Refresh on focus
   useFocusEffect(
     useCallback(() => {
       const refreshData = async () => {
+        if (refreshing) return;
         setRefreshing(true);
-        await Promise.all([
-          refreshChats && refreshChats(),
-          refreshStories && refreshStories()
-        ]);
-        setRefreshing(false);
+        try {
+          await Promise.all([
+            refreshChats && refreshChats(),
+            refreshStories && refreshStories()
+          ]);
+        } catch (error) {
+          console.log("Refresh error:", error);
+        } finally {
+          setRefreshing(false);
+        }
       };
       refreshData();
     }, [refreshChats, refreshStories])
   );
 
-  if (loadingChats) {
+  // Show loading with timeout fallback
+  if (loadingChats && !hasLoadedOnce && !loadingTimeout) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <Image source={images.loader} style={styles.loader} />
+        <Text style={{ marginTop: 10, color: colors.tertiary }}>Loading chats...</Text>
+      </View>
+    );
+  }
+
+  // Show timeout error with retry
+  if (loadingTimeout && !hasLoadedOnce) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <Ionicons name="chatbubbles-outline" size={60} color={colors.primary} />
+        <Text style={{ marginTop: 15, color: colors.tertiary, textAlign: 'center', paddingHorizontal: 30 }}>
+          Unable to load chats. Check your internet connection.
+        </Text>
+        <TouchableOpacity 
+          style={{ marginTop: 20, backgroundColor: colors.primary, paddingHorizontal: 30, paddingVertical: 12, borderRadius: 8 }}
+          onPress={async () => {
+            setLoadingTimeout(false);
+            setHasLoadedOnce(false);
+            setRefreshing(true);
+            try {
+              await Promise.all([
+                refreshChats && refreshChats(),
+                refreshStories && refreshStories()
+              ]);
+              setHasLoadedOnce(true);
+              setLoadingTimeout(false);
+            } catch (error) {
+              console.log("Retry error:", error);
+              setLoadingTimeout(true);
+            } finally {
+              setRefreshing(false);
+            }
+          }}
+        >
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -408,7 +468,6 @@ const ChatList = () => {
 
       <View style={styles.statusListContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {/* FIXED: Add Story button with better styling */}
           {currentUser?.role === "cooperative" && (
             <TouchableOpacity
               style={styles.statusItem}
@@ -424,7 +483,6 @@ const ChatList = () => {
             </TouchableOpacity>
           )}
           
-          {/* Render user story containers */}
           {Object.entries(groupedStories).map(([userId, stories]) => {
             const displayName = getStoryOwnerName(userId);
             const shortName = displayName.length > 12 ? `${displayName.substring(0, 10)}...` : displayName;
@@ -516,15 +574,34 @@ const ChatList = () => {
       <FlatList
         data={chatList}
         keyExtractor={(item) => item.uid}
-        refreshing={refreshing}
-        onRefresh={async () => {
-          setRefreshing(true);
-          await Promise.all([
-            refreshChats && refreshChats(),
-            refreshStories && refreshStories()
-          ]);
-          setRefreshing(false);
-        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              try {
+                await Promise.all([
+                  refreshChats && refreshChats(),
+                  refreshStories && refreshStories()
+                ]);
+              } catch (error) {
+                console.log("Refresh error:", error);
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={{ padding: 40, alignItems: 'center' }}>
+            <Ionicons name="chatbubbles-outline" size={50} color={colors.tertiary} />
+            <Text style={{ marginTop: 10, color: colors.tertiary, textAlign: 'center' }}>
+              No conversations yet. Start chatting!
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.chatItem}
@@ -569,7 +646,6 @@ const styles = StyleSheet.create({
   statusSeenRing: { backgroundColor: "#e2e8f0", borderRadius: 30 },
   statusInner: { backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   statusImage: { width: "100%", height: "100%" },
-  // NEW: Add Story button specific styles
   addStoryBorder: { 
     backgroundColor: "#f0f0f0",
     borderRadius: 30,
