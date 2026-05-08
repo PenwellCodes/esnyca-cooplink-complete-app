@@ -10,6 +10,8 @@ import {
   Dimensions,
   Alert,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -37,6 +39,7 @@ const ViewStoryScreen = () => {
   const [replyText, setReplyText] = useState("");
   const [isPaused, setIsPaused] = useState(false);
   const [remainingDuration, setRemainingDuration] = useState(TOTAL_DURATION);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const animationStartRef = useRef(Date.now());
 
@@ -89,19 +92,21 @@ const ViewStoryScreen = () => {
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Listener for keyboard focus on reply field to auto-pause
+  // Keyboard listeners for better handling
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       "keyboardDidShow",
       () => {
+        setIsKeyboardVisible(true);
         pauseAnimation();
-      },
+      }
     );
     const keyboardDidHideListener = Keyboard.addListener(
       "keyboardDidHide",
       () => {
+        setIsKeyboardVisible(false);
         resumeAnimation();
-      },
+      }
     );
     return () => {
       keyboardDidShowListener.remove();
@@ -125,7 +130,7 @@ const ViewStoryScreen = () => {
       router.back();
       return;
     }
-    // Record view (ensure recordView handles uniqueness)
+    // Record view
     if (recordView && currentUser) {
       recordView(storyId, currentUser.uid);
     }
@@ -208,8 +213,8 @@ const ViewStoryScreen = () => {
           storyPreview: replyData.storyPreview,
         });
         Alert.alert(translations.replySentTitle, translations.replySentBody);
+        setReplyText("");
       }
-      setReplyText("");
     } catch (error) {
       console.error("Error sending reply:", error);
       Alert.alert(translations.error, translations.failedToSendReply);
@@ -234,7 +239,7 @@ const ViewStoryScreen = () => {
                     try {
                         await deleteStory(storyId, story.imageURL);
                         Alert.alert(translations.success, translations.storyDeletedSuccessfully);
-                        router.push("/(tabs)/chat"); // Changed from router.back() to explicitly navigate to chat
+                        router.push("/(tabs)/chat");
                     } catch (error) {
                         Alert.alert(translations.error, translations.failedToDeleteStory);
                     }
@@ -248,12 +253,22 @@ const ViewStoryScreen = () => {
     return null;
   }
 
+  const isOwner = currentUser.uid === story.userId;
+
   return (
     <View style={styles.container}>
       {/* Progress Bar */}
-      <View style={styles.progressBarContainer}>
+      <View style={[styles.progressBarContainer, { top: insets.top || 0 }]}>
         <Animated.View style={[styles.progressBar, { width: progressAnim }]} />
       </View>
+
+      {/* Close Button */}
+      <TouchableOpacity
+        style={[styles.closeButton, { top: insets.top + 10, right: 16 }]}
+        onPress={() => router.back()}
+      >
+        <Text style={styles.closeButtonText}>✕</Text>
+      </TouchableOpacity>
 
       {/* Story Image */}
       <TouchableOpacity
@@ -266,7 +281,7 @@ const ViewStoryScreen = () => {
         <Image
           source={{ uri: story?.imageURL }}
           style={styles.storyImage}
-          resizeMode="cover"
+          resizeMode="contain"
         />
         {/* Caption overlay */}
         {story.caption ? (
@@ -276,39 +291,45 @@ const ViewStoryScreen = () => {
         ) : null}
       </TouchableOpacity>
 
-      {/* For story owner: show view count in center at bottom */}
-      {currentUser.uid === story.userId ? (
+      {/* For story owner: show view count */}
+      {isOwner ? (
         <View
           style={[
             styles.viewCountContainer,
-            { bottom: 16 + insets.bottom + keyboardHeight },
+            { bottom: insets.bottom + 20 },
           ]}
         >
           <Text style={styles.viewCountText}>
-            {story.views ? story.views.length : 0} {translations.views}
+            {(story.views?.length || 0)} {translations.views}
           </Text>
         </View>
       ) : (
-        // For viewers: show reply input at bottom
-        <View
-          style={[
-            styles.replyContainer,
-            { bottom: 16 + insets.bottom + keyboardHeight },
-          ]}
+        // For viewers: show reply input at bottom (WhatsApp style)
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
         >
-          <TextInput
-            style={styles.replyInput}
-            placeholder={translations.replyPlaceholder}
-            placeholderTextColor="#ccc"
-            value={replyText}
-            onChangeText={setReplyText}
-            onFocus={pauseAnimation}
-            onBlur={resumeAnimation}
-          />
-          <TouchableOpacity style={styles.sendButton} onPress={handleReply}>
-            <Text style={styles.sendButtonText}>{translations.send}</Text>
-          </TouchableOpacity>
-        </View>
+          <View
+            style={[
+              styles.replyContainer,
+              { paddingBottom: isKeyboardVisible ? 10 : insets.bottom + 10 }
+            ]}
+          >
+            <TextInput
+              style={styles.replyInput}
+              placeholder={translations.replyPlaceholder}
+              placeholderTextColor="#999"
+              value={replyText}
+              onChangeText={setReplyText}
+              onFocus={pauseAnimation}
+              onBlur={resumeAnimation}
+              multiline
+            />
+            <TouchableOpacity style={styles.sendButton} onPress={handleReply}>
+              <Text style={styles.sendButtonText}>{translations.send}</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       )}
     </View>
   );
@@ -323,15 +344,30 @@ const styles = StyleSheet.create({
   },
   progressBarContainer: {
     position: "absolute",
-    top: 0,
     left: 0,
     right: 0,
-    height: 4,
-    backgroundColor: "#555",
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    zIndex: 10,
   },
   progressBar: {
     height: "100%",
     backgroundColor: "#fff",
+  },
+  closeButton: {
+    position: "absolute",
+    zIndex: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeButtonText: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
   },
   imageContainer: {
     flex: 1,
@@ -342,42 +378,44 @@ const styles = StyleSheet.create({
   },
   captionContainer: {
     position: "absolute",
-    top: "50%",
-    left: "10%",
-    right: "10%",
-    backgroundColor: "rgba(37, 34, 34, 0.466)",
-    padding: 8,
-    borderRadius: 8,
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 12,
+    borderRadius: 10,
     alignItems: "center",
   },
   captionText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     textAlign: "center",
   },
   replyContainer: {
-    position: "absolute",
-    left: 8,
-    right: 8,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: "rgba(30,30,30,0.95)",
+    borderTopWidth: 1,
+    borderTopColor: "#333",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   replyInput: {
     flex: 1,
     color: "#fff",
+    fontSize: 16,
     paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    maxHeight: 80,
   },
   sendButton: {
-    padding: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   sendButtonText: {
     color: "#007AFF",
-    fontWeight: "bold",
+    fontWeight: "600",
+    fontSize: 16,
   },
   viewCountContainer: {
     position: "absolute",
@@ -387,11 +425,11 @@ const styles = StyleSheet.create({
   },
   viewCountText: {
     color: "#fff",
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
     backgroundColor: "rgba(0,170,255,0.8)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
   },
 });
