@@ -15,16 +15,26 @@
     },
 
     "scheme": "myapp",
-    "platforms": ["ios", "android"],
 
-    "assetBundlePatterns": ["**/*"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
+
+    "assetBundlePatterns": [
+      "**/*"
+    ],
 
     "ios": {
       "buildNumber": "42",
       "supportsTablet": true,
+
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       },
+
       "config": {
         "googleMapsApiKey": "AIzaSyALNndDdx76-YfNME6-5LXgfGfVhbxqMtU"
       }
@@ -60,8 +70,9 @@
 
     "extra": {
       "apiBaseUrl": "https://fragrant-mode-69da.lihawu95.workers.dev/api",
+
       "eas": {
-        "projectId": "3b2807cf-6a12-461b-abc3-7c5d-4892ca5eb3b9"
+        "projectId": "3b2807cf-6a12-461b-abc3-cf7338f0ce72"
       }
     },
 
@@ -105,10 +116,9 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#007AFF",
-
-        
-          "sounds": [],
-
+          "sounds": [
+            "./assets/notification.wav"
+          ],
           "androidMode": "default",
           "androidCollapsible": true
         }
