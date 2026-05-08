@@ -128,6 +128,7 @@ export const ChatProvider = ({ children }) => {
   const [chatList, setChatList] = useState([]);
   const [conversations, setConversations] = useState({});
   const [loadingChats, setLoadingChats] = useState(true);
+  const [isChatReady, setIsChatReady] = useState(false);
   const [activeChatId, setActiveChatId] = useState(null);
   const [lastMessages, setLastMessages] = useState({});
   const [userMap, setUserMap] = useState({});
@@ -151,12 +152,17 @@ export const ChatProvider = ({ children }) => {
     toDate: () => new Date(value),
   });
 
-  const refreshChatState = async () => {
+  const refreshChatState = useCallback(async () => {
     if (!currentUserId) return;
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
 
+    if (!isChatReady) {
+      setLoadingChats(true);
+    }
+
     refreshPromiseRef.current = (async () => {
       const userUid = normalizeId(currentUserId);
+      let successfulSync = false;
       try {
         const allUsers = await apiRequest("/users", {
           timeoutMs: CHAT_SYNC_TIMEOUT_MS,
@@ -207,7 +213,6 @@ export const ChatProvider = ({ children }) => {
               "Chat refresh warning:",
               fallbackError?.message || fallbackError
             );
-            setLoadingChats(false);
             return;
           }
         }
@@ -300,7 +305,11 @@ export const ChatProvider = ({ children }) => {
         const noChatsResolved =
           (chats || []).length > 0 && Object.keys(nextConversations).length === 0;
         if (noChatsResolved) {
-          setLoadingChats(false);
+          successfulSync = true;
+          setConversations({});
+          setLastMessages({});
+          setUnreadCounts({});
+          setChatIdMap({});
           return;
         }
 
@@ -344,14 +353,20 @@ export const ChatProvider = ({ children }) => {
           setUnreadCounts(nextUnread);
           setChatIdMap(nextChatIdMap);
         }
-        setLoadingChats(false);
+        successfulSync = true;
+      } catch (error) {
+        console.log("Chat refresh failed:", error?.message || error);
       } finally {
+        setLoadingChats(false);
+        if (!isChatReady) {
+          setIsChatReady(true);
+        }
         refreshPromiseRef.current = null;
       }
     })();
 
     return refreshPromiseRef.current;
-  };
+  }, [currentUserId, currentUser?.role, isChatReady]);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -361,20 +376,30 @@ export const ChatProvider = ({ children }) => {
       setUnreadCounts({});
       setChatIdMap({});
       setLoadingChats(false);
+      setIsChatReady(false);
       return;
     }
 
     refreshChatState().catch((error) => {
       console.log("Chat refresh warning:", error?.message || error);
       setLoadingChats(false);
+      setIsChatReady(true);
     });
-
-    const interval = setInterval(() => {
-      refreshChatState().catch(() => {});
-    }, 12000);
-
-    return () => clearInterval(interval);
   }, [currentUserId, currentUser?.role]);
+
+  const CHAT_POLL_INTERVAL_MS = 5000;
+
+  useEffect(() => {
+    if (!currentUserId) return undefined;
+
+    const intervalId = setInterval(() => {
+      refreshChatState().catch((error) => {
+        console.log("Background chat poll failed:", error?.message || error);
+      });
+    }, CHAT_POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [currentUserId, refreshChatState]);
 
   // FIXED: Mark messages as read and refresh unread counts
   const markMessagesAsRead = async (chatId, messages) => {
@@ -637,6 +662,7 @@ export const ChatProvider = ({ children }) => {
         chatList,
         conversations,
         loadingChats,
+        isChatReady,
         markMessagesAsRead,
         activeChatId,
         setActiveChatId,
@@ -647,7 +673,7 @@ export const ChatProvider = ({ children }) => {
         sendMessage,
         refreshChats,
         getTotalUnreadCount,
-        forceRefreshUnreadCounts, // NEW: Added
+        forceRefreshUnreadCounts,
       }}
     >
       {children}

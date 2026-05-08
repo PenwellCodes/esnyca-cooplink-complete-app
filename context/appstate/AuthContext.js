@@ -12,26 +12,37 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  useEffect(() => {
-    const hydrate = async () => {
-      const savedUser = await AsyncStorage.getItem("user");
-      const authToken =
-        (await AsyncStorage.getItem("authToken")) ||
-        (await AsyncStorage.getItem("token")) ||
-        (await AsyncStorage.getItem("jwtToken")) ||
-        null;
+  const clearAuthData = async () => {
+    await AsyncStorage.removeItem("authToken");
+    await AsyncStorage.removeItem("token");
+    await AsyncStorage.removeItem("jwtToken");
+    await AsyncStorage.removeItem("user");
+    setCurrentUser(null);
+  };
 
-      if (!authToken && savedUser) {
-        // Chats and protected routes now require auth; avoid stale "logged in" state.
-        await AsyncStorage.removeItem("user");
-        setCurrentUser(null);
-      } else if (savedUser) {
-        setCurrentUser(normalizeUser(JSON.parse(savedUser)));
-      } else {
-        setCurrentUser(null);
+  const hydrate = async () => {
+    const savedUser = await AsyncStorage.getItem("user");
+    const authToken =
+      (await AsyncStorage.getItem("authToken")) ||
+      (await AsyncStorage.getItem("token")) ||
+      (await AsyncStorage.getItem("jwtToken")) ||
+      null;
+
+    if (savedUser) {
+      const normalizedUser = normalizeUser(JSON.parse(savedUser));
+      setCurrentUser(normalizedUser);
+      // Validate session in background if token exists
+      if (authToken) {
+        // For now, don't validate on startup to keep login persistent
+        // validateSession();
       }
-      setLoadingAuth(false);
-    };
+    } else {
+      setCurrentUser(null);
+    }
+    setLoadingAuth(false);
+  };
+
+  useEffect(() => {
     hydrate();
   }, []);
 
@@ -66,6 +77,9 @@ export const AuthProvider = ({ children }) => {
     const normalizedUser = normalizeUser(user);
     setCurrentUser(normalizedUser);
     await AsyncStorage.setItem("user", JSON.stringify(normalizedUser));
+    if (token) {
+      await AsyncStorage.setItem("authToken", token);
+    }
   };
 
   const login = async (email, password) => {
@@ -137,11 +151,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem("authToken");
-    await AsyncStorage.removeItem("token");
-    await AsyncStorage.removeItem("jwtToken");
-    await AsyncStorage.removeItem("user");
-    setCurrentUser(null);
+    await clearAuthData();
   };
 
   const deleteAccount = async (email, password) => {

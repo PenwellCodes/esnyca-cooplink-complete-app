@@ -125,6 +125,18 @@ export async function apiRequest(path, options = {}) {
     const error = new Error(message);
     error.status = response.status;
     error.data = data;
+
+    // Handle 401 globally - token expired
+    if (response.status === 401) {
+      // Clear stored auth data
+      await AsyncStorage.removeItem("authToken");
+      await AsyncStorage.removeItem("token");
+      await AsyncStorage.removeItem("jwtToken");
+      await AsyncStorage.removeItem("user");
+      // Note: We can't call logout here as it would create a circular dependency
+      // The AuthContext will handle setting currentUser to null when it detects no user
+    }
+
     throw error;
   }
 

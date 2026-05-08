@@ -99,7 +99,8 @@ const SettingsScreen = () => {
 
   const handleUpdateProfile = () => {
     if (!currentUser) {
-      router.push("/(auth)/sign-in");
+      const returnTo = encodeURIComponent("/(screens)/profile");
+      router.push(`/(auth)/sign-in?returnTo=${returnTo}`);
       return;
     }
     router.push("/(screens)/profile");
