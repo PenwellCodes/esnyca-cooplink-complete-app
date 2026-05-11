@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,8 @@ const ResetPassword = () => {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarStyle, setSnackbarStyle] = useState({});
+  const [inputPositions, setInputPositions] = useState({});
+  const scrollViewRef = useRef(null);
   const [translations, setTranslations] = useState({
     enterEmail: "Please enter your email",
     emailMistyped:
@@ -110,17 +112,29 @@ const ResetPassword = () => {
       setSnackbarStyle({ backgroundColor: "red" });
       setSnackbarVisible(true);
     }
-    setLoading(false);
+  };
+  const handleInputLayout = (key) => (event) => {
+    const { y } = event.nativeEvent.layout;
+    setInputPositions((prev) => ({ ...prev, [key]: y }));
+  };
+
+  const scrollToInput = (key) => {
+    const y = inputPositions[key];
+    if (typeof y !== "number") return;
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    }, 100);
   };
 
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      enabled={Platform.OS === "ios"}
-      keyboardVerticalOffset={insets.top + 8}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      enabled
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 24}
     >
       <ScrollView
+        ref={scrollViewRef}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
@@ -128,9 +142,10 @@ const ResetPassword = () => {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingBottom: 24 + keyboardHeight + Math.max(insets.bottom, 12),
+            paddingBottom: 32 + keyboardHeight + Math.max(insets.bottom, 12),
           },
         ]}
+        bounces={false}
       >
         <View style={styles.header}>
           <Ionicons
@@ -150,7 +165,7 @@ const ResetPassword = () => {
             {translations.instructions}
           </Text>
 
-          <View style={styles.inputContainer}>
+          <View style={styles.inputContainer} onLayout={handleInputLayout("email")}>
             <Ionicons name="mail-outline" size={20} color={colors.primary} />
             <TextInput
               placeholder={translations.email}
@@ -158,6 +173,7 @@ const ResetPassword = () => {
               placeholderTextColor={colors.onSurfaceVariant}
               value={email}
               onChangeText={setEmail}
+              onFocus={() => scrollToInput("email")}
               keyboardType="email-address"
               autoCapitalize="none"
             />

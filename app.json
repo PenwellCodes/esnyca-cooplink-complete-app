@@ -32,6 +32,7 @@
     "android": {
       "versionCode": 18,
       "softwareKeyboardLayoutMode": "resize",
+      
        "usesCleartextTraffic": true,
 
       "adaptiveIcon": {

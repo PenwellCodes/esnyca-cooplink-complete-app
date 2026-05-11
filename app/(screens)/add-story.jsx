@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,8 @@ const AddStoryScreen = () => {
   const [imageURI, setImageURI] = useState(null);
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [inputPositions, setInputPositions] = useState({});
+  const scrollViewRef = useRef(null);
 
   const [translations, setTranslations] = useState({
     addStory: "Add Story",
@@ -100,36 +102,28 @@ const AddStoryScreen = () => {
     }
   };
 
-  const handlePostStory = async () => {
-    if (!imageURI) {
-      Alert.alert(
-        translations.noImageSelected,
-        translations.selectImageBody
-      );
-      return;
-    }
-    setUploading(true);
-    try {
-      // Post the story using our StoriesContext function
-      await postStory({ imageURI, caption, userId: currentUser.uid });
-      Alert.alert(translations.success, translations.storyPostedSuccessfully);
-      router.back();
-    } catch (error) {
-      Alert.alert(translations.error, translations.failedToPostStory);
-      console.error(error);
-    } finally {
-      setUploading(false);
-    }
+  const handleInputLayout = (key) => (event) => {
+    const { y } = event.nativeEvent.layout;
+    setInputPositions((prev) => ({ ...prev, [key]: y }));
+  };
+
+  const scrollToInput = (key) => {
+    const y = inputPositions[key];
+    if (typeof y !== "number") return;
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    }, 100);
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.keyboardRoot}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      enabled={Platform.OS === "ios"}
-      keyboardVerticalOffset={insets.top + 48}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      enabled
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 48 : 24}
     >
       <ScrollView
+        ref={scrollViewRef}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets
@@ -137,10 +131,11 @@ const AddStoryScreen = () => {
           styles.container,
           {
             paddingBottom:
-              Math.max(insets.bottom, 16) + 16 + keyboardHeight,
+              32 + keyboardHeight + Math.max(insets.bottom, 12),
           },
         ]}
         showsVerticalScrollIndicator={false}
+        bounces={false}
       >
         <Text style={styles.header}>{translations.addStory}</Text>
         <TouchableOpacity style={styles.pickImageButton} onPress={pickImage}>
@@ -149,13 +144,16 @@ const AddStoryScreen = () => {
           </Text>
         </TouchableOpacity>
         {imageURI && <Image source={{ uri: imageURI }} style={styles.previewImage} />}
-        <TextInput
-          style={styles.input}
-          placeholder={translations.addCaption}
-          placeholderTextColor="#6B7280"
-          value={caption}
-          onChangeText={setCaption}
-        />
+        <View onLayout={handleInputLayout("caption")}>
+          <TextInput
+            style={styles.input}
+            placeholder={translations.addCaption}
+            placeholderTextColor="#6B7280"
+            value={caption}
+            onChangeText={setCaption}
+            onFocus={() => scrollToInput("caption")}
+          />
+        </View>
         {uploading ? (
           <ActivityIndicator size="large" color="#007AFF" />
         ) : (

@@ -379,7 +379,7 @@ const ChatScreen = () => {
         data={messages}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderMessage}
-        contentContainerStyle={styles.messagesList}
+        contentContainerStyle={[styles.messagesList, { paddingBottom: 120 + Math.max(insets.bottom, 8) }]}
         onContentSizeChange={() => {
           if (messages && messages.length > 0) {
             flatListRef.current?.scrollToEnd({ animated: false });
@@ -404,9 +404,24 @@ const ChatScreen = () => {
       {/* Input Container */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : Math.max(insets.bottom, 10)}
       >
-        <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopColor: colors.outline, paddingBottom: insets.bottom || 8 }]}>
+        <View style={[
+          styles.inputContainer, 
+          { 
+            backgroundColor: colors.background, 
+            borderTopColor: colors.outline,
+            position: "absolute",
+            bottom: Math.max(insets.bottom, 8),
+            left: 0,
+            right: 0,
+            elevation: 5,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+          }
+        ]}>
           <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
             <Ionicons name="image-outline" size={24} color="#007AFF" />
           </TouchableOpacity>
@@ -518,7 +533,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderTopWidth: 1,
   },
   attachmentButton: {
     marginRight: 10,

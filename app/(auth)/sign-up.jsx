@@ -48,6 +48,8 @@ const SignUp = () => {
     region: "", // For cooperatives
   });
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [inputPositions, setInputPositions] = useState({});
+  const scrollViewRef = useRef(null);
   const [hidePassword, setHidePassword] = useState(true);
   const [hideConfirmPassword, setHideConfirmPassword] = useState(true);
 
@@ -61,8 +63,6 @@ const SignUp = () => {
 
   // Loading state for ActivityIndicator
   const [loading, setLoading] = useState(false);
-  const [inputPositions, setInputPositions] = useState({});
-  const scrollViewRef = useRef(null);
   const [translations, setTranslations] = useState({
     fillEmailPassword: "Please fill in email and password",
     emailMistyped: "Email looks mistyped (e.g. .comc). Please correct it.",
