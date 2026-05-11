@@ -27,7 +27,6 @@ import { Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../../context/appstate/LanguageContext";
 import { apiRequest } from "../../../utils/api";
-import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 import { useNotifications } from "../../../context/appstate/NotificationsContext";
 
 const placeholderAvatar =
@@ -132,7 +131,7 @@ const ChatScreen = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [pendingStoryReply, setPendingStoryReply] = useState(() =>
@@ -147,7 +146,6 @@ const ChatScreen = () => {
   const messages = [...contextMessages, ...dedupedLocalMessages];
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardHeight();
   const { currentLanguage, t } = useLanguage();
 
   const [translations, setTranslations] = useState({
@@ -198,20 +196,27 @@ const ChatScreen = () => {
     markCurrentChatAsRead();
   }, [chatId, currentUserUid, conversations, markMessagesAsRead, refreshChats, forceRefreshUnreadCounts]);
 
-  // Keyboard listeners to track when keyboard is visible
+  // FIXED: Keyboard handling for both iOS and Android
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      setIsKeyboardVisible(true);
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      // Scroll to bottom when keyboard opens
+      setTimeout(() => {
+        if (flatListRef.current && messages.length > 0) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
+      }, 100);
     });
+    
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
     });
 
     return () => {
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
-  }, []);
+  }, [messages.length]);
 
   useEffect(() => {
     const loadTranslations = async () => {
@@ -251,28 +256,24 @@ const ChatScreen = () => {
     })();
   }, []);
 
-  // FIXED: Scroll to bottom when keyboard opens (WhatsApp behavior)
-  useEffect(() => {
-    if (isKeyboardVisible && messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [isKeyboardVisible, messages.length]);
-
   // Scroll to bottom when messages change
   useEffect(() => {
-    if (messages.length > 0 && !isKeyboardVisible) {
+    if (messages.length > 0) {
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+        if (flatListRef.current) {
+          flatListRef.current.scrollToEnd({ animated: false });
+        }
+      }, 50);
     }
   }, [messages.length]);
 
-  const scrollToBottom = () => {
-    if (messages.length > 0) {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }
+  // Handle input focus - scroll to bottom
+  const handleInputFocus = () => {
+    setTimeout(() => {
+      if (flatListRef.current && messages.length > 0) {
+        flatListRef.current.scrollToEnd({ animated: true });
+      }
+    }, 150);
   };
 
   const handleSendMessage = async () => {
@@ -292,13 +293,16 @@ const ChatScreen = () => {
       timestamp: new Date(),
       status: "sending",
     };
+    
     setLocalMessages((prev) => [...prev, tempMessage]);
     setMessageText("");
     
-    // Scroll to bottom immediately after sending
+    // Immediate scroll after sending
     setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+      if (flatListRef.current) {
+        flatListRef.current.scrollToEnd({ animated: true });
+      }
+    }, 50);
 
     try {
       const created = await sendChatMessage({
@@ -401,8 +405,13 @@ const ChatScreen = () => {
     };
 
     setLocalMessages((prev) => [...prev, tempMessage]);
-    scrollToBottom();
     setUploading(true);
+
+    setTimeout(() => {
+      if (flatListRef.current) {
+        flatListRef.current.scrollToEnd({ animated: true });
+      }
+    }, 50);
 
     try {
       const downloadURL = await uploadFile(file.uri, file.name);
@@ -458,8 +467,13 @@ const ChatScreen = () => {
     };
 
     setLocalMessages((prev) => [...prev, tempMessage]);
-    scrollToBottom();
     setUploading(true);
+
+    setTimeout(() => {
+      if (flatListRef.current) {
+        flatListRef.current.scrollToEnd({ animated: true });
+      }
+    }, 50);
 
     try {
       const fileName = uri.split("/").pop();
@@ -507,7 +521,7 @@ const ChatScreen = () => {
             styles.messageBubble,
             {
               alignSelf:
-                item.sender === currentUser.uid ? "flex-end" : "flex-start",
+                item.sender === currentUser?.uid ? "flex-end" : "flex-start",
             },
           ]}
         >
@@ -526,7 +540,7 @@ const ChatScreen = () => {
           )}
           <Text
             style={{
-              color: item.sender === currentUser.uid ? "white" : "black",
+              color: item.sender === currentUser?.uid ? "white" : "black",
             }}
           >
             {item.text}
@@ -546,14 +560,14 @@ const ChatScreen = () => {
         <View
           style={{
             alignSelf:
-              item.sender === currentUser.uid ? "flex-end" : "flex-start",
+              item.sender === currentUser?.uid ? "flex-end" : "flex-start",
             marginVertical: 5,
             marginHorizontal: 10,
           }}
         >
           <LinearGradient
             colors={
-              item.sender === currentUser.uid
+              item.sender === currentUser?.uid
                 ? ["#4c669f", "#3b5998"]
                 : ["#e0e0e0", "#cfcfcf"]
             }
@@ -573,7 +587,7 @@ const ChatScreen = () => {
               {item.status === "uploading" ? (
                 <ActivityIndicator
                   size="small"
-                  color={item.sender === currentUser.uid ? "#fff" : "#666"}
+                  color={item.sender === currentUser?.uid ? "#fff" : "#666"}
                   style={{ marginRight: 5 }}
                 />
               ) : (
@@ -585,13 +599,13 @@ const ChatScreen = () => {
                     name="download-outline"
                     size={16}
                     color={
-                      item.sender === currentUser.uid ? "#cce6ff" : "#007AFF"
+                      item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF"
                     }
                   />
                   <Text
                     style={{
                       color:
-                        item.sender === currentUser.uid ? "#cce6ff" : "#007AFF",
+                        item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF",
                       marginLeft: 5,
                       fontSize: 12,
                     }}
@@ -616,7 +630,7 @@ const ChatScreen = () => {
       return (
         <LinearGradient
           colors={
-            item.sender === currentUser.uid
+            item.sender === currentUser?.uid
               ? ["#4c669f", "#3b5998"]
               : ["#e0e0e0", "#cfcfcf"]
           }
@@ -624,7 +638,7 @@ const ChatScreen = () => {
             styles.messageBubble,
             {
               alignSelf:
-                item.sender === currentUser.uid ? "flex-end" : "flex-start",
+                item.sender === currentUser?.uid ? "flex-end" : "flex-start",
               flexDirection: "row",
               alignItems: "center",
             },
@@ -633,12 +647,12 @@ const ChatScreen = () => {
           <Ionicons
             name="document-text-outline"
             size={24}
-            color={item.sender === currentUser.uid ? "white" : "black"}
+            color={item.sender === currentUser?.uid ? "white" : "black"}
           />
           <View style={{ marginLeft: 8 }}>
             <Text
               style={{
-                color: item.sender === currentUser.uid ? "white" : "black",
+                color: item.sender === currentUser?.uid ? "white" : "black",
                 fontWeight: "bold",
               }}
             >
@@ -648,7 +662,7 @@ const ChatScreen = () => {
               <Text
                 style={{
                   color:
-                    item.sender === currentUser.uid ? "#cce6ff" : "#007AFF",
+                    item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF",
                 }}
               >
                 {translations.download}
@@ -669,7 +683,7 @@ const ChatScreen = () => {
       return (
         <LinearGradient
           colors={
-            item.sender === currentUser.uid
+            item.sender === currentUser?.uid
               ? ["#4c669f", "#3b5998"]
               : ["#e0e0e0", "#cfcfcf"]
           }
@@ -677,7 +691,7 @@ const ChatScreen = () => {
             styles.messageBubble,
             {
               alignSelf:
-                item.sender === currentUser.uid ? "flex-end" : "flex-start",
+                item.sender === currentUser?.uid ? "flex-end" : "flex-start",
               flexDirection: "row",
               alignItems: "center",
             },
@@ -686,7 +700,7 @@ const ChatScreen = () => {
           <Ionicons
             name="musical-notes-outline"
             size={24}
-            color={item.sender === currentUser.uid ? "white" : "black"}
+            color={item.sender === currentUser?.uid ? "white" : "black"}
           />
           <View style={{ marginLeft: 8 }}>
             <TouchableOpacity
@@ -695,7 +709,7 @@ const ChatScreen = () => {
               <Text
                 style={{
                   color:
-                    item.sender === currentUser.uid ? "#cce6ff" : "#007AFF",
+                    item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF",
                   fontWeight: "bold",
                 }}
               >
@@ -716,7 +730,7 @@ const ChatScreen = () => {
     return (
       <LinearGradient
         colors={
-          item.sender === currentUser.uid
+          item.sender === currentUser?.uid
             ? ["#4c669f", "#3b5998"]
             : ["#e0e0e0", "#cfcfcf"]
         }
@@ -724,13 +738,13 @@ const ChatScreen = () => {
           styles.messageBubble,
           {
             alignSelf:
-              item.sender === currentUser.uid ? "flex-end" : "flex-start",
+              item.sender === currentUser?.uid ? "flex-end" : "flex-start",
           },
         ]}
       >
         <Text
           style={{
-            color: item.sender === currentUser.uid ? "white" : "black",
+            color: item.sender === currentUser?.uid ? "white" : "black",
           }}
         >
           {item.text}
@@ -766,7 +780,7 @@ const ChatScreen = () => {
           headerShown: false,
         }}
       />
-      <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
         <View style={[styles.header, { marginTop: insets.top || 35, paddingTop: 8 }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -786,7 +800,7 @@ const ChatScreen = () => {
           </View>
         </View>
 
-        {/* FIXED: Messages List with proper padding at bottom */}
+        {/* Messages List - FIXED: Added bottom padding that increases when keyboard is open */}
         <FlatList
           ref={flatListRef}
           style={{ flex: 1 }}
@@ -795,69 +809,60 @@ const ChatScreen = () => {
           renderItem={renderMessage}
           contentContainerStyle={[
             styles.messagesList,
-            { paddingBottom: isKeyboardVisible ? 10 : 80 }
+            { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 10 : 80 }
           ]}
-          onContentSizeChange={() => {
-            if (!isKeyboardVisible && messages.length > 0) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-            }
-          }}
           onLayout={() => {
-            if (messages.length > 0 && !isKeyboardVisible) {
+            if (messages.length > 0) {
               flatListRef.current?.scrollToEnd({ animated: false });
             }
           }}
         />
 
-        {/* Input Container - FIXED: Proper WhatsApp behavior */}
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
-        >
-          {pendingStoryReply && (
-            <View style={styles.pendingStoryReply}>
-              <View style={styles.pendingStoryReplyLeft}>
-                {pendingStoryReply.imageURL ? (
-                  <Image source={{ uri: pendingStoryReply.imageURL }} style={styles.pendingStoryReplyImage} />
-                ) : null}
-                <View style={styles.pendingStoryReplyTextWrap}>
-                  <Text style={styles.pendingStoryReplyTitle}>Replying to this status</Text>
-                  {!!pendingStoryReply.caption && (
-                    <Text style={styles.pendingStoryReplyCaption} numberOfLines={1}>
-                      {pendingStoryReply.caption}
-                    </Text>
-                  )}
-                </View>
+        {/* Input Container - FIXED: Removed KeyboardAvoidingView and use simple View */}
+        {pendingStoryReply && (
+          <View style={styles.pendingStoryReply}>
+            <View style={styles.pendingStoryReplyLeft}>
+              {pendingStoryReply.imageURL ? (
+                <Image source={{ uri: pendingStoryReply.imageURL }} style={styles.pendingStoryReplyImage} />
+              ) : null}
+              <View style={styles.pendingStoryReplyTextWrap}>
+                <Text style={styles.pendingStoryReplyTitle}>Replying to this status</Text>
+                {!!pendingStoryReply.caption && (
+                  <Text style={styles.pendingStoryReplyCaption} numberOfLines={1}>
+                    {pendingStoryReply.caption}
+                  </Text>
+                )}
               </View>
-              <TouchableOpacity onPress={() => setPendingStoryReply(null)}>
-                <Ionicons name="close-circle" size={20} color="#666" />
-              </TouchableOpacity>
             </View>
-          )}
-
-          <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
-            <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
-              <Ionicons name="image-outline" size={24} color="#007AFF" />
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={pickDocuments} style={styles.attachmentButton}>
-              <Ionicons name="attach-outline" size={24} color="#007AFF" />
-            </TouchableOpacity>
-
-            <TextInput
-              placeholder={translations.typeMessage}
-              value={messageText}
-              onChangeText={setMessageText}
-              style={[styles.input, { borderColor: colors.outline, color: colors.onSurface, backgroundColor: colors.surface }]}
-              placeholderTextColor={colors.onSurfaceVariant}
-              multiline
-            />
-            
-            <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
-              <Ionicons name="send" size={24} color="#007AFF" />
+            <TouchableOpacity onPress={() => setPendingStoryReply(null)}>
+              <Ionicons name="close-circle" size={20} color="#666" />
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        )}
+
+        <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
+          <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
+            <Ionicons name="image-outline" size={24} color="#007AFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={pickDocuments} style={styles.attachmentButton}>
+            <Ionicons name="attach-outline" size={24} color="#007AFF" />
+          </TouchableOpacity>
+
+          <TextInput
+            placeholder={translations.typeMessage}
+            value={messageText}
+            onChangeText={setMessageText}
+            onFocus={handleInputFocus}
+            style={[styles.input, { borderColor: colors.outline, color: colors.onSurface, backgroundColor: colors.surface }]}
+            placeholderTextColor={colors.onSurfaceVariant}
+            multiline
+          />
+          
+          <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
+            <Ionicons name="send" size={24} color="#007AFF" />
+          </TouchableOpacity>
+        </View>
       </View>
     </>
   );
