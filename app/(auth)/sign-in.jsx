@@ -20,6 +20,8 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useNavigation } from "@react-navigation/native";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
+import Toast from "react-native-toast-message";
+import { HOME_ROUTE } from "../../utils/routes";
 
 const SignIn = () => {
   const insets = useSafeAreaInsets();
@@ -36,7 +38,7 @@ const SignIn = () => {
     if (navigation?.canGoBack?.()) {
       navigation.goBack();
     } else {
-      router.replace("/(tabs)/home");
+      router.replace(HOME_ROUTE);
     }
   };
 
@@ -82,16 +84,16 @@ const SignIn = () => {
     setLoading(true);
     const result = await login(email.trim(), password);
     if (result.success) {
-      setSnackbarMessage(translations.successSignedIn);
-      setSnackbarStyle({ backgroundColor: "green" });
-      setSnackbarVisible(true);
-      setTimeout(() => {
-        if (returnTo) {
-          router.replace(decodeURIComponent(returnTo));
-        } else {
-          router.replace("/(tabs)/home");
-        }
-      }, 1500);
+      const destination = returnTo
+        ? decodeURIComponent(returnTo)
+        : HOME_ROUTE;
+      Toast.show({
+        type: "success",
+        text1: translations.successSignedIn || "Signed in",
+        position: "top",
+        visibilityTime: 2000,
+      });
+      router.replace(destination);
     } else {
       if (
         result.error.toLowerCase().includes("invalid") ||

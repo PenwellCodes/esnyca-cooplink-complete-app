@@ -1,12 +1,17 @@
 import "react-native-gesture-handler";
 import { useEffect } from "react";
+import { installGlobalErrorHandlers } from "../utils/productionErrors";
+
+installGlobalErrorHandlers();
+import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useFonts } from "expo-font";
 import "react-native-url-polyfill/auto";
 import { SplashScreen, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import GlobalContextProvider from "../context/appstate/GlobalContextProvider";
-import { PaperProvider } from "react-native-paper";
-import theme from "../theme/theme";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import Toast from "react-native-toast-message";
 
 SplashScreen.preventAutoHideAsync();
@@ -25,34 +30,52 @@ const RootLayout = () => {
   });
 
   useEffect(() => {
-    if (error) throw error;
+    if (error) {
+      console.error("Font loading error:", error);
+      SplashScreen.hideAsync();
+      return;
+    }
     if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, error]);
 
-  if (!fontsLoaded) {
-    return null;
-  }
-
   if (!fontsLoaded && !error) {
-    return null;
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator size="large" color="#00AAFF" />
+      </View>
+    );
   }
 
   return (
-    <PaperProvider theme={theme}>
-      <GlobalContextProvider>
-        <StatusBar style="dark" />
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(screens)" options={{ headerShown: false }} />
-        </Stack>
-        <Toast />
-      </GlobalContextProvider>
-    </PaperProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <GlobalContextProvider>
+            <StatusBar style="dark" />
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(screens)" options={{ headerShown: false }} />
+            </Stack>
+            <Toast />
+          </GlobalContextProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 };
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  boot: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+  },
+});
 
 export default RootLayout;

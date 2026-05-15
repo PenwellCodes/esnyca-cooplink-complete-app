@@ -6,7 +6,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { AppState } from "react-native";
+import { AppState, InteractionManager } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "./AuthContext";
 import Toast from "react-native-toast-message";
@@ -423,11 +423,15 @@ export const ChatProvider = ({ children }) => {
 
     refreshPromiseRef.current = null;
 
-    refreshChatState().catch((error) => {
-      console.log("Chat refresh warning:", error?.message || error);
-      setLoadingChats(false);
-      setIsChatReady(true);
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
+      refreshChatState().catch((error) => {
+        console.log("Chat refresh warning:", error?.message || error);
+        setLoadingChats(false);
+        setIsChatReady(true);
+      });
     });
+
+    return () => interactionTask.cancel();
   }, [currentUserId, currentUser?.role]);
 
   const CHAT_POLL_INTERVAL_MS = 5000;

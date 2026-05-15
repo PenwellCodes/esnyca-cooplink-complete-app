@@ -22,6 +22,7 @@ import StoryViewer from "../../components/StoryViewer";
 import { useNavigation } from "@react-navigation/native";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
+import { HOME_ROUTE } from "../../utils/routes";
 
 const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
 
@@ -786,7 +787,7 @@ const ChatList = () => {
             if (navigation?.canGoBack?.()) {
               navigation.goBack();
             } else {
-              router.replace("/(tabs)/home");
+              router.replace(HOME_ROUTE);
             }
           }}
           style={styles.backButton}

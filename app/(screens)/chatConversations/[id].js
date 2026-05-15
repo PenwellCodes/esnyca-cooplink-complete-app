@@ -777,15 +777,6 @@ const ChatScreen = () => {
         </Text>
       </LinearGradient>
     );
-
-    if (isOwnMessage) {
-      return (
-        <TouchableOpacity activeOpacity={0.7} onLongPress={() => handleDeleteMessage(item)} delayLongPress={300}>
-          {MessageContent}
-        </TouchableOpacity>
-      );
-    }
-    return MessageContent;
   };
 
   if (!currentUserUid || !targetUserUid || !chatId) {

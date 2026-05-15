@@ -2,7 +2,7 @@
   "expo": {
     "name": "youthcorner",
     "slug": "youthcorner",
-    "version": "5.3.0",
+    "version": "5.3.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -56,6 +56,7 @@
     },
     "extra": {
       "apiBaseUrl": "https://fragrant-mode-69da.lihawu95.workers.dev/api",
+      "showProductionErrors": true,
       "eas": {
         "projectId": "3b2807cf-6a12-461b-abc3-cf7338f0ce72"
       }
@@ -106,9 +107,11 @@
       "expo-asset",
       "expo-font"
     ],
-    "runtimeVersion": "5.3.0",
+    "runtimeVersion": "5.3.1",
     "updates": {
-      "url": "https://u.expo.dev/3b2807cf-6a12-461b-abc3-cf7338f0ce72"
+      "url": "https://u.expo.dev/3b2807cf-6a12-461b-abc3-cf7338f0ce72",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

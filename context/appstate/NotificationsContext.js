@@ -294,15 +294,13 @@ export const NotificationsProvider = ({ children }) => {
       console.log('App state changed to:', nextAppState);
     });
 
-    // Cleanup
+    // Cleanup — use subscription.remove() (removeNotificationSubscription was removed in expo-notifications)
     return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
-      subscription.remove();
+      notificationListener.current?.remove?.();
+      responseListener.current?.remove?.();
+      subscription?.remove?.();
+      notificationListener.current = undefined;
+      responseListener.current = undefined;
     };
   }, [isInChat, currentUser?.uid]);
 

@@ -1,4 +1,5 @@
-import { Image, Text, TouchableOpacity, View, StyleSheet } from "react-native";
+import { Image, Text, TouchableOpacity, View, StyleSheet, ActivityIndicator } from "react-native";
+import { HOME_ROUTE } from "../../utils/routes";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useRef, useState, useEffect } from "react";
@@ -48,17 +49,21 @@ const Onboarding = () => {
 
   useEffect(() => {
     if (isFirstLaunch === false) {
-      router.replace("/(tabs)/home");
+      router.replace(HOME_ROUTE);
     }
   }, [isFirstLaunch]);
 
   if (isFirstLaunch === null || isFirstLaunch === false) {
-    return null;
+    return (
+      <View style={[styles.container, styles.boot]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
   }
 
   const handleComplete = async () => {
     await completeOnboarding();
-    router.replace("/(tabs)/home");
+    router.replace(HOME_ROUTE);
   };
 
   return (
@@ -142,6 +147,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  boot: {
+    justifyContent: "center",
   },
   skipButton: {
     width: "100%",

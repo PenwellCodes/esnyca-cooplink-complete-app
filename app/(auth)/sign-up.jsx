@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
+import { HOME_ROUTE } from "../../utils/routes";
 
 const TOP_SECTION_HEIGHT = 180;
 
@@ -226,7 +227,7 @@ const SignUp = () => {
         if (returnTo) {
           router.replace(decodeURIComponent(returnTo));
         } else {
-          router.replace("/(tabs)/home");
+          router.replace(HOME_ROUTE);
         }
       }, 1500);
     } catch (error) {
@@ -254,7 +255,7 @@ const SignUp = () => {
     if (navigation?.canGoBack?.()) {
       navigation.goBack();
     } else {
-      router.replace("/(tabs)/home");
+      router.replace(HOME_ROUTE);
     }
   };
 
