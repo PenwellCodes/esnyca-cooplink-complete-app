@@ -43,6 +43,8 @@ const Layout = () => {
   return (
     <>
       <Stack>
+        <Stack.Screen name="group-chat" options={{ headerShown: false }} />
+        <Stack.Screen name="chatConversations" options={{ headerShown: false }} />
         {screenDefs.map(({ name, title }) => (
           <Stack.Screen
             key={name}

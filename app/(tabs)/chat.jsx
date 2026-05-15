@@ -58,6 +58,19 @@ function hasAnyUnviewedStory(storiesList, viewerUid) {
   return storiesList.some((s) => !viewerHasSeenStory(s, viewerUid));
 }
 
+function getStoryCreatedAtMs(story) {
+  if (!story?.createdAt) return 0;
+  const ms = new Date(story.createdAt).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+/** Newest story first (for circle thumbnail and viewer). */
+function sortStoriesNewestFirst(list) {
+  return [...(list || [])].sort(
+    (a, b) => getStoryCreatedAtMs(b) - getStoryCreatedAtMs(a)
+  );
+}
+
 const getUserInitials = (displayName) => {
   if (!displayName || displayName === "User") return "?";
   if (displayName === "Me" || displayName === "You") return "U";
@@ -579,6 +592,10 @@ const ChatList = () => {
         }
       });
     }
+
+    Object.keys(groups).forEach((userId) => {
+      groups[userId] = sortStoriesNewestFirst(groups[userId]);
+    });
 
     return groups;
   }, [activeStories]);

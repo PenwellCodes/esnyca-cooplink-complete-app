@@ -86,6 +86,7 @@ const SignUp = () => {
     uploadProfile: "Upload Profile",
     registerAsFmt: "Register as",
     chatCorner: "CHAT CORNER",
+    forgetPassword: "Forget password?",
   });
 
   React.useEffect(() => {
@@ -119,6 +120,7 @@ const SignUp = () => {
         uploadProfile: await t("Upload Profile"),
         registerAsFmt: await t("Register as"),
         chatCorner: await t("CHAT CORNER"),
+        forgetPassword: await t("Forget password?"),
       });
     };
     loadTranslations();
@@ -501,6 +503,20 @@ const SignUp = () => {
               </>
             )}
 
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/reset-password")}
+            >
+              <Text
+                style={[
+                  styles.forgotPassword,
+                  typography.small,
+                  { color: colors.primary },
+                ]}
+              >
+                {translations.forgetPassword}
+              </Text>
+            </TouchableOpacity>
+
             {/* Profile Picture Upload Section */}
             <View style={styles.uploadContainer}>
               <TouchableOpacity
@@ -644,6 +660,7 @@ const styles = StyleSheet.create({
   },
   uploadButtonText: { fontSize: 16 },
   fileName: { marginTop: 5, textAlign: "center" },
+  forgotPassword: { alignSelf: "flex-end", marginBottom: 20 },
 });
 
 export default SignUp;

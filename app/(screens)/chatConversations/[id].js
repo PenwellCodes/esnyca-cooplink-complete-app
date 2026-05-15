@@ -22,12 +22,12 @@ import { formatDistanceToNow } from "date-fns";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import { Stack } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../../context/appstate/LanguageContext";
 import { apiRequest } from "../../../utils/api";
 import { useNotifications } from "../../../context/appstate/NotificationsContext";
-import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight"; // ✅ use the hook
+import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -100,34 +100,61 @@ const parseStoryPreviewParam = (rawValue) => {
   }
 };
 
-const getValidDate = (timestamp) => {
-  if (!timestamp) return null;
-  if (timestamp.toDate && typeof timestamp.toDate === "function") return timestamp.toDate();
-  if (timestamp.seconds) return new Date(timestamp.seconds * 1000);
-  if (timestamp instanceof Date) return timestamp;
-  return new Date(timestamp);
+/** Expo Router may pass params as string or string[] */
+const resolveParam = (value) => {
+  if (value == null) return "";
+  if (Array.isArray(value)) return String(value[0] ?? "").trim();
+  return String(value).trim();
+};
+
+const parseUserParam = (rawValue) => {
+  const raw = resolveParam(rawValue);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const uid = normalizeId(parsed.uid || parsed.id || parsed.Id);
+    if (!uid) return null;
+    return {
+      uid,
+      displayName:
+        parsed.displayName || parsed.DisplayName || parsed.name || "Chat",
+      profilePic:
+        parsed.profilePic ||
+        parsed.profilePicUrl ||
+        parsed.ProfilePicUrl ||
+        null,
+      role: parsed.role || parsed.Role || "",
+    };
+  } catch {
+    return null;
+  }
 };
 
 const ChatScreen = () => {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const userId = params.userId || params.id;
-  const predefinedMessage = params.predefinedMessage;
+  const routeUserId = resolveParam(params.userId || params.id);
+  const predefinedMessage = resolveParam(params.predefinedMessage);
   const { currentUser } = useAuth();
   const { userMap } = useChat();
-  const user = userMap ? userMap[normalizeId(userId)] : null;
-  const {
-    conversations,
-    markMessagesAsRead,
-    setActiveChatId,
+  const userFromParams = parseUserParam(params.user);
+  const user =
+    (userMap && routeUserId ? userMap[normalizeId(routeUserId)] : null) ||
+    userFromParams;
+  const { 
+    conversations, 
+    markMessagesAsRead, 
+    setActiveChatId, 
     sendMessage: sendChatMessage,
     refreshChats,
     forceRefreshUnreadCounts,
     deleteMessage = () => {},
   } = useChat();
   const { setUserInChat } = useNotifications();
-  const currentUserUid = currentUser?.uid || null;
-  const targetUserUid = user?.uid || userId;
+  const currentUserUid = normalizeId(currentUser?.uid || currentUser?.id) || null;
+  const targetUserUid =
+    normalizeId(user?.uid || user?.id || routeUserId) || null;
   const chatId = buildDirectKey(currentUserUid, targetUserUid);
 
   const [messageText, setMessageText] = useState(predefinedMessage || "");
@@ -149,6 +176,7 @@ const ChatScreen = () => {
   const messages = [...contextMessages, ...dedupedLocalMessages];
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { currentLanguage, t } = useLanguage();
   const keyboardHeight = useKeyboardHeight(); // ✅ real keyboard height
 
@@ -496,62 +524,234 @@ const ChatScreen = () => {
   };
 
   const renderMessage = ({ item }) => {
-    const isOwnMessage = item.sender === currentUserUid;
-    const bubbleColor = isOwnMessage ? "#4c669f" : "#e0e0e0";
-    const textColor = isOwnMessage ? "white" : "black";
-
-    const MessageContent = (
-      <View style={[styles.messageBubble, { alignSelf: isOwnMessage ? "flex-end" : "flex-start", backgroundColor: bubbleColor }]}>
-        {item.type === "story_reply" && (
-          <>
-            {item.storyPreview?.imageURL && (
-              <View style={styles.storyPreviewContainer}>
-                <Image source={{ uri: item.storyPreview.imageURL }} style={styles.storyPreviewImage} />
-                {item.storyPreview.caption && <Text style={styles.storyPreviewCaption}>{item.storyPreview.caption}</Text>}
-              </View>
-            )}
-            <Text style={{ color: textColor }}>{item.text}</Text>
-          </>
-        )}
-        {item.type === "image" && (
-          <>
-            <TouchableOpacity onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)} activeOpacity={0.8}>
-              <Image source={{ uri: item.fileUrl }} style={styles.imageMessage} resizeMode="contain" />
+    if (item.type === "story_reply") {
+      return (
+        <View
+          style={[
+            styles.messageBubble,
+            {
+              alignSelf:
+                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
+            },
+          ]}
+        >
+          {item.storyPreview?.imageURL && (
+            <View style={styles.storyPreviewContainer}>
+              <Image
+                source={{ uri: item.storyPreview.imageURL }}
+                style={styles.storyPreviewImage}
+              />
+              {item.storyPreview.caption && (
+                <Text style={styles.storyPreviewCaption}>
+                  {item.storyPreview.caption}
+                </Text>
+              )}
+            </View>
+          )}
+          <Text
+            style={{
+              color: normalizeId(item.sender) === currentUserUid ? "white" : "black",
+            }}
+          >
+            {item.text}
+          </Text>
+          <Text style={styles.timestamp}>
+            {item.timestamp && typeof item.timestamp.toDate === "function"
+              ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
+                  addSuffix: true,
+                })
+              : translations.sending}
+          </Text>
+        </View>
+      );
+    }
+    if (item.type === "image") {
+      return (
+        <View
+          style={{
+            alignSelf:
+              normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
+            marginVertical: 5,
+            marginHorizontal: 10,
+          }}
+        >
+          <LinearGradient
+            colors={
+              normalizeId(item.sender) === currentUserUid
+                ? ["#4c669f", "#3b5998"]
+                : ["#e0e0e0", "#cfcfcf"]
+            }
+            style={styles.messageBubble}
+          >
+            <TouchableOpacity
+              onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={{ uri: item.fileUrl }}
+                style={styles.imageMessage}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
             <View style={styles.imageActions}>
               {item.status === "uploading" ? (
-                <ActivityIndicator size="small" color={isOwnMessage ? "#fff" : "#666"} style={{ marginRight: 5 }} />
+                <ActivityIndicator
+                  size="small"
+                  color={normalizeId(item.sender) === currentUserUid ? "#fff" : "#666"}
+                  style={{ marginRight: 5 }}
+                />
               ) : (
-                <TouchableOpacity onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)} style={styles.downloadButton}>
-                  <Ionicons name="download-outline" size={16} color={isOwnMessage ? "#cce6ff" : "#007AFF"} />
-                  <Text style={{ color: isOwnMessage ? "#cce6ff" : "#007AFF", marginLeft: 5, fontSize: 12 }}>{translations.download}</Text>
+                <TouchableOpacity
+                  onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
+                  style={styles.downloadButton}
+                >
+                  <Ionicons
+                    name="download-outline"
+                    size={16}
+                    color={
+                      normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF"
+                    }
+                  />
+                  <Text
+                    style={{
+                      color:
+                        normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF",
+                      marginLeft: 5,
+                      fontSize: 12,
+                    }}
+                  >
+                    {translations.download}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
-          </>
-        )}
-        {item.type === "file" && (
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Ionicons name="document-text-outline" size={24} color={isOwnMessage ? "white" : "black"} />
-            <View style={{ marginLeft: 8 }}>
-              <Text style={{ color: isOwnMessage ? "white" : "black", fontWeight: "bold" }}>{item.fileName}</Text>
-              <TouchableOpacity onPress={() => Linking.openURL(item.fileUrl)}>
-                <Text style={{ color: isOwnMessage ? "#cce6ff" : "#007AFF" }}>{translations.download}</Text>
-              </TouchableOpacity>
-            </View>
+          </LinearGradient>
+        </View>
+      );
+    }
+    if (item.type === "file") {
+      return (
+        <LinearGradient
+          colors={
+            normalizeId(item.sender) === currentUserUid
+              ? ["#4c669f", "#3b5998"]
+              : ["#e0e0e0", "#cfcfcf"]
+          }
+          style={[
+            styles.messageBubble,
+            {
+              alignSelf:
+                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
+              flexDirection: "row",
+              alignItems: "center",
+            },
+          ]}
+        >
+          <Ionicons
+            name="document-text-outline"
+            size={24}
+            color={normalizeId(item.sender) === currentUserUid ? "white" : "black"}
+          />
+          <View style={{ marginLeft: 8 }}>
+            <Text
+              style={{
+                color: normalizeId(item.sender) === currentUserUid ? "white" : "black",
+                fontWeight: "bold",
+              }}
+            >
+              {item.fileName}
+            </Text>
+            <TouchableOpacity onPress={() => Linking.openURL(item.fileUrl)}>
+              <Text
+                style={{
+                  color:
+                    normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF",
+                }}
+              >
+                {translations.download}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.timestamp}>
+              {item.timestamp && typeof item.timestamp.toDate === "function"
+                ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
+                    addSuffix: true,
+                  })
+                : translations.sending}
+            </Text>
           </View>
-        )}
-        {item.type === "audio" && (
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Ionicons name="musical-notes-outline" size={24} color={isOwnMessage ? "white" : "black"} />
-            <View style={{ marginLeft: 8 }}>
-              <TouchableOpacity onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}>
-                <Text style={{ color: isOwnMessage ? "#cce6ff" : "#007AFF", fontWeight: "bold" }}>Voice note</Text>
-              </TouchableOpacity>
-            </View>
+        </LinearGradient>
+      );
+    }
+    if (item.type === "audio") {
+      return (
+        <LinearGradient
+          colors={
+            normalizeId(item.sender) === currentUserUid
+              ? ["#4c669f", "#3b5998"]
+              : ["#e0e0e0", "#cfcfcf"]
+          }
+          style={[
+            styles.messageBubble,
+            {
+              alignSelf:
+                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
+              flexDirection: "row",
+              alignItems: "center",
+            },
+          ]}
+        >
+          <Ionicons
+            name="musical-notes-outline"
+            size={24}
+            color={normalizeId(item.sender) === currentUserUid ? "white" : "black"}
+          />
+          <View style={{ marginLeft: 8 }}>
+            <TouchableOpacity
+              onPress={() => item.fileUrl && Linking.openURL(item.fileUrl)}
+            >
+              <Text
+                style={{
+                  color:
+                    normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF",
+                  fontWeight: "bold",
+                }}
+              >
+                Voice note
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.timestamp}>
+              {item.timestamp && typeof item.timestamp.toDate === "function"
+                ? formatDistanceToNow(new Date(item.timestamp.toDate()), {
+                    addSuffix: true,
+                  })
+                : translations.sending}
+            </Text>
           </View>
-        )}
-        {item.type === "text" && !item.storyPreview && <Text style={{ color: textColor }}>{item.text}</Text>}
+        </LinearGradient>
+      );
+    }
+    return (
+      <LinearGradient
+        colors={
+          normalizeId(item.sender) === currentUserUid
+            ? ["#4c669f", "#3b5998"]
+            : ["#e0e0e0", "#cfcfcf"]
+        }
+        style={[
+          styles.messageBubble,
+          {
+            alignSelf:
+              normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
+          },
+        ]}
+      >
+        <Text
+          style={{
+            color: normalizeId(item.sender) === currentUserUid ? "white" : "black",
+          }}
+        >
+          {item.text}
+        </Text>
         <Text style={styles.timestamp}>
           {(() => {
             const date = getValidDate(item.timestamp);
@@ -573,10 +773,33 @@ const ChatScreen = () => {
 
   if (!currentUserUid || !targetUserUid || !chatId) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <Text style={{ color: 'red', fontSize: 16, textAlign: 'center' }}>Unable to load chat. Please go back and try again.</Text>
+      <View
+        style={[
+          styles.container,
+          {
+            flex: 1,
+            backgroundColor: colors.background,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 24,
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text
+          style={{
+            color: colors.onSurface,
+            fontSize: 16,
+            textAlign: "center",
+            marginTop: 16,
+          }}
+        >
+          {!currentUserUid
+            ? "Sign in to view this chat."
+            : "Loading conversation…"}
+        </Text>
         <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
-          <Text style={{ color: '#007AFF', fontSize: 16 }}>Go Back</Text>
+          <Text style={{ color: "#007AFF", fontSize: 16 }}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -587,14 +810,14 @@ const ChatScreen = () => {
   const bottomPadding = keyboardHeight > 0 ? keyboardHeight + 10 : Math.max(insets.bottom, 10);
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: colors.background }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={keyboardVerticalOffset}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
-        <View style={[styles.header, { paddingTop: insets.top || 35 }]}>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top || 12 }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
@@ -613,14 +836,18 @@ const ChatScreen = () => {
           ref={flatListRef}
           style={{ flex: 1 }}
           data={messages}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) =>
+            item?.id != null ? String(item.id) : `msg-${index}`
+          }
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesList}
-          onLayout={() => { if (messages.length > 0) flatListRef.current?.scrollToEnd({ animated: false }); }}
-          keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-          getItemLayout={getItemLayout}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          onLayout={() => {
+            if (messages.length > 0) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
         />
 
         {pendingStoryReply && (
@@ -638,7 +865,16 @@ const ChatScreen = () => {
           </View>
         )}
 
-        <View style={[styles.inputContainer, { backgroundColor: colors.background, paddingBottom: bottomPadding }]}>
+        <View
+          style={[
+            styles.inputContainer,
+            {
+              backgroundColor: colors.background,
+              paddingBottom:
+                10 + (keyboardHeight > 0 ? 0 : Math.max(insets.bottom, 8)),
+            },
+          ]}
+        >
           <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
             <Ionicons name="image-outline" size={24} color="#007AFF" />
           </TouchableOpacity>
@@ -660,7 +896,7 @@ const ChatScreen = () => {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </>
+    </View>
   );
 };
 
