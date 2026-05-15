@@ -12,7 +12,6 @@ import {
   Alert,
   Platform,
   Keyboard,
-  KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../context/appstate/ChatContext";
@@ -29,7 +28,6 @@ import { useTheme } from "react-native-paper";
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
 
-// Helper function to get user initials
 const getUserInitials = (displayName) => {
   if (!displayName) return "?";
   const nameParts = displayName.split(" ");
@@ -39,7 +37,6 @@ const getUserInitials = (displayName) => {
   return displayName.substring(0, 2).toUpperCase();
 };
 
-// Avatar component with initials fallback
 const AvatarWithInitials = ({ imageUrl, name, size = 40 }) => {
   const [imageError, setImageError] = useState(false);
   const initials = getUserInitials(name);
@@ -93,7 +90,15 @@ const ChatScreen = () => {
   const group = params.group ? JSON.parse(params.group) : null;
   const { currentUser } = useAuth();
   const currentUserId = currentUser?.id || currentUser?.uid;
-  const { conversations, markMessagesAsRead, setActiveChatId, userMap, sendMessage, refreshChats } = useChat();
+  const { 
+    conversations, 
+    markMessagesAsRead, 
+    setActiveChatId, 
+    userMap, 
+    sendMessage, 
+    refreshChats,
+    deleteMessage
+  } = useChat();
   const chatId = group?.uid || "group_swazi_cooperators";
   const headerTitle = group?.displayName || "Group";
   const insets = useSafeAreaInsets();
@@ -103,8 +108,8 @@ const ChatScreen = () => {
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [allUsers, setAllUsers] = useState({}); // Store all users for fallback
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [allUsers, setAllUsers] = useState({});
   const { currentLanguage, t } = useLanguage();
 
   const [translations, setTranslations] = useState({
@@ -112,6 +117,10 @@ const ChatScreen = () => {
     typeMessage: "Type a message...",
     download: "Download",
     sending: "Sending...",
+    deleteMessage: "Delete message",
+    deleteConfirmation: "Delete this message?",
+    deleteForMe: "Delete for me",
+    cancel: "Cancel",
   });
 
   useEffect(() => {
@@ -121,6 +130,10 @@ const ChatScreen = () => {
         typeMessage: await t("Type a message..."),
         download: await t("Download"),
         sending: await t("Sending..."),
+        deleteMessage: await t("Delete message"),
+        deleteConfirmation: await t("Delete this message?"),
+        deleteForMe: await t("Delete for me"),
+        cancel: await t("Cancel"),
       });
     };
     loadTranslations();
@@ -149,21 +162,6 @@ const ChatScreen = () => {
     fetchAllUsers();
   }, []);
 
-  // Keyboard listeners
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      setIsKeyboardVisible(true);
-    });
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setIsKeyboardVisible(false);
-    });
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
-
   // Get messages safely
   const contextMessages = conversations && conversations[chatId] ? conversations[chatId] : [];
   const messages = [...contextMessages, ...localMessages];
@@ -179,23 +177,45 @@ const ChatScreen = () => {
     }
   }, [messages, chatId]);
 
-  // Auto-scroll to bottom when keyboard opens
+  // Scroll to bottom when messages change (new message added)
   useEffect(() => {
-    if (isKeyboardVisible && messages && messages.length > 0) {
+    if (messages && messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [isKeyboardVisible, messages]);
+  }, [messages.length]);
 
-  // Scroll to bottom when messages change
+  // Keyboard handling – update height and force scroll
   useEffect(() => {
-    if (messages && messages.length > 0 && !isKeyboardVisible) {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
+      const newHeight = e.endCoordinates.height;
+      setKeyboardHeight(newHeight);
+      // Wait for the layout to update with new padding, then scroll
+      setTimeout(() => {
+        if (flatListRef.current && messages.length > 0) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
+      }, 150);
+    });
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, [messages.length]);
+
+  // When keyboardHeight changes (becomes >0), scroll to bottom again (safety)
+  useEffect(() => {
+    if (keyboardHeight > 0 && messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      }, 50);
     }
-  }, [messages]);
+  }, [keyboardHeight]);
 
   const uploadFile = async (uri, fileName = `file-${Date.now()}.jpg`) => {
     const formData = new FormData();
@@ -217,10 +237,7 @@ const ChatScreen = () => {
     };
     setLocalMessages((p) => [...p, temp]);
     setMessageText("");
-    
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
 
     try {
       await sendMessage({ chatKey: chatId, type: "text", text: messageText });
@@ -254,6 +271,7 @@ const ChatScreen = () => {
       status: "sending",
     };
     setLocalMessages((p) => [...p, temp]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
     
     try {
       const fileName = uri.split("/").pop();
@@ -271,55 +289,50 @@ const ChatScreen = () => {
     }
   };
 
-  // FIXED: Get sender name from multiple sources
+  const handleDeleteMessage = (message) => {
+    if (message.sender !== currentUserId) return;
+    Alert.alert(
+      translations.deleteMessage,
+      translations.deleteConfirmation,
+      [
+        { text: translations.cancel, style: "cancel" },
+        {
+          text: translations.deleteForMe,
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (deleteMessage) await deleteMessage(chatId, message.id);
+              setLocalMessages((prev) => prev.filter((m) => m.id !== message.id));
+              if (refreshChats) await refreshChats();
+            } catch (error) {
+              console.error("Error deleting message:", error);
+              Alert.alert("Error", "Failed to delete message");
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const getSenderName = (senderId) => {
     if (senderId === currentUserId) return "You";
-    
-    // Try userMap from ChatContext first
     let sender = userMap && userMap[senderId];
-    if (sender && sender.displayName) {
-      return sender.displayName;
-    }
-    
-    // Try allUsers dictionary (fetched directly from API)
-    if (allUsers[senderId] && allUsers[senderId].displayName) {
-      return allUsers[senderId].displayName;
-    }
-    
-    // Try to find in conversations data
+    if (sender && sender.displayName) return sender.displayName;
+    if (allUsers[senderId] && allUsers[senderId].displayName) return allUsers[senderId].displayName;
     if (conversations && conversations[chatId]) {
-      const messagesList = conversations[chatId];
-      const userInMessages = messagesList.find(msg => msg.sender === senderId);
-      if (userInMessages && userInMessages.senderName) {
-        return userInMessages.senderName;
-      }
+      const userInMessages = conversations[chatId].find(msg => msg.sender === senderId);
+      if (userInMessages && userInMessages.senderName) return userInMessages.senderName;
     }
-    
-    // Last resort - use a shortened version of the user ID
-    if (senderId && senderId.length > 8) {
-      return `User ${senderId.substring(0, 6)}`;
-    }
-    
+    if (senderId && senderId.length > 8) return `User ${senderId.substring(0, 6)}`;
     return "User";
   };
 
-  // FIXED: Get sender avatar from multiple sources
   const getSenderAvatar = (senderId) => {
-    if (senderId === currentUserId) {
-      return currentUser?.profilePic || placeholderAvatar;
-    }
-    
-    // Try userMap
+    if (senderId === currentUserId) return currentUser?.profilePic || placeholderAvatar;
     let sender = userMap && userMap[senderId];
-    if (sender && sender.profilePic) {
-      return sender.profilePic;
-    }
-    
-    // Try allUsers
-    if (allUsers[senderId] && allUsers[senderId].profilePic) {
-      return allUsers[senderId].profilePic;
-    }
-    
+    if (sender && sender.profilePic) return sender.profilePic;
+    if (allUsers[senderId] && allUsers[senderId].profilePic) return allUsers[senderId].profilePic;
     return placeholderAvatar;
   };
 
@@ -331,7 +344,6 @@ const ChatScreen = () => {
     
     return (
       <View style={styles.messageWrapper}>
-        {/* Sender Name - Always show */}
         <View style={[styles.senderNameContainer, { justifyContent: mine ? "flex-end" : "flex-start" }]}>
           <Text style={[styles.senderName, { color: colors.primary }]}>
             {senderName}
@@ -341,25 +353,34 @@ const ChatScreen = () => {
         <View style={[styles.groupMessageContainer, { flexDirection: mine ? "row-reverse" : "row", alignItems: "flex-end" }]}>
           <AvatarWithInitials imageUrl={senderPic} name={senderName} size={32} />
           
-          <LinearGradient colors={gradient} style={[styles.messageBubble, mine ? styles.myMessageBubble : styles.otherMessageBubble]}>
-            {item.type === "image" && item.fileUrl ? (
-              <TouchableOpacity onPress={() => Linking.openURL(item.fileUrl)} activeOpacity={0.8}>
-                <Image source={{ uri: item.fileUrl }} style={styles.imageMessage} resizeMode="cover" />
-                <Text style={styles.downloadText}>{translations.download}</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={{ color: "white", fontSize: 15 }}>{item.text}</Text>
-            )}
-            <Text style={styles.timestamp}>
-              {item.timestamp && typeof item.timestamp.toDate === "function"
-                ? formatDistanceToNow(new Date(item.timestamp.toDate()), { addSuffix: true })
-                : translations.sending}
-            </Text>
-          </LinearGradient>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onLongPress={() => mine && handleDeleteMessage(item)}
+            delayLongPress={300}
+          >
+            <LinearGradient colors={gradient} style={[styles.messageBubble, mine ? styles.myMessageBubble : styles.otherMessageBubble]}>
+              {item.type === "image" && item.fileUrl ? (
+                <TouchableOpacity onPress={() => Linking.openURL(item.fileUrl)} activeOpacity={0.8}>
+                  <Image source={{ uri: item.fileUrl }} style={styles.imageMessage} resizeMode="cover" />
+                  <Text style={styles.downloadText}>{translations.download}</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={{ color: "white", fontSize: 15 }}>{item.text}</Text>
+              )}
+              <Text style={styles.timestamp}>
+                {item.timestamp && typeof item.timestamp.toDate === "function"
+                  ? formatDistanceToNow(new Date(item.timestamp.toDate()), { addSuffix: true })
+                  : translations.sending}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
       </View>
     );
   };
+
+  // Dynamic bottom padding: when keyboard is open, add its height + a small gap
+  const dynamicBottomPadding = keyboardHeight > 0 ? keyboardHeight + 15 : 20 + Math.max(insets.bottom, 8);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -379,9 +400,13 @@ const ChatScreen = () => {
         data={messages}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderMessage}
-        contentContainerStyle={[styles.messagesList, { paddingBottom: 120 + Math.max(insets.bottom, 8) }]}
+        contentContainerStyle={[
+          styles.messagesList,
+          { paddingBottom: dynamicBottomPadding }
+        ]}
         onContentSizeChange={() => {
-          if (messages && messages.length > 0) {
+          // Only auto-scroll when keyboard is NOT open, because keyboard scroll is handled separately
+          if (messages && messages.length > 0 && !keyboardHeight) {
             flatListRef.current?.scrollToEnd({ animated: false });
           }
         }}
@@ -393,7 +418,7 @@ const ChatScreen = () => {
         }
       />
 
-      {/* Uploading Indicator */}
+      {/* Uploading Overlay */}
       {uploading && (
         <View style={styles.uploadingOverlay}>
           <ActivityIndicator size="large" color="#007AFF" />
@@ -401,45 +426,43 @@ const ChatScreen = () => {
         </View>
       )}
 
-      {/* Input Container */}
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : Math.max(insets.bottom, 10)}
-      >
-        <View style={[
-          styles.inputContainer, 
-          { 
-            backgroundColor: colors.background, 
-            borderTopColor: colors.outline,
-            position: "absolute",
-            bottom: Math.max(insets.bottom, 8),
-            left: 0,
-            right: 0,
-            elevation: 5,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-          }
-        ]}>
-          <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
-            <Ionicons name="image-outline" size={24} color="#007AFF" />
-          </TouchableOpacity>
+      {/* Input Container – no KeyboardAvoidingView, relies on dynamic padding */}
+      <View style={[
+        styles.inputContainer,
+        {
+          backgroundColor: colors.background,
+          borderTopColor: colors.outline,
+          paddingBottom: Platform.OS === "ios" ? 8 : Math.max(insets.bottom, 8),
+        }
+      ]}>
+        <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
+          <Ionicons name="image-outline" size={24} color="#007AFF" />
+        </TouchableOpacity>
 
-          <TextInput
-            placeholder={translations.typeMessage}
-            value={messageText}
-            onChangeText={setMessageText}
-            style={[styles.input, { borderColor: colors.outline, color: colors.onSurface, backgroundColor: colors.surface }]}
-            placeholderTextColor={colors.onSurfaceVariant}
-            multiline
-          />
-          
-          <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
-            <Ionicons name="send" size={24} color="#007AFF" />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+        <TextInput
+          placeholder={translations.typeMessage}
+          value={messageText}
+          onChangeText={setMessageText}
+          onFocus={() => {
+            // Additional scroll when input gains focus (ensures latest message is visible)
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150);
+          }}
+          style={[
+            styles.input,
+            {
+              borderColor: colors.outline,
+              color: colors.onSurface,
+              backgroundColor: colors.surface
+            }
+          ]}
+          placeholderTextColor={colors.onSurfaceVariant}
+          multiline
+        />
+        
+        <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
+          <Ionicons name="send" size={24} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -469,7 +492,6 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: 10,
     flexGrow: 1,
   },
   messageWrapper: {
@@ -533,6 +555,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 10,
+    borderTopWidth: 1,
   },
   attachmentButton: {
     marginRight: 10,

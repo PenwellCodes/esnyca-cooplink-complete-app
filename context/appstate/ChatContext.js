@@ -401,7 +401,7 @@ export const ChatProvider = ({ children }) => {
     return () => clearInterval(intervalId);
   }, [currentUserId, refreshChatState]);
 
-  // FIXED: Mark messages as read and refresh unread counts
+  // Mark messages as read and refresh unread counts
   const markMessagesAsRead = async (chatId, messages) => {
     try {
       const unreadMessages = messages.filter(
@@ -432,7 +432,60 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
-  // NEW: Function to manually refresh chats
+  // NEW: Delete a message
+  const deleteMessage = async (chatKey, messageId) => {
+    try {
+      // Resolve actual chat ID from chatIdMap or conversations
+      let actualChatId = chatIdMap[chatKey];
+      if (!actualChatId) {
+        const existingMessages = conversations[chatKey] || [];
+        const fallbackFromMessages = existingMessages[0]?._chatId;
+        if (fallbackFromMessages) {
+          actualChatId = fallbackFromMessages;
+        } else {
+          throw new Error(`Chat ID not found for key: ${chatKey}`);
+        }
+      }
+
+      // Send DELETE request to backend
+      await apiRequest(`/chats/${actualChatId}/messages/${messageId}`, {
+        method: "DELETE",
+        timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+      });
+
+      // Update local conversations state by removing the message
+      setConversations((prev) => {
+        const currentMessages = prev[chatKey] || [];
+        const updatedMessages = currentMessages.filter((m) => String(m.id) !== String(messageId));
+        if (updatedMessages.length === currentMessages.length) return prev; // no change
+        return {
+          ...prev,
+          [chatKey]: updatedMessages,
+        };
+      });
+
+      // Update lastMessages if necessary (if the deleted message was the last)
+      setLastMessages((prev) => {
+        const updatedMessages = conversations[chatKey]?.filter((m) => String(m.id) !== String(messageId)) || [];
+        const newLastTimestamp = updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1]?.timestamp : null;
+        if (newLastTimestamp) {
+          return { ...prev, [chatKey]: newLastTimestamp };
+        } else {
+          const newPrev = { ...prev };
+          delete newPrev[chatKey];
+          return newPrev;
+        }
+      });
+
+      // Optionally refresh from server to be fully consistent
+      refreshChatState().catch((err) => console.log("Refresh after delete warning:", err));
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      throw error;
+    }
+  };
+
+  // Function to manually refresh chats
   const refreshChats = useCallback(async () => {
     if (!currentUserId) return false;
     try {
@@ -444,7 +497,7 @@ export const ChatProvider = ({ children }) => {
     }
   }, [currentUserId, refreshChatState]);
 
-  // NEW: Function to get total unread count
+  // Function to get total unread count
   const getTotalUnreadCount = useCallback(() => {
     let total = 0;
     Object.values(unreadCounts).forEach(count => {
@@ -453,7 +506,7 @@ export const ChatProvider = ({ children }) => {
     return total;
   }, [unreadCounts]);
 
-  // NEW: Force refresh unread counts directly from conversations
+  // Force refresh unread counts directly from conversations
   const forceRefreshUnreadCounts = useCallback(async () => {
     if (!currentUserId) return {};
     
@@ -674,6 +727,7 @@ export const ChatProvider = ({ children }) => {
         refreshChats,
         getTotalUnreadCount,
         forceRefreshUnreadCounts,
+        deleteMessage,          // <-- Added deleteMessage function
       }}
     >
       {children}

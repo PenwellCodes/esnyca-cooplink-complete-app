@@ -37,8 +37,7 @@ const AddStoryScreen = () => {
   const [translations, setTranslations] = useState({
     addStory: "Add Story",
     permissionRequired: "Permission required",
-    permissionBody:
-      "We need media library permissions to pick an image.",
+    permissionBody: "We need media library permissions to pick an image.",
     noImageSelected: "No image selected",
     selectImageBody: "Please select an image for your story.",
     changeImage: "Change Image",
@@ -60,9 +59,7 @@ const AddStoryScreen = () => {
           "We need media library permissions to pick an image."
         ),
         noImageSelected: await t("No image selected"),
-        selectImageBody: await t(
-          "Please select an image for your story."
-        ),
+        selectImageBody: await t("Please select an image for your story."),
         changeImage: await t("Change Image"),
         pickImage: await t("Pick an Image"),
         addCaption: await t("Add a caption..."),
@@ -70,9 +67,7 @@ const AddStoryScreen = () => {
         success: await t("Success"),
         storyPostedSuccessfully: await t("Story posted successfully!"),
         error: await t("Error"),
-        failedToPostStory: await t(
-          "Failed to post story. Please try again."
-        ),
+        failedToPostStory: await t("Failed to post story. Please try again."),
       });
     };
     loadTranslations();
@@ -99,6 +94,33 @@ const AddStoryScreen = () => {
     });
     if (!result.canceled) {
       setImageURI(result.assets[0].uri);
+    }
+  };
+
+  // ✅ FIXED: Call postStory with the correct object parameter
+  const handlePostStory = async () => {
+    if (!imageURI) {
+      Alert.alert(translations.noImageSelected, translations.selectImageBody);
+      return;
+    }
+    if (!currentUser?.uid) {
+      Alert.alert(translations.error, "User not logged in");
+      return;
+    }
+    setUploading(true);
+    try {
+      await postStory({
+        imageURI: imageURI,
+        caption: caption,
+        userId: currentUser.uid,
+      });
+      Alert.alert(translations.success, translations.storyPostedSuccessfully);
+      router.back();
+    } catch (error) {
+      console.error("Error posting story:", error);
+      Alert.alert(translations.error, translations.failedToPostStory);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -222,7 +244,3 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
-
-
-
-
