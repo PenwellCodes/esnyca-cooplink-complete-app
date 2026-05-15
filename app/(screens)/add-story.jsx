@@ -101,33 +101,6 @@ const AddStoryScreen = () => {
     }
   };
 
-  // ✅ FIXED: Call postStory with the correct object parameter
-  const handlePostStory = async () => {
-    if (!imageURI) {
-      Alert.alert(translations.noImageSelected, translations.selectImageBody);
-      return;
-    }
-    if (!currentUser?.uid) {
-      Alert.alert(translations.error, "User not logged in");
-      return;
-    }
-    setUploading(true);
-    try {
-      await postStory({
-        imageURI: imageURI,
-        caption: caption,
-        userId: currentUser.uid,
-      });
-      Alert.alert(translations.success, translations.storyPostedSuccessfully);
-      router.back();
-    } catch (error) {
-      console.error("Error posting story:", error);
-      Alert.alert(translations.error, translations.failedToPostStory);
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleInputLayout = (key) => (event) => {
     const { y } = event.nativeEvent.layout;
     setInputPositions((prev) => ({ ...prev, [key]: y }));

@@ -60,6 +60,9 @@
   },
   "expo": {
     "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      },
       "reactNativeDirectoryCheck": {
         "exclude": [
           "expo-audio",

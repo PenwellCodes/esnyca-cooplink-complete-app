@@ -110,7 +110,6 @@ const ChatScreen = () => {
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const flatListRef = useRef(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [allUsers, setAllUsers] = useState({});
   const { currentLanguage, t } = useLanguage();
 
@@ -188,36 +187,13 @@ const ChatScreen = () => {
     }
   }, [messages.length]);
 
-  // Keyboard handling – update height and force scroll
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
-      const newHeight = e.endCoordinates.height;
-      setKeyboardHeight(newHeight);
-      // Wait for the layout to update with new padding, then scroll
-      setTimeout(() => {
-        if (flatListRef.current && messages.length > 0) {
-          flatListRef.current.scrollToEnd({ animated: true });
-        }
-      }, 150);
-    });
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, [messages.length]);
-
-  // When keyboardHeight changes (becomes >0), scroll to bottom again (safety)
   useEffect(() => {
     if (keyboardHeight > 0 && messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 50);
+      }, 150);
     }
-  }, [keyboardHeight]);
+  }, [keyboardHeight, messages.length]);
 
   const uploadFile = async (uri, fileName = `file-${Date.now()}.jpg`) => {
     const formData = new FormData();

@@ -83,6 +83,24 @@ const HeaderAvatar = ({ imageUrl, name, size = 40 }) => {
 const normalizeId = (value) =>
   value == null ? "" : String(value).trim().toLowerCase();
 
+/** Normalize chat timestamps (Firestore-style, Date, or ISO string). */
+const getValidDate = (timestamp) => {
+  if (timestamp == null) return null;
+  try {
+    if (typeof timestamp.toDate === "function") {
+      const d = timestamp.toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    }
+    if (timestamp instanceof Date) {
+      return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+    }
+    const d = new Date(timestamp);
+    return Number.isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+};
+
 const buildDirectKey = (a, b) => {
   const aa = normalizeId(a);
   const bb = normalizeId(b);
@@ -178,7 +196,6 @@ const ChatScreen = () => {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
   const { currentLanguage, t } = useLanguage();
-  const keyboardHeight = useKeyboardHeight(); // ✅ real keyboard height
 
   const [translations, setTranslations] = useState({
     permissionRequiredTitle: "Permission Required",
@@ -758,7 +775,7 @@ const ChatScreen = () => {
             return date ? formatDistanceToNow(date, { addSuffix: true }) : translations.sending;
           })()}
         </Text>
-      </View>
+      </LinearGradient>
     );
 
     if (isOwnMessage) {
