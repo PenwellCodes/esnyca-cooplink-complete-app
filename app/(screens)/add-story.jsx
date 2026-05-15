@@ -29,6 +29,7 @@ const AddStoryScreen = () => {
   const { currentLanguage, t } = useLanguage();
 
   const [imageURI, setImageURI] = useState(null);
+  const [imageAspectRatio, setImageAspectRatio] = useState(4 / 3);
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [inputPositions, setInputPositions] = useState({});
@@ -91,14 +92,17 @@ const AddStoryScreen = () => {
   }, []);
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false,
       quality: 1,
     });
-    if (!result.canceled) {
-      setImageURI(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setImageURI(asset.uri);
+      if (asset.width && asset.height) {
+        setImageAspectRatio(asset.width / asset.height);
+      }
     }
   };
 
@@ -113,6 +117,42 @@ const AddStoryScreen = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
     }, 100);
+  };
+
+  const handlePostStory = async () => {
+    if (!imageURI) {
+      Alert.alert(
+        translations.noImageSelected,
+        translations.selectImageBody
+      );
+      return;
+    }
+
+    const userId = currentUser?.uid || currentUser?.id;
+    if (!userId) {
+      Alert.alert(translations.error, translations.failedToPostStory);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await postStory({
+        imageURI,
+        caption: caption.trim(),
+        userId,
+      });
+      Alert.alert(translations.success, translations.storyPostedSuccessfully, [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } catch (error) {
+      console.error("Error posting story:", error);
+      Alert.alert(
+        translations.error,
+        error?.message || translations.failedToPostStory
+      );
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -143,7 +183,13 @@ const AddStoryScreen = () => {
             {imageURI ? translations.changeImage : translations.pickImage}
           </Text>
         </TouchableOpacity>
-        {imageURI && <Image source={{ uri: imageURI }} style={styles.previewImage} />}
+        {imageURI ? (
+          <Image
+            source={{ uri: imageURI }}
+            style={[styles.previewImage, { aspectRatio: imageAspectRatio }]}
+            resizeMode="contain"
+          />
+        ) : null}
         <View onLayout={handleInputLayout("caption")}>
           <TextInput
             style={styles.input}
@@ -197,9 +243,10 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: "100%",
-    height: 200,
+    maxHeight: 480,
     borderRadius: 8,
     marginBottom: 16,
+    backgroundColor: "#f3f4f6",
   },
   input: {
     borderWidth: 1,

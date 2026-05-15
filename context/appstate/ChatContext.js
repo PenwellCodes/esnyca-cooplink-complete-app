@@ -101,12 +101,26 @@ function pickNewIncomingToast(prev, next, userUid, activeChatId) {
   for (const chatKey of Object.keys(next)) {
     const msgs = next[chatKey];
     if (!msgs?.length) continue;
+
+    const unreadFromOthers = msgs.filter(
+      (m) => !m.read && normalizeId(m.sender) !== userUid
+    ).length;
+    if (unreadFromOthers === 0) continue;
+
     const latest = msgs[msgs.length - 1];
     const prevMsgs = prev[chatKey];
     const prevLatest = prevMsgs?.length ? prevMsgs[prevMsgs.length - 1] : null;
 
-    if (prevLatest && latest.id === prevLatest.id) continue;
-    if (latest.sender === userUid) continue;
+    if (prevLatest && String(latest.id) === String(prevLatest.id)) continue;
+
+    const senderNorm = normalizeId(latest.sender);
+    if (senderNorm === userUid) continue;
+
+    if (chatKey !== GLOBAL_GROUP_CHAT_KEY) {
+      const recv = normalizeId(latest.receiver);
+      if (recv && recv !== userUid) continue;
+    }
+
     if (latest.read) continue;
     if (activeChatId === chatKey) continue;
 
@@ -136,6 +150,9 @@ export const ChatProvider = ({ children }) => {
   const [chatIdMap, setChatIdMap] = useState({});
   const activeChatIdRef = useRef(null);
   const refreshPromiseRef = useRef(null);
+  const currentUserIdRef = useRef(currentUserId);
+  const prevChatUserIdRef = useRef(null);
+  currentUserIdRef.current = currentUserId;
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -297,9 +314,14 @@ export const ChatProvider = ({ children }) => {
               delete nextLastMessages[chatKey];
             }
             nextUnread[chatKey] = messages.filter(
-              (msg) => !msg.read && msg.sender !== userUid
+              (msg) => !msg.read && normalizeId(msg.sender) !== userUid
             ).length;
           }
+        }
+
+        // Drop stale results if the logged-in user changed mid-request (logout / switch account)
+        if (normalizeId(String(currentUserIdRef.current ?? "")) !== userUid) {
+          return;
         }
 
         const noChatsResolved =
@@ -357,9 +379,11 @@ export const ChatProvider = ({ children }) => {
       } catch (error) {
         console.log("Chat refresh failed:", error?.message || error);
       } finally {
-        setLoadingChats(false);
-        if (!isChatReady) {
-          setIsChatReady(true);
+        if (normalizeId(String(currentUserIdRef.current ?? "")) === userUid) {
+          setLoadingChats(false);
+          if (!isChatReady) {
+            setIsChatReady(true);
+          }
         }
         refreshPromiseRef.current = null;
       }
@@ -370,6 +394,7 @@ export const ChatProvider = ({ children }) => {
 
   useEffect(() => {
     if (!currentUserId) {
+      refreshPromiseRef.current = null;
       setChatList([]);
       setConversations({});
       setLastMessages({});
@@ -377,8 +402,26 @@ export const ChatProvider = ({ children }) => {
       setChatIdMap({});
       setLoadingChats(false);
       setIsChatReady(false);
+      prevChatUserIdRef.current = null;
       return;
     }
+
+    const prevId = prevChatUserIdRef.current;
+    if (
+      prevId != null &&
+      normalizeId(prevId) !== normalizeId(currentUserId)
+    ) {
+      refreshPromiseRef.current = null;
+      setChatList([]);
+      setConversations({});
+      setLastMessages({});
+      setUnreadCounts({});
+      setChatIdMap({});
+      setIsChatReady(false);
+    }
+    prevChatUserIdRef.current = currentUserId;
+
+    refreshPromiseRef.current = null;
 
     refreshChatState().catch((error) => {
       console.log("Chat refresh warning:", error?.message || error);
@@ -453,39 +496,14 @@ export const ChatProvider = ({ children }) => {
     return total;
   }, [unreadCounts]);
 
-  // NEW: Force refresh unread counts directly from conversations
   const forceRefreshUnreadCounts = useCallback(async () => {
-    if (!currentUserId) return {};
-    
+    if (!currentUserId) return;
     try {
-      // Force refresh the entire chat state first
       await refreshChatState();
-      
-      // Calculate unread counts directly from conversations
-      const userUid = normalizeId(currentUserId);
-      const newUnreadCounts = {};
-      
-      Object.keys(conversations).forEach(chatKey => {
-        const chatMessages = conversations[chatKey] || [];
-        const unread = chatMessages.filter(msg => {
-          const isReceiver = normalizeId(msg.receiver) === userUid;
-          const isNotRead = !msg.read && msg.status !== 'read';
-          const isNotFromCurrentUser = normalizeId(msg.sender) !== userUid;
-          return isReceiver && isNotRead && isNotFromCurrentUser;
-        }).length;
-        
-        if (unread > 0) {
-          newUnreadCounts[chatKey] = unread;
-        }
-      });
-      
-      setUnreadCounts(newUnreadCounts);
-      return newUnreadCounts;
     } catch (error) {
       console.error("Error forcing refresh unread counts:", error);
-      return {};
     }
-  }, [currentUserId, conversations, refreshChatState]);
+  }, [currentUserId, refreshChatState]);
 
   const ensureDirectChat = async (otherUserId) => {
     const chatKey = buildDirectKey(currentUserId, otherUserId);

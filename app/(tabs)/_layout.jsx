@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Tabs, usePathname, useRouter, useFocusEffect } from "expo-router";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
@@ -24,8 +24,8 @@ const TabIcon = ({ icon, color, label, isActive }) => (
 );
 
 function ChatTabIcon({ color, label, isActive, unreadTotal }) {
-  const display =
-    unreadTotal > 99 ? "99+" : unreadTotal > 0 ? String(unreadTotal) : "";
+  const n = Number(unreadTotal) || 0;
+  const display = n > 99 ? "99+" : n > 0 ? String(n) : "";
   return (
     <View style={styles.chatTabWrap}>
       <View style={styles.chatIconWrap}>
@@ -34,7 +34,7 @@ function ChatTabIcon({ color, label, isActive, unreadTotal }) {
           size={24}
           color={color}
         />
-        {unreadTotal > 0 ? (
+        {n > 0 ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{display}</Text>
           </View>
@@ -56,44 +56,18 @@ const TabLayout = () => {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const { currentUser } = useAuth();
-  const { 
-    conversations, 
-    refreshChats, 
+  const {
+    refreshChats,
     forceRefreshUnreadCounts,
-    unreadCounts,
-    loadingChats,
-    isChatReady,
     getTotalUnreadCount,
   } = useChat();
   const router = useRouter();
   const { currentLanguage, t } = useLanguage();
-  const [totalUnreadChats, setTotalUnreadChats] = useState(null);
-
-  const calculateTotalUnread = useCallback(() => {
+  const chatUserUid = currentUser?.uid ?? currentUser?.id ?? null;
+  const totalUnreadChats = useMemo(() => {
+    if (!chatUserUid) return 0;
     return getTotalUnreadCount();
-  }, [getTotalUnreadCount]);
-
-  useEffect(() => {
-    if (!currentUser) {
-      setTotalUnreadChats(0);
-      return;
-    }
-
-    if (loadingChats || !isChatReady) {
-      setTotalUnreadChats(null);
-      return;
-    }
-
-    const total = calculateTotalUnread();
-    setTotalUnreadChats(total);
-  }, [currentUser, loadingChats, isChatReady, calculateTotalUnread]);
-
-  useEffect(() => {
-    const total = calculateTotalUnread();
-    if (!loadingChats && isChatReady) {
-      setTotalUnreadChats(total);
-    }
-  }, [unreadCounts, conversations, loadingChats, isChatReady, calculateTotalUnread]);
+  }, [chatUserUid, getTotalUnreadCount]);
 
   // Background unread refresh for the nav badge
   useEffect(() => {
@@ -110,37 +84,29 @@ const TabLayout = () => {
     return () => clearInterval(intervalId);
   }, [currentUser, forceRefreshUnreadCounts]);
 
-  // Refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       const refresh = async () => {
-        if (refreshChats) {
-          await refreshChats();
-          if (forceRefreshUnreadCounts) {
-            await forceRefreshUnreadCounts();
-          }
-          const total = calculateTotalUnread();
-          setTotalUnreadChats(total);
-        }
-      };
-      refresh();
-    }, [refreshChats, forceRefreshUnreadCounts, calculateTotalUnread])
-  );
-
-  // Refresh on mount
-  useEffect(() => {
-    const refresh = async () => {
-      if (refreshChats) {
+        if (!refreshChats) return;
         await refreshChats();
         if (forceRefreshUnreadCounts) {
           await forceRefreshUnreadCounts();
         }
-        const total = calculateTotalUnread();
-        setTotalUnreadChats(total);
+      };
+      refresh();
+    }, [refreshChats, forceRefreshUnreadCounts])
+  );
+
+  useEffect(() => {
+    const refresh = async () => {
+      if (!refreshChats) return;
+      await refreshChats();
+      if (forceRefreshUnreadCounts) {
+        await forceRefreshUnreadCounts();
       }
     };
     refresh();
-  }, []); // Empty dependency array for mount only
+  }, []);
 
   const [tabLabels, setTabLabels] = useState({
     home: "Home",

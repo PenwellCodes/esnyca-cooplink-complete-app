@@ -23,11 +23,11 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../../context/appstate/LanguageContext";
 import { apiRequest } from "../../../utils/api";
 import { useNotifications } from "../../../context/appstate/NotificationsContext";
+import { useKeyboardHeight } from "../../../hooks/useKeyboardHeight";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -103,14 +103,48 @@ const parseStoryPreviewParam = (rawValue) => {
   }
 };
 
+/** Expo Router may pass params as string or string[] */
+const resolveParam = (value) => {
+  if (value == null) return "";
+  if (Array.isArray(value)) return String(value[0] ?? "").trim();
+  return String(value).trim();
+};
+
+const parseUserParam = (rawValue) => {
+  const raw = resolveParam(rawValue);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const uid = normalizeId(parsed.uid || parsed.id || parsed.Id);
+    if (!uid) return null;
+    return {
+      uid,
+      displayName:
+        parsed.displayName || parsed.DisplayName || parsed.name || "Chat",
+      profilePic:
+        parsed.profilePic ||
+        parsed.profilePicUrl ||
+        parsed.ProfilePicUrl ||
+        null,
+      role: parsed.role || parsed.Role || "",
+    };
+  } catch {
+    return null;
+  }
+};
+
 const ChatScreen = () => {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const userId = params.userId || params.id;
-  const predefinedMessage = params.predefinedMessage;
+  const routeUserId = resolveParam(params.userId || params.id);
+  const predefinedMessage = resolveParam(params.predefinedMessage);
   const { currentUser } = useAuth();
   const { userMap } = useChat();
-  const user = userMap ? userMap[normalizeId(userId)] : null;
+  const userFromParams = parseUserParam(params.user);
+  const user =
+    (userMap && routeUserId ? userMap[normalizeId(routeUserId)] : null) ||
+    userFromParams;
   const { 
     conversations, 
     markMessagesAsRead, 
@@ -120,8 +154,9 @@ const ChatScreen = () => {
     forceRefreshUnreadCounts
   } = useChat();
   const { setUserInChat } = useNotifications();
-  const currentUserUid = currentUser?.uid || null;
-  const targetUserUid = user?.uid || userId;
+  const currentUserUid = normalizeId(currentUser?.uid || currentUser?.id) || null;
+  const targetUserUid =
+    normalizeId(user?.uid || user?.id || routeUserId) || null;
   const chatId = buildDirectKey(currentUserUid, targetUserUid);
 
   // State for text messages and local messages
@@ -146,6 +181,7 @@ const ChatScreen = () => {
   const messages = [...contextMessages, ...dedupedLocalMessages];
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { currentLanguage, t } = useLanguage();
 
   const [translations, setTranslations] = useState({
@@ -508,7 +544,7 @@ const ChatScreen = () => {
             styles.messageBubble,
             {
               alignSelf:
-                item.sender === currentUser?.uid ? "flex-end" : "flex-start",
+                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
             },
           ]}
         >
@@ -527,7 +563,7 @@ const ChatScreen = () => {
           )}
           <Text
             style={{
-              color: item.sender === currentUser?.uid ? "white" : "black",
+              color: normalizeId(item.sender) === currentUserUid ? "white" : "black",
             }}
           >
             {item.text}
@@ -547,14 +583,14 @@ const ChatScreen = () => {
         <View
           style={{
             alignSelf:
-              item.sender === currentUser?.uid ? "flex-end" : "flex-start",
+              normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
             marginVertical: 5,
             marginHorizontal: 10,
           }}
         >
           <LinearGradient
             colors={
-              item.sender === currentUser?.uid
+              normalizeId(item.sender) === currentUserUid
                 ? ["#4c669f", "#3b5998"]
                 : ["#e0e0e0", "#cfcfcf"]
             }
@@ -574,7 +610,7 @@ const ChatScreen = () => {
               {item.status === "uploading" ? (
                 <ActivityIndicator
                   size="small"
-                  color={item.sender === currentUser?.uid ? "#fff" : "#666"}
+                  color={normalizeId(item.sender) === currentUserUid ? "#fff" : "#666"}
                   style={{ marginRight: 5 }}
                 />
               ) : (
@@ -586,13 +622,13 @@ const ChatScreen = () => {
                     name="download-outline"
                     size={16}
                     color={
-                      item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF"
+                      normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF"
                     }
                   />
                   <Text
                     style={{
                       color:
-                        item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF",
+                        normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF",
                       marginLeft: 5,
                       fontSize: 12,
                     }}
@@ -617,7 +653,7 @@ const ChatScreen = () => {
       return (
         <LinearGradient
           colors={
-            item.sender === currentUser?.uid
+            normalizeId(item.sender) === currentUserUid
               ? ["#4c669f", "#3b5998"]
               : ["#e0e0e0", "#cfcfcf"]
           }
@@ -625,7 +661,7 @@ const ChatScreen = () => {
             styles.messageBubble,
             {
               alignSelf:
-                item.sender === currentUser?.uid ? "flex-end" : "flex-start",
+                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
               flexDirection: "row",
               alignItems: "center",
             },
@@ -634,12 +670,12 @@ const ChatScreen = () => {
           <Ionicons
             name="document-text-outline"
             size={24}
-            color={item.sender === currentUser?.uid ? "white" : "black"}
+            color={normalizeId(item.sender) === currentUserUid ? "white" : "black"}
           />
           <View style={{ marginLeft: 8 }}>
             <Text
               style={{
-                color: item.sender === currentUser?.uid ? "white" : "black",
+                color: normalizeId(item.sender) === currentUserUid ? "white" : "black",
                 fontWeight: "bold",
               }}
             >
@@ -649,7 +685,7 @@ const ChatScreen = () => {
               <Text
                 style={{
                   color:
-                    item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF",
+                    normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF",
                 }}
               >
                 {translations.download}
@@ -670,7 +706,7 @@ const ChatScreen = () => {
       return (
         <LinearGradient
           colors={
-            item.sender === currentUser?.uid
+            normalizeId(item.sender) === currentUserUid
               ? ["#4c669f", "#3b5998"]
               : ["#e0e0e0", "#cfcfcf"]
           }
@@ -678,7 +714,7 @@ const ChatScreen = () => {
             styles.messageBubble,
             {
               alignSelf:
-                item.sender === currentUser?.uid ? "flex-end" : "flex-start",
+                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
               flexDirection: "row",
               alignItems: "center",
             },
@@ -687,7 +723,7 @@ const ChatScreen = () => {
           <Ionicons
             name="musical-notes-outline"
             size={24}
-            color={item.sender === currentUser?.uid ? "white" : "black"}
+            color={normalizeId(item.sender) === currentUserUid ? "white" : "black"}
           />
           <View style={{ marginLeft: 8 }}>
             <TouchableOpacity
@@ -696,7 +732,7 @@ const ChatScreen = () => {
               <Text
                 style={{
                   color:
-                    item.sender === currentUser?.uid ? "#cce6ff" : "#007AFF",
+                    normalizeId(item.sender) === currentUserUid ? "#cce6ff" : "#007AFF",
                   fontWeight: "bold",
                 }}
               >
@@ -717,7 +753,7 @@ const ChatScreen = () => {
     return (
       <LinearGradient
         colors={
-          item.sender === currentUser?.uid
+          normalizeId(item.sender) === currentUserUid
             ? ["#4c669f", "#3b5998"]
             : ["#e0e0e0", "#cfcfcf"]
         }
@@ -725,13 +761,13 @@ const ChatScreen = () => {
           styles.messageBubble,
           {
             alignSelf:
-              item.sender === currentUser?.uid ? "flex-end" : "flex-start",
+              normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
           },
         ]}
       >
         <Text
           style={{
-            color: item.sender === currentUser?.uid ? "white" : "black",
+            color: normalizeId(item.sender) === currentUserUid ? "white" : "black",
           }}
         >
           {item.text}
@@ -749,31 +785,47 @@ const ChatScreen = () => {
 
   if (!currentUserUid || !targetUserUid || !chatId) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <Text style={{ color: 'red', fontSize: 16, textAlign: 'center' }}>
-          Unable to load chat. Please go back and try again.
+      <View
+        style={[
+          styles.container,
+          {
+            flex: 1,
+            backgroundColor: colors.background,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 24,
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text
+          style={{
+            color: colors.onSurface,
+            fontSize: 16,
+            textAlign: "center",
+            marginTop: 16,
+          }}
+        >
+          {!currentUserUid
+            ? "Sign in to view this chat."
+            : "Loading conversation…"}
         </Text>
         <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
-          <Text style={{ color: '#007AFF', fontSize: 16 }}>Go Back</Text>
+          <Text style={{ color: "#007AFF", fontSize: 16 }}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
-      <KeyboardAvoidingView 
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: colors.background }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top || 35 }]}>
+        <View style={[styles.header, { paddingTop: insets.top || 12 }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
@@ -796,9 +848,13 @@ const ChatScreen = () => {
           ref={flatListRef}
           style={{ flex: 1 }}
           data={messages}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) =>
+            item?.id != null ? String(item.id) : `msg-${index}`
+          }
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesList}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           onLayout={() => {
             if (messages.length > 0) {
               flatListRef.current?.scrollToEnd({ animated: false });
@@ -828,7 +884,16 @@ const ChatScreen = () => {
           </View>
         )}
 
-        <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
+        <View
+          style={[
+            styles.inputContainer,
+            {
+              backgroundColor: colors.background,
+              paddingBottom:
+                10 + (keyboardHeight > 0 ? 0 : Math.max(insets.bottom, 8)),
+            },
+          ]}
+        >
           <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
             <Ionicons name="image-outline" size={24} color="#007AFF" />
           </TouchableOpacity>
@@ -853,7 +918,7 @@ const ChatScreen = () => {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </>
+    </View>
   );
 };
 

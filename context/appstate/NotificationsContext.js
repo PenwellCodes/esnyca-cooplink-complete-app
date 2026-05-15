@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
-import { Platform, LogBox, AppState, Vibration } from "react-native";
+import { Platform, LogBox, AppState, Vibration, Alert } from "react-native";
 import { useAuth } from "./AuthContext";
 import { apiRequest } from "../../utils/api";
 import { router } from "expo-router";
@@ -10,20 +10,37 @@ import Toast from "react-native-toast-message";
 // Ignore Expo Go warning
 LogBox.ignoreLogs(['expo-notifications:']);
 
+/** Synced from NotificationsProvider — used by module-level notification handler */
+const foregroundNotificationUserRef = { uid: null };
+
 const NotificationsContext = createContext({});
+
+function normalizeUid(value) {
+  return value == null ? "" : String(value).trim().toLowerCase();
+}
 
 // Check if running in Expo Go
 const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
 
-// Configure notification handler for foreground messages (WhatsApp style)
+// Configure notification handler — suppress system banner/sound for own-message echoes
 if (!isExpoGo) {
   Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
-      console.log("📱 Handling notification:", notification);
+      const data = notification.request.content.data || {};
+      const senderId = normalizeUid(data.senderUserId ?? data.senderId);
+      const me = foregroundNotificationUserRef.uid;
+      if (me && senderId && senderId === me) {
+        return {
+          shouldShowAlert: false,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+          priority: Notifications.AndroidNotificationPriority.DEFAULT,
+        };
+      }
       return {
-        shouldShowAlert: true,      // Show alert popup like WhatsApp
-        shouldPlaySound: true,      // Play sound
-        shouldSetBadge: true,       // Update badge count
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
       };
     },
@@ -92,6 +109,12 @@ export const NotificationsProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isInChat, setIsInChat] = useState(false);
 
+  useEffect(() => {
+    foregroundNotificationUserRef.uid = currentUser?.uid
+      ? normalizeUid(currentUser.uid)
+      : null;
+  }, [currentUser?.uid]);
+
   // Register for push notifications
   useEffect(() => {
     const setup = async () => {
@@ -113,21 +136,25 @@ export const NotificationsProvider = ({ children }) => {
 
   // Show WhatsApp-style toast notification (banner at top)
   const showWhatsAppToast = (title, message, data) => {
-    console.log(`📱 [WhatsApp Style Toast] ${title}: ${message}`);
-    
-    // Vibrate like WhatsApp (double vibration pattern)
-    if (Platform.OS !== 'web') {
-      Vibration.vibrate([0, 500, 200, 500]);
+    const senderId = normalizeUid(data?.senderUserId ?? data?.senderId);
+    const me = currentUser?.uid ? normalizeUid(currentUser.uid) : "";
+    if (senderId && me && senderId === me) {
+      return;
     }
-    
-    // Update unread count
-    setUnreadCount(prev => prev + 1);
-    
+
+    console.log(`📱 [WhatsApp Style Toast] ${title}: ${message}`);
+
     // Don't show toast if user is currently in the chat
     if (isInChat && data?.senderUserId === data?.currentChatUserId) {
       console.log("User is currently in this chat, skipping toast");
       return;
     }
+
+    if (Platform.OS !== "web") {
+      Vibration.vibrate([0, 500, 200, 500]);
+    }
+
+    setUnreadCount((prev) => prev + 1);
     
     // Show WhatsApp-style toast banner
     Toast.show({
@@ -158,21 +185,24 @@ export const NotificationsProvider = ({ children }) => {
 
   // Show WhatsApp-style alert (popup modal) - fallback for important notifications
   const showWhatsAppAlert = (title, message, data) => {
-    console.log(`📱 [WhatsApp Style Alert] ${title}: ${message}`);
-    
-    // Vibrate like WhatsApp
-    if (Platform.OS !== 'web') {
-      Vibration.vibrate([0, 500, 200, 500]);
+    const senderId = normalizeUid(data?.senderUserId ?? data?.senderId);
+    const me = currentUser?.uid ? normalizeUid(currentUser.uid) : "";
+    if (senderId && me && senderId === me) {
+      return;
     }
-    
-    // Update unread count
-    setUnreadCount(prev => prev + 1);
-    
-    // Don't show alert if user is currently in the chat
+
+    console.log(`📱 [WhatsApp Style Alert] ${title}: ${message}`);
+
     if (isInChat && data?.senderUserId === data?.currentChatUserId) {
       console.log("User is currently in this chat, skipping alert");
       return;
     }
+
+    if (Platform.OS !== "web") {
+      Vibration.vibrate([0, 500, 200, 500]);
+    }
+
+    setUnreadCount((prev) => prev + 1);
     
     // Show WhatsApp-style alert with Reply option
     Alert.alert(
@@ -218,14 +248,17 @@ export const NotificationsProvider = ({ children }) => {
     notificationListener.current = Notifications.addNotificationReceivedListener(
       (notification) => {
         console.log("📱 Foreground notification received:", notification);
-        
+
         const { title, body, data } = notification.request.content;
-        
-        // Extract sender name from title or data
-        const senderName = title || data?.userName || 'New message';
-        const messageBody = body || 'Sent you a message';
-        
-        // Use toast for normal messages (like WhatsApp banner)
+        const senderId = normalizeUid(data?.senderUserId ?? data?.senderId);
+        const me = currentUser?.uid ? normalizeUid(currentUser.uid) : "";
+        if (senderId && me && senderId === me) {
+          return;
+        }
+
+        const senderName = title || data?.userName || "New message";
+        const messageBody = body || "Sent you a message";
+
         showWhatsAppToast(senderName, messageBody, {
           ...data,
           currentChatUserId: data?.currentChatUserId,
@@ -271,7 +304,7 @@ export const NotificationsProvider = ({ children }) => {
       }
       subscription.remove();
     };
-  }, [isInChat]);
+  }, [isInChat, currentUser?.uid]);
 
   // Function to set whether user is currently in a chat
   const setUserInChat = (inChat, chatUserId = null) => {

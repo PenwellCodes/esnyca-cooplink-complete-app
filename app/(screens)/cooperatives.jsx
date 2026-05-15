@@ -20,6 +20,7 @@ import { typography, images } from "../../constants";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
 import { useChat } from "../../context/appstate/ChatContext";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
 
@@ -66,6 +67,7 @@ const AvatarWithInitials = ({ imageUrl, name, size = 90 }) => {
 
 const CooperativeUsersScreen = () => {
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { colors } = useTheme();
   const { currentUser } = useAuth();
   const router = useRouter();
@@ -310,10 +312,20 @@ const CooperativeUsersScreen = () => {
   );
 
   return (
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background,
+          paddingBottom: Platform.OS === "android" ? keyboardHeight : 0,
+        },
+      ]}
+    >
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+      behavior="padding"
+      enabled={Platform.OS === "ios"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 56 : 0}
     >
       {/* Top bar with filter button */}
       <View style={styles.topBar}>
@@ -363,6 +375,8 @@ const CooperativeUsersScreen = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       />
 
       <Portal>
@@ -395,6 +409,7 @@ const CooperativeUsersScreen = () => {
         </Modal>
       </Portal>
     </KeyboardAvoidingView>
+    </View>
   );
 };
 

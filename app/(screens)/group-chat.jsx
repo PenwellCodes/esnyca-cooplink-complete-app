@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
 import { useTheme } from "react-native-paper";
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const placeholderAvatar =
   "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png?20150327203541";
@@ -97,6 +98,7 @@ const ChatScreen = () => {
   const chatId = group?.uid || "group_swazi_cooperators";
   const headerTitle = group?.displayName || "Group";
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
 
   const [localMessages, setLocalMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
@@ -361,67 +363,69 @@ const ChatScreen = () => {
     );
   };
 
+  const listPaddingBottom =
+    (keyboardHeight > 0 ? 12 : 12 + 88) + (keyboardHeight > 0 ? 0 : Math.max(insets.bottom, 8));
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top || 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        <AvatarWithInitials imageUrl={group?.profilePicture} name={headerTitle} size={40} />
-        <Text style={styles.headerTitle}>{headerTitle}</Text>
-      </View>
-
-      {/* Messages List */}
-      <FlatList
-        ref={flatListRef}
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: colors.background,
+        paddingBottom: Platform.OS === "android" ? keyboardHeight : 0,
+      }}
+    >
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
-        data={messages}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderMessage}
-        contentContainerStyle={[styles.messagesList, { paddingBottom: 120 + Math.max(insets.bottom, 8) }]}
-        onContentSizeChange={() => {
-          if (messages && messages.length > 0) {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }
-        }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{translations.startConversation}</Text>
-          </View>
-        }
-      />
-
-      {/* Uploading Indicator */}
-      {uploading && (
-        <View style={styles.uploadingOverlay}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.uploadingText}>Uploading image...</Text>
-        </View>
-      )}
-
-      {/* Input Container */}
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : Math.max(insets.bottom, 10)}
+        behavior="padding"
+        enabled={Platform.OS === "ios"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? (insets.top || 12) + 56 : 0}
       >
-        <View style={[
-          styles.inputContainer, 
-          { 
-            backgroundColor: colors.background, 
-            borderTopColor: colors.outline,
-            position: "absolute",
-            bottom: Math.max(insets.bottom, 8),
-            left: 0,
-            right: 0,
-            elevation: 5,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
+        <View style={[styles.header, { paddingTop: insets.top || 12 }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <AvatarWithInitials imageUrl={group?.profilePicture} name={headerTitle} size={40} />
+          <Text style={styles.headerTitle}>{headerTitle}</Text>
+        </View>
+
+        <FlatList
+          ref={flatListRef}
+          style={{ flex: 1 }}
+          data={messages}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderMessage}
+          contentContainerStyle={[styles.messagesList, { paddingBottom: listPaddingBottom }]}
+          onContentSizeChange={() => {
+            if (messages && messages.length > 0) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>{translations.startConversation}</Text>
+            </View>
           }
-        ]}>
+        />
+
+        <View
+          style={[
+            styles.inputContainer,
+            {
+              backgroundColor: colors.background,
+              borderTopColor: colors.outline,
+              borderTopWidth: StyleSheet.hairlineWidth,
+              paddingBottom:
+                10 + (keyboardHeight > 0 ? 0 : Math.max(insets.bottom, 8)),
+              elevation: 5,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: -2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+            },
+          ]}
+        >
           <TouchableOpacity onPress={sendImage} style={styles.attachmentButton}>
             <Ionicons name="image-outline" size={24} color="#007AFF" />
           </TouchableOpacity>
@@ -434,12 +438,19 @@ const ChatScreen = () => {
             placeholderTextColor={colors.onSurfaceVariant}
             multiline
           />
-          
+
           <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
             <Ionicons name="send" size={24} color="#007AFF" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {uploading && (
+        <View style={styles.uploadingOverlay}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.uploadingText}>Uploading image...</Text>
+        </View>
+      )}
     </View>
   );
 };
