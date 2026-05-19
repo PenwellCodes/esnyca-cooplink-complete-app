@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,22 +10,20 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, Circle, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import haversine from 'haversine';
-import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useLanguage } from '../../context/appstate/LanguageContext';
-import { apiRequest } from "../../utils/api";
+import { apiRequest } from '../../utils/api';
+import LeafletMap from '../../components/LeafletMap';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 const LocationsScreen = () => {
   const insets = useSafeAreaInsets();
@@ -84,23 +82,22 @@ const LocationsScreen = () => {
     loadTranslations();
   }, [t]);
 
-  // Get current location
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           setErrorMessage(await t('Permission to access location was denied.'));
           setLoading(false);
           return;
         }
-        let location = await Location.getCurrentPositionAsync({});
+        const location = await Location.getCurrentPositionAsync({});
         setCurrentLocation({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         });
-      } catch (error) {
+      } catch {
         setErrorMessage(await t('Error fetching current location.'));
       } finally {
         setLoading(false);
@@ -108,42 +105,30 @@ const LocationsScreen = () => {
     })();
   }, []);
 
-  // Fetch user locations
   useEffect(() => {
     const fetchUserLocations = async () => {
       setLoading(true);
       try {
-        const usersRaw = await apiRequest("/users");
-        
+        const usersRaw = await apiRequest('/users');
+
         const locations = (usersRaw || [])
-          .map(item => {
-            const data = {
-              id: item.Id || item.id,
-              title: item.DisplayName || 'Unknown Company',
-              description: item.Content || 'No description available',
-              photoUrl: item.ProfilePicUrl,
-              companyAddress: item.CompanyAddress,
-              latitude: item.LocationLat,
-              longitude: item.LocationLng,
-            };
-            return {
-              id: data.id,
-              latitude: data.latitude,
-              longitude: data.longitude,
-              title: data.title,
-              description: data.description,
-              photoUrl: data.photoUrl,
-              companyAddress: data.companyAddress,
-            };
-          })
-          .filter(location => location.latitude && location.longitude);
+          .map((item) => ({
+            id: item.Id || item.id,
+            latitude: parseFloat(item.LocationLat),
+            longitude: parseFloat(item.LocationLng),
+            title: item.DisplayName || 'Unknown Company',
+            description: item.Content || 'No description available',
+            photoUrl: item.ProfilePicUrl,
+            companyAddress: item.CompanyAddress,
+          }))
+          .filter((location) => location.latitude && location.longitude);
 
         const localizedLocations = await Promise.all(
           locations.map(async (location) => ({
             ...location,
-            title: await t(location.title || ""),
-            description: await t(location.description || ""),
-            companyAddress: await t(location.companyAddress || ""),
+            title: await t(location.title || ''),
+            description: await t(location.description || ''),
+            companyAddress: await t(location.companyAddress || ''),
           }))
         );
 
@@ -174,7 +159,10 @@ const LocationsScreen = () => {
   const calculateDistance = (lat, lng) => {
     if (!currentLocation) return null;
     const distance = haversine(
-      { latitude: currentLocation.latitude, longitude: currentLocation.longitude },
+      {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+      },
       { latitude: lat, longitude: lng },
       { unit: 'km' }
     );
@@ -183,18 +171,16 @@ const LocationsScreen = () => {
 
   const recenterMap = () => {
     if (currentLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        ...currentLocation,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      });
+      mapRef.current.recenter(currentLocation, 14);
     }
   };
 
-  // Draw the route INSIDE the current map screen (no external maps).
   const drawQuickestRouteOnMap = (location) => {
     if (!currentLocation) {
-      Alert.alert(translations.routeUnavailableTitle, translations.routeUnavailableBody);
+      Alert.alert(
+        translations.routeUnavailableTitle,
+        translations.routeUnavailableBody
+      );
       return;
     }
 
@@ -210,46 +196,28 @@ const LocationsScreen = () => {
     const coords = [origin, destination];
     setRouteCoords(coords);
 
-    // Zoom to show the full route.
-    if (mapRef.current && typeof mapRef.current.fitToCoordinates === 'function') {
-      mapRef.current.fitToCoordinates(coords, {
-        edgePadding: { top: 60, right: 60, bottom: 160, left: 60 },
-        animated: true,
-      });
+    if (mapRef.current) {
+      mapRef.current.fitToCoordinates(coords);
     }
   };
 
-  const renderMarker = (location) => (
-    <Marker
-      key={location.id}
-      coordinate={{ 
-        latitude: location.latitude, 
-        longitude: location.longitude 
-      }}
-      title={location.title}
-      description={location.description}
-      onPress={() => {
-        setRouteCoords(null);
-        setSelectedLocation(location);
-      }}
-    >
-      {location.photoUrl ? (
-        <View style={styles.customMarker}>
-          <Image 
-            source={{ uri: location.photoUrl }} 
-            style={styles.markerImage}
-          />
-          <Ionicons 
-            name="location-sharp" 
-            size={40} 
-            color="#191970" 
-            style={styles.markerIcon}
-          />
-        </View>
-      ) : (
-        <Ionicons name="location-sharp" size={40} color="#191970" />
-      )}
-    </Marker>
+  const handleMarkerPress = ({ id }) => {
+    const location = searchResults.find(
+      (item) => String(item.id) === String(id)
+    );
+    if (location) {
+      setRouteCoords(null);
+      setSelectedLocation(location);
+    }
+  };
+
+  const mapCenter = useMemo(
+    () =>
+      currentLocation ?? {
+        latitude: -26.5225,
+        longitude: 31.4659,
+      },
+    [currentLocation]
   );
 
   return (
@@ -259,112 +227,103 @@ const LocationsScreen = () => {
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
       <StatusBar style="dark" backgroundColor="#F5F5F5" />
-      <TextInput
-        style={styles.searchInput}
-        placeholder={translations.searchPlaceholder}
-        placeholderTextColor="#6B7280"
-        value={searchQuery}
-        onChangeText={(text) => setSearchQuery(text)}
-        onSubmitEditing={handleSearch}
-      />
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      <View style={styles.controlsSection}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder={translations.searchPlaceholder}
+          placeholderTextColor="#6B7280"
+          value={searchQuery}
+          onChangeText={(text) => setSearchQuery(text)}
+          onSubmitEditing={handleSearch}
+        />
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-      {loading && <ActivityIndicator size="large" color="#007AFF" style={styles.loadingIndicator} />}
+        {loading && (
+          <ActivityIndicator
+            size="large"
+            color="#007AFF"
+            style={styles.loadingIndicator}
+          />
+        )}
 
-      <View style={styles.controlContainer}>
-        <Text style={styles.controlLabel}>
-          {translations.radiusLabel}: {radius / 1000} km
-        </Text>
-        <Slider
-          style={styles.slider}
-          minimumValue={1000}
-          maximumValue={10000}
-          step={500}
-          value={radius}
-          onValueChange={(value) => setRadius(value)}
+        <View style={styles.controlContainer}>
+          <Text style={styles.controlLabel}>
+            {translations.radiusLabel}: {radius / 1000} km
+          </Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={1000}
+            maximumValue={10000}
+            step={500}
+            value={radius}
+            onValueChange={(value) => setRadius(value)}
+          />
+        </View>
+
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => setSearchResults(userLocations)}
+          >
+            <Icon name="times-circle" size={20} color="#FFF" />
+            <Text style={styles.buttonText}>{translations.clear}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              const next = mapType === 'standard' ? 'satellite' : 'standard';
+              setMapType(next);
+              mapRef.current?.setMapType(next);
+            }}
+          >
+            <Icon name="map" size={20} color="#FFF" />
+            <Text style={styles.buttonText}>{translations.switchView}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.button} onPress={recenterMap}>
+            <Icon name="location-arrow" size={20} color="#FFF" />
+            <Text style={styles.buttonText}>{translations.recenter}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          style={styles.resultsList}
+          data={searchResults}
+          keyExtractor={(item) => item.id.toString()}
+          nestedScrollEnabled
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.resultItem}
+              onPress={() => {
+                setRouteCoords(null);
+                setSelectedLocation(item);
+              }}
+            >
+              <Text style={styles.resultText}>
+                {item.title} - {calculateDistance(item.latitude, item.longitude)}{' '}
+                km
+              </Text>
+            </TouchableOpacity>
+          )}
         />
       </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => setSearchResults(userLocations)}
-        >
-          <Icon name="times-circle" size={20} color="#FFF" />
-          <Text style={styles.buttonText}>{translations.clear}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
-        >
-          <Icon name="map" size={20} color="#FFF" />
-          <Text style={styles.buttonText}>{translations.switchView}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={recenterMap}>
-          <Icon name="location-arrow" size={20} color="#FFF" />
-          <Text style={styles.buttonText}>{translations.recenter}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <FlatList
-        data={searchResults}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.resultItem}
-            onPress={() => {
-              setRouteCoords(null);
-              setSelectedLocation(item);
-            }}
-          >
-            <Text style={styles.resultText}>
-              {item.title} - {calculateDistance(item.latitude, item.longitude)} km
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
-
-      <MapView
+      <LeafletMap
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
+        center={mapCenter}
+        zoom={13}
         mapType={mapType}
-        showsUserLocation
-        showsMyLocationButton={true}
-        showsCompass={true}
-        zoomControlEnabled={true}
-        initialRegion={{
-          latitude: currentLocation ? currentLocation.latitude : -26.5225,
-          longitude: currentLocation ? currentLocation.longitude : 31.4659,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        }}
-        customMapStyle={[
-          {
-            featureType: "poi",
-            elementType: "labels",
-            stylers: [{ visibility: "off" }],
-          },
-        ]}
-      >
-        {searchResults.map(renderMarker)}
-        {userLocations.map(renderMarker)}
-        {routeCoords && routeCoords.length >= 2 && (
-          <Polyline
-            coordinates={routeCoords}
-            strokeColor="#00AAFF"
-            strokeWidth={4}
-          />
-        )}
-        {currentLocation && (
-          <Circle
-            center={currentLocation}
-            radius={radius}
-            strokeColor="rgba(0, 122, 255, 0.5)"
-            fillColor="rgba(0, 122, 255, 0.2)"
-          />
-        )}
-      </MapView>
+        markers={searchResults}
+        userLocation={currentLocation}
+        circle={
+          currentLocation
+            ? { center: currentLocation, radius }
+            : undefined
+        }
+        polyline={routeCoords}
+        onMarkerPress={handleMarkerPress}
+        interactive={false}
+      />
 
       {selectedLocation && (
         <Modal
@@ -384,16 +343,20 @@ const LocationsScreen = () => {
               </Text>
             )}
             <Text style={styles.modalDistance}>
-              {translations.distanceLabel}: {calculateDistance(
+              {translations.distanceLabel}:{' '}
+              {calculateDistance(
                 selectedLocation.latitude,
                 selectedLocation.longitude
-              )} km
+              )}{' '}
+              km
             </Text>
             <TouchableOpacity
               style={[styles.closeButton, { marginTop: 10 }]}
               onPress={() => drawQuickestRouteOnMap(selectedLocation)}
             >
-              <Text style={styles.closeButtonText}>{translations.quickestRoute}</Text>
+              <Text style={styles.closeButtonText}>
+                {translations.quickestRoute}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.closeButton}
@@ -416,6 +379,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
     paddingTop: 20,
+  },
+  controlsSection: {
+    maxHeight: height * 0.42,
+  },
+  resultsList: {
+    maxHeight: height * 0.18,
   },
   searchInput: {
     padding: 12,
@@ -469,11 +438,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   map: {
+    flex: 1,
     width: '100%',
-    height: height * 0.5,
+    minHeight: height * 0.35,
     borderRadius: 10,
     marginVertical: 10,
-    zIndex: 1,
+    overflow: 'hidden',
   },
   resultItem: {
     padding: 12,
@@ -511,20 +481,6 @@ const styles = StyleSheet.create({
   },
   loadingIndicator: {
     marginTop: 10,
-  },
-  customMarker: {
-    alignItems: 'center',
-  },
-  markerImage: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
-    borderWidth: 2,
-    borderColor: '#191970',
-  },
-  markerIcon: {
-    position: 'absolute',
-    bottom: -20,
   },
   modalDescription: {
     fontSize: 16,

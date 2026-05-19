@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
-import MapView, { Marker } from 'react-native-maps';
+import LeafletMap from '../../components/LeafletMap';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/appstate/AuthContext';
 import { useLanguage } from '../../context/appstate/LanguageContext';
@@ -62,6 +62,7 @@ const Profile = () => {
     phoneNumber: "Phone Number",
     productService: "Product/Service",
     location: "Location",
+    tapMapToSetLocation: "Tap the map to set your cooperative location",
     satelliteView: "Satellite View",
     standardView: "Standard View",
     selected: "Selected",
@@ -104,6 +105,7 @@ const Profile = () => {
         phoneNumber: await t("Phone Number"),
         productService: await t("Product/Service"),
         location: await t("Location"),
+        tapMapToSetLocation: await t("Tap the map to set your cooperative location"),
         satelliteView: await t("Satellite View"),
         standardView: await t("Standard View"),
         selected: await t("Selected"),
@@ -161,21 +163,36 @@ const Profile = () => {
 
   if (!currentUser) return null;
 
-  // Request location
+  const defaultMapRegion = {
+    latitude: -26.5225,
+    longitude: 31.4659,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  };
+
+  // Request location (fallback map center if permission denied)
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(translations.permissionDeniedTitle, translations.permissionDeniedBody);
-        return;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            translations.permissionDeniedTitle,
+            translations.permissionDeniedBody
+          );
+          setLocation(defaultMapRegion);
+          return;
+        }
+        const currentLocation = await Location.getCurrentPositionAsync({});
+        setLocation({
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        });
+      } catch {
+        setLocation(defaultMapRegion);
       }
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      });
     })();
   }, []);
 
@@ -198,6 +215,9 @@ const Profile = () => {
           setLocalProfilePic(profilePicUrl);
         }
 
+        const savedLat = parseFloat(profile.LocationLat ?? profile.locationLat);
+        const savedLng = parseFloat(profile.LocationLng ?? profile.locationLng);
+
         setUserData({
           id: profile.Id || profile.id,
           displayName: profile.DisplayName || profile.displayName || "",
@@ -207,6 +227,26 @@ const Profile = () => {
           content: profile.Content || profile.content || "",
           profilePic: profilePicUrl || localProfilePic,
         });
+
+        if (!Number.isNaN(savedLat) && !Number.isNaN(savedLng)) {
+          const saved = { latitude: savedLat, longitude: savedLng };
+          setSelectedLocation(saved);
+          setLocation((prev) =>
+            prev
+              ? { ...prev, latitude: savedLat, longitude: savedLng }
+              : {
+                  latitude: savedLat,
+                  longitude: savedLng,
+                  latitudeDelta: 0.0922,
+                  longitudeDelta: 0.0421,
+                }
+          );
+          setLocationName(
+            profile.CompanyAddress ||
+              profile.companyAddress ||
+              `${savedLat.toFixed(5)}, ${savedLng.toFixed(5)}`
+          );
+        }
       } catch (error) {
         console.error("Error fetching user data:", error);
         Alert.alert(translations.error, translations.failedLoadProfileData);
@@ -344,22 +384,30 @@ const Profile = () => {
     }
   };
 
-  const handleMapLongPress = async (e) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
+  const handleMapSelectLocation = async ({ latitude, longitude }) => {
+    let name = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+
     try {
       const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
-      const name = address
-        ? `${address.street || ""} ${address.city || ""} ${address.region || ""}`.trim()
-        : `${translations.selected} Location`;
-
-      const locationDetails = { latitude, longitude, name };
-      setSelectedLocation(locationDetails);
-      setLocationName(name);
-      setUserData(prev => ({ ...prev, location: locationDetails }));
+      if (address) {
+        const formatted = `${address.street || ""} ${address.city || ""} ${address.region || ""}`.trim();
+        if (formatted) name = formatted;
+      }
     } catch (error) {
-      console.error('Error getting location details:', error);
-      Alert.alert(translations.error, translations.failedGetLocationDetails);
+      console.warn('Reverse geocode unavailable, saving coordinates only:', error);
     }
+
+    const locationDetails = { latitude, longitude, name };
+    setSelectedLocation(locationDetails);
+    setLocationName(name);
+    setLocation((prev) => ({
+      ...(prev || {}),
+      latitude,
+      longitude,
+      latitudeDelta: prev?.latitudeDelta ?? 0.01,
+      longitudeDelta: prev?.longitudeDelta ?? 0.01,
+    }));
+    setUserData((prev) => ({ ...prev, location: locationDetails }));
   };
 
   const handleInputLayout = (key) => (event) => {
@@ -404,6 +452,7 @@ const Profile = () => {
           { paddingBottom: 40 + keyboardHeight + Math.max(insets.bottom, 12) },
         ]}
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -492,6 +541,9 @@ const Profile = () => {
               </View>
 
               <Text style={[styles.sectionTitle, { color: colors.primary }]}>{translations.location}</Text>
+              <Text style={[styles.mapHint, { color: colors.onSurfaceVariant }]}>
+                {translations.tapMapToSetLocation}
+              </Text>
               {location && (
                 <View style={styles.mapContainer}>
                   <TouchableOpacity
@@ -503,25 +555,32 @@ const Profile = () => {
                     </Text>
                   </TouchableOpacity>
 
-                  <MapView
+                  <LeafletMap
                     style={styles.map}
-                    initialRegion={location}
+                    center={{
+                      latitude: selectedLocation?.latitude ?? location.latitude,
+                      longitude: selectedLocation?.longitude ?? location.longitude,
+                    }}
+                    zoom={selectedLocation ? 15 : 14}
                     mapType={mapType}
-                    onLongPress={handleMapLongPress}
-                  >
-                    {selectedLocation && (
-                      <Marker
-                        coordinate={{
-                          latitude: selectedLocation.latitude,
-                          longitude: selectedLocation.longitude,
-                        }}
-                        title={locationName}
-                      />
-                    )}
-                  </MapView>
+                    markers={
+                      selectedLocation
+                        ? [
+                            {
+                              id: 'selected',
+                              latitude: selectedLocation.latitude,
+                              longitude: selectedLocation.longitude,
+                              title: locationName,
+                            },
+                          ]
+                        : []
+                    }
+                    onMapClick={handleMapSelectLocation}
+                    onMapLongPress={handleMapSelectLocation}
+                  />
 
                   {selectedLocation && (
-                    <Text style={styles.locationText}>
+                    <Text style={[styles.locationText, { color: colors.onSurface }]}>
                       {translations.selected}: {locationName}
                     </Text>
                   )}
@@ -614,7 +673,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   updateButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  mapContainer: { width: '100%', height: 200, marginBottom: 20, borderRadius: 8, overflow: 'hidden' },
+  mapHint: { fontSize: 13, marginBottom: 8, alignSelf: 'flex-start' },
+  mapContainer: { width: '100%', height: 260, marginBottom: 20, borderRadius: 8, overflow: 'hidden' },
   map: { width: '100%', height: '100%' },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, alignSelf: 'flex-start' },
   locationText: { marginTop: 5, fontSize: 14 },
