@@ -358,6 +358,149 @@ router.get('/:chatId/messages', async (req, res) => {
 });
 
 /* =========================
+   DELETE CHAT (messages, participants, chat)
+========================= */
+router.delete('/:chatId', async (req, res) => {
+  const { chatId } = req.params;
+  const tokenUserId = req.user?.Id ? String(req.user.Id) : null;
+
+  if (!isGuid(chatId)) {
+    return res.status(400).json({ message: 'Invalid chatId' });
+  }
+
+  if (!tokenUserId || !isGuid(tokenUserId)) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const pool = await getPool();
+
+    const participantCheck = await pool
+      .request()
+      .input('ChatId', sql.UniqueIdentifier, chatId)
+      .input('UserId', sql.UniqueIdentifier, tokenUserId)
+      .query(`
+        SELECT 1 AS ok
+        FROM dbo.ChatParticipants
+        WHERE ChatId = @ChatId AND UserId = @UserId
+      `);
+
+    if (!participantCheck.recordset?.length) {
+      return res.status(403).json({ message: 'You are not a participant of this chat' });
+    }
+
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    try {
+      await new sql.Request(tx)
+        .input('ChatId', sql.UniqueIdentifier, chatId)
+        .query('DELETE FROM dbo.ChatMessages WHERE ChatId = @ChatId');
+
+      await new sql.Request(tx)
+        .input('ChatId', sql.UniqueIdentifier, chatId)
+        .query('DELETE FROM dbo.ChatParticipants WHERE ChatId = @ChatId');
+
+      const deleted = await new sql.Request(tx)
+        .input('ChatId', sql.UniqueIdentifier, chatId)
+        .query('DELETE FROM dbo.Chats WHERE Id = @ChatId');
+
+      if (deleted.rowsAffected?.[0] === 0) {
+        await tx.rollback();
+        return res.status(404).json({ message: 'Chat not found' });
+      }
+
+      await tx.commit();
+      return res.json({ success: true });
+    } catch (txErr) {
+      try {
+        await tx.rollback();
+      } catch {
+        /* ignore */
+      }
+      throw txErr;
+    }
+  } catch (err) {
+    console.error('🔥 DELETE CHAT ERROR:', err);
+    return res.status(500).json({ message: err.message || 'Failed to delete chat' });
+  }
+});
+
+/* =========================
+   DELETE MESSAGE
+========================= */
+router.delete('/:chatId/messages/:messageId', async (req, res) => {
+  const { messageId } = req.params;
+  const tokenUserId = req.user?.Id ? String(req.user.Id) : null;
+
+  if (!isGuid(messageId)) {
+    return res.status(400).json({ message: 'Invalid messageId' });
+  }
+
+  if (!tokenUserId || !isGuid(tokenUserId)) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const pool = await getPool();
+
+    const messageRow = await pool
+      .request()
+      .input('Id', sql.UniqueIdentifier, messageId)
+      .query(`
+        SELECT Id, ChatId, SenderUserId
+        FROM dbo.ChatMessages
+        WHERE Id = @Id
+      `);
+
+    if (!messageRow.recordset?.length) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    const row = messageRow.recordset[0];
+    const resolvedChatId = String(row.ChatId);
+
+    const participantCheck = await pool
+      .request()
+      .input('ChatId', sql.UniqueIdentifier, resolvedChatId)
+      .input('UserId', sql.UniqueIdentifier, tokenUserId)
+      .query(`
+        SELECT 1 AS ok
+        FROM dbo.ChatParticipants
+        WHERE ChatId = @ChatId AND UserId = @UserId
+      `);
+
+    if (!participantCheck.recordset?.length) {
+      return res.status(403).json({ message: 'You are not a participant of this chat' });
+    }
+
+    const senderId = String(row.SenderUserId || '').toLowerCase();
+    if (senderId !== tokenUserId.toLowerCase()) {
+      return res.status(403).json({ message: 'You can only delete your own messages' });
+    }
+
+    const result = await pool
+      .request()
+      .input('ChatId', sql.UniqueIdentifier, resolvedChatId)
+      .input('Id', sql.UniqueIdentifier, messageId)
+      .input('SenderUserId', sql.UniqueIdentifier, tokenUserId)
+      .query(`
+        DELETE FROM dbo.ChatMessages
+        WHERE Id = @Id AND ChatId = @ChatId AND SenderUserId = @SenderUserId
+      `);
+
+    if (result.rowsAffected?.[0] === 0) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    return res.json({ success: true, chatId: resolvedChatId });
+  } catch (err) {
+    console.error('🔥 DELETE MESSAGE ERROR:', err);
+    return res.status(500).json({ message: err.message || 'Failed to delete message' });
+  }
+});
+
+/* =========================
    MARK AS READ
 ========================= */
 router.post('/:chatId/messages/:messageId/read', async (req, res) => {

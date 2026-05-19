@@ -14,6 +14,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
 } from "react-native";
+import { TouchableOpacity as GHChatTouchable } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../context/appstate/ChatContext";
 import { useAuth } from "../../context/appstate/AuthContext";
@@ -85,6 +86,15 @@ const getGradientForUser = (uid = "user") => {
   return colorGradients[Math.abs(hash) % colorGradients.length];
 };
 
+const normalizeId = (value) =>
+  value == null ? "" : String(value).trim().toLowerCase();
+
+const MESSAGE_ID_GUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isPersistedMessageId = (id) =>
+  id != null && MESSAGE_ID_GUID_RE.test(String(id));
+
 const ChatScreen = () => {
   const router = useRouter();
   const { colors } = useTheme();
@@ -99,7 +109,9 @@ const ChatScreen = () => {
     userMap, 
     sendMessage, 
     refreshChats,
-    deleteMessage
+    deleteMessage,
+    hideMessageForMe,
+    filterMessagesForChat,
   } = useChat();
   const chatId = group?.uid || "group_swazi_cooperators";
   const headerTitle = group?.displayName || "Group";
@@ -120,9 +132,13 @@ const ChatScreen = () => {
     download: "Download",
     sending: "Sending...",
     deleteMessage: "Delete message",
-    deleteConfirmation: "Delete this message?",
-    deleteForMe: "Delete for me",
+    removeForMe: "Remove for me",
+    deleteForEveryone: "Delete for everyone",
+    deleteForEveryoneHint:
+      "Permanently removes this message for all participants.",
+    removeForMeHint: "Hides this message on your device only.",
     cancel: "Cancel",
+    error: "Error",
   });
 
   useEffect(() => {
@@ -133,9 +149,14 @@ const ChatScreen = () => {
         download: await t("Download"),
         sending: await t("Sending..."),
         deleteMessage: await t("Delete message"),
-        deleteConfirmation: await t("Delete this message?"),
-        deleteForMe: await t("Delete for me"),
+        removeForMe: await t("Remove for me"),
+        deleteForEveryone: await t("Delete for everyone"),
+        deleteForEveryoneHint: await t(
+          "Permanently removes this message for all participants."
+        ),
+        removeForMeHint: await t("Hides this message on your device only."),
         cancel: await t("Cancel"),
+        error: await t("Error"),
       });
     };
     loadTranslations();
@@ -164,9 +185,15 @@ const ChatScreen = () => {
     fetchAllUsers();
   }, []);
 
-  // Get messages safely
-  const contextMessages = conversations && conversations[chatId] ? conversations[chatId] : [];
-  const messages = [...contextMessages, ...localMessages];
+  const rawContext = conversations?.[chatId] || [];
+  const contextMessageIds = new Set(rawContext.map((m) => String(m.id)));
+  const dedupedLocal = localMessages.filter(
+    (m) => !contextMessageIds.has(String(m.id))
+  );
+  const messages = filterMessagesForChat(chatId, [
+    ...rawContext,
+    ...dedupedLocal,
+  ]);
 
   useEffect(() => {
     setActiveChatId(chatId);
@@ -268,30 +295,64 @@ const ChatScreen = () => {
     }
   };
 
-  const handleDeleteMessage = (message) => {
-    if (message.sender !== currentUserId) return;
-    Alert.alert(
-      translations.deleteMessage,
-      translations.deleteConfirmation,
-      [
-        { text: translations.cancel, style: "cancel" },
-        {
-          text: translations.deleteForMe,
-          style: "destructive",
-          onPress: async () => {
-            try {
-              if (deleteMessage) await deleteMessage(chatId, message.id);
-              setLocalMessages((prev) => prev.filter((m) => m.id !== message.id));
-              if (refreshChats) await refreshChats();
-            } catch (error) {
-              console.error("Error deleting message:", error);
-              Alert.alert("Error", "Failed to delete message");
-            }
-          },
-        },
-      ],
-      { cancelable: true }
+  const removeFromLocalUi = async (message) => {
+    await hideMessageForMe(chatId, message.id);
+    setLocalMessages((prev) =>
+      prev.filter((m) => String(m.id) !== String(message.id))
     );
+  };
+
+  const handleDeleteMessage = (message) => {
+    const mine = normalizeId(message.sender) === normalizeId(currentUserId);
+    const canDeleteForEveryone = mine && isPersistedMessageId(message.id);
+
+    const buttons = [
+      {
+        text: translations.removeForMe,
+        onPress: () => {
+          removeFromLocalUi(message).catch((e) =>
+            console.error("Remove for me:", e)
+          );
+        },
+      },
+    ];
+
+    if (canDeleteForEveryone) {
+      buttons.push({
+        text: translations.deleteForEveryone,
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteMessage(chatId, message.id, message);
+            setLocalMessages((prev) =>
+              prev.filter((m) => String(m.id) !== String(message.id))
+            );
+          } catch (error) {
+            if (error?.localOnly) {
+              setLocalMessages((prev) =>
+                prev.filter((m) => String(m.id) !== String(message.id))
+              );
+              return;
+            }
+            console.error("Error deleting message:", error);
+            Alert.alert(
+              translations.error,
+              error?.message || "Failed to delete message"
+            );
+          }
+        },
+      });
+    }
+
+    buttons.push({ text: translations.cancel, style: "cancel" });
+
+    const hint = canDeleteForEveryone
+      ? `${translations.removeForMeHint}\n\n${translations.deleteForEveryoneHint}`
+      : translations.removeForMeHint;
+
+    Alert.alert(translations.deleteMessage, hint, buttons, {
+      cancelable: true,
+    });
   };
 
   const getSenderName = (senderId) => {
@@ -316,7 +377,7 @@ const ChatScreen = () => {
   };
 
   const renderMessage = ({ item }) => {
-    const mine = item.sender === currentUserId;
+    const mine = normalizeId(item.sender) === normalizeId(currentUserId);
     const gradient = mine ? ["#4c669f", "#3b5998"] : getGradientForUser(item.sender);
     const senderName = getSenderName(item.sender);
     const senderPic = getSenderAvatar(item.sender);
@@ -332,10 +393,10 @@ const ChatScreen = () => {
         <View style={[styles.groupMessageContainer, { flexDirection: mine ? "row-reverse" : "row", alignItems: "flex-end" }]}>
           <AvatarWithInitials imageUrl={senderPic} name={senderName} size={32} />
           
-          <TouchableOpacity
+          <GHChatTouchable
             activeOpacity={0.7}
-            onLongPress={() => mine && handleDeleteMessage(item)}
-            delayLongPress={300}
+            onLongPress={() => handleDeleteMessage(item)}
+            delayLongPress={400}
           >
             <LinearGradient colors={gradient} style={[styles.messageBubble, mine ? styles.myMessageBubble : styles.otherMessageBubble]}>
               {item.type === "image" && item.fileUrl ? (
@@ -352,7 +413,7 @@ const ChatScreen = () => {
                   : translations.sending}
               </Text>
             </LinearGradient>
-          </TouchableOpacity>
+          </GHChatTouchable>
         </View>
       </View>
     );

@@ -11,6 +11,22 @@ import { router } from "expo-router";
 import { useAuth } from "./AuthContext";
 import Toast from "react-native-toast-message";
 import { apiRequest } from "../../utils/api";
+import {
+  readDataCache,
+  writeDataCache,
+  chatStateCacheKey,
+  subscribeNetUsable,
+  CACHE_KEYS,
+} from "../../utils/dataCache";
+import {
+  deserializeChatStateFromCache,
+  serializeChatStateForCache,
+} from "../../utils/chatStateCache";
+import {
+  readHiddenMessages,
+  writeHiddenMessages,
+  filterVisibleMessages,
+} from "../../utils/hiddenChatMessages";
 
 const CHAT_SYNC_TIMEOUT_MS = 450000;
 const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
@@ -148,15 +164,102 @@ export const ChatProvider = ({ children }) => {
   const [userMap, setUserMap] = useState({});
   const [unreadCounts, setUnreadCounts] = useState({});
   const [chatIdMap, setChatIdMap] = useState({});
+  const [hiddenMessagesByChat, setHiddenMessagesByChat] = useState({});
+  const [chatSyncError, setChatSyncError] = useState(null);
   const activeChatIdRef = useRef(null);
   const refreshPromiseRef = useRef(null);
   const currentUserIdRef = useRef(currentUserId);
   const prevChatUserIdRef = useRef(null);
+  const persistChatTimerRef = useRef(null);
   currentUserIdRef.current = currentUserId;
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setHiddenMessagesByChat({});
+      return;
+    }
+    let cancelled = false;
+    readHiddenMessages(currentUserId).then((map) => {
+      if (!cancelled) setHiddenMessagesByChat(map || {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId]);
+
+  const resolveActualChatId = useCallback(
+    (chatKey, messageOrId) => {
+      const msg =
+        messageOrId && typeof messageOrId === "object" ? messageOrId : null;
+      const fromMessage = msg?._chatId;
+      if (fromMessage && isGuid(String(fromMessage))) {
+        return String(fromMessage);
+      }
+      if (chatIdMap[chatKey]) return chatIdMap[chatKey];
+      const existing = conversations[chatKey] || [];
+      const fromList =
+        msg && existing.find((m) => String(m.id) === String(msg.id))
+          ? msg._chatId
+          : existing[existing.length - 1]?._chatId ||
+            existing[0]?._chatId;
+      if (fromList && isGuid(String(fromList))) return String(fromList);
+      if (isGuid(String(chatKey))) return String(chatKey);
+      return null;
+    },
+    [chatIdMap, conversations]
+  );
+
+  function isGuid(value) {
+    return (
+      typeof value === "string" &&
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(
+        value
+      )
+    );
+  }
+
+  const filterMessagesForChat = useCallback(
+    (chatKey, messages) =>
+      filterVisibleMessages(chatKey, messages, hiddenMessagesByChat),
+    [hiddenMessagesByChat]
+  );
+
+  const hideMessageForMe = useCallback(
+    async (chatKey, messageId) => {
+      if (!currentUserId || !chatKey || messageId == null) return;
+      const id = String(messageId);
+      setHiddenMessagesByChat((prev) => {
+        const next = { ...prev };
+        const list = new Set((next[chatKey] || []).map(String));
+        list.add(id);
+        next[chatKey] = [...list];
+        writeHiddenMessages(currentUserId, next);
+        return next;
+      });
+      setConversations((prev) => {
+        const current = prev[chatKey] || [];
+        const updated = current.filter((m) => String(m.id) !== id);
+        if (updated.length === current.length) return prev;
+        setLastMessages((lmPrev) => {
+          if (updated.length === 0) {
+            const next = { ...lmPrev };
+            delete next[chatKey];
+            return next;
+          }
+          return {
+            ...lmPrev,
+            [chatKey]: updated[updated.length - 1].timestamp,
+          };
+        });
+        return { ...prev, [chatKey]: updated };
+      });
+    },
+    [currentUserId]
+  );
 
   const buildDirectKey = (a, b) => {
     if (!a || !b) return null;
@@ -184,6 +287,11 @@ export const ChatProvider = ({ children }) => {
         const allUsers = await apiRequest("/users", {
           timeoutMs: CHAT_SYNC_TIMEOUT_MS,
         });
+        try {
+          await writeDataCache(CACHE_KEYS.USERS, allUsers);
+        } catch {
+          /* ignore */
+        }
         const normalizedUsers = (allUsers || []).map((item) => ({
           id: item.Id || item.id,
           uid: normalizeId(item.Id || item.id),
@@ -376,8 +484,14 @@ export const ChatProvider = ({ children }) => {
           setChatIdMap(nextChatIdMap);
         }
         successfulSync = true;
+        setChatSyncError(null);
       } catch (error) {
         console.log("Chat refresh failed:", error?.message || error);
+        if (normalizeId(String(currentUserIdRef.current ?? "")) === userUid) {
+          setChatSyncError(
+            "Unable to refresh chats. Please check your internet connection."
+          );
+        }
       } finally {
         if (normalizeId(String(currentUserIdRef.current ?? "")) === userUid) {
           setLoadingChats(false);
@@ -391,6 +505,56 @@ export const ChatProvider = ({ children }) => {
 
     return refreshPromiseRef.current;
   }, [currentUserId, currentUser?.role, isChatReady]);
+
+  useEffect(() => {
+    if (!currentUserId) return undefined;
+    return subscribeNetUsable(() => {
+      refreshChatState().catch((e) =>
+        console.log("Chat refresh after reconnect:", e?.message || e)
+      );
+    });
+  }, [currentUserId, refreshChatState]);
+
+  useEffect(() => {
+    if (!currentUserId || !isChatReady) {
+      if (persistChatTimerRef.current) {
+        clearTimeout(persistChatTimerRef.current);
+        persistChatTimerRef.current = null;
+      }
+      return undefined;
+    }
+    if (persistChatTimerRef.current) {
+      clearTimeout(persistChatTimerRef.current);
+    }
+    persistChatTimerRef.current = setTimeout(() => {
+      const uid = normalizeId(currentUserId);
+      if (!uid) return;
+      const payload = serializeChatStateForCache({
+        chatList,
+        conversations,
+        lastMessages,
+        unreadCounts,
+        chatIdMap,
+        userMap,
+      });
+      writeDataCache(chatStateCacheKey(uid), payload);
+    }, 900);
+    return () => {
+      if (persistChatTimerRef.current) {
+        clearTimeout(persistChatTimerRef.current);
+        persistChatTimerRef.current = null;
+      }
+    };
+  }, [
+    currentUserId,
+    isChatReady,
+    chatList,
+    conversations,
+    lastMessages,
+    unreadCounts,
+    chatIdMap,
+    userMap,
+  ]);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -424,11 +588,35 @@ export const ChatProvider = ({ children }) => {
     refreshPromiseRef.current = null;
 
     const interactionTask = InteractionManager.runAfterInteractions(() => {
-      refreshChatState().catch((error) => {
-        console.log("Chat refresh warning:", error?.message || error);
-        setLoadingChats(false);
-        setIsChatReady(true);
-      });
+      (async () => {
+        const uid = normalizeId(currentUserId);
+        try {
+          const raw = await readDataCache(chatStateCacheKey(uid));
+          const restored = deserializeChatStateFromCache(raw);
+          if (
+            restored &&
+            normalizeId(String(currentUserIdRef.current ?? "")) === uid
+          ) {
+            setChatList(restored.chatList);
+            setConversations(restored.conversations);
+            setLastMessages(restored.lastMessages);
+            setUnreadCounts(restored.unreadCounts);
+            setChatIdMap(restored.chatIdMap);
+            setUserMap(restored.userMap);
+            setLoadingChats(false);
+            setIsChatReady(true);
+          }
+        } catch (e) {
+          console.log("Chat cache hydrate:", e?.message || e);
+        }
+        try {
+          await refreshChatState();
+        } catch (error) {
+          console.log("Chat refresh warning:", error?.message || error);
+          setLoadingChats(false);
+          setIsChatReady(true);
+        }
+      })();
     });
 
     return () => interactionTask.cancel();
@@ -479,58 +667,125 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
-  // NEW: Delete a message
-  const deleteMessage = async (chatKey, messageId) => {
-    try {
-      // Resolve actual chat ID from chatIdMap or conversations
+  const deleteChat = useCallback(
+    async (chatKey) => {
+      if (!currentUserId || !chatKey) {
+        throw new Error("Cannot delete chat.");
+      }
+
       let actualChatId = chatIdMap[chatKey];
       if (!actualChatId) {
         const existingMessages = conversations[chatKey] || [];
-        const fallbackFromMessages = existingMessages[0]?._chatId;
-        if (fallbackFromMessages) {
-          actualChatId = fallbackFromMessages;
-        } else {
-          throw new Error(`Chat ID not found for key: ${chatKey}`);
-        }
+        actualChatId =
+          existingMessages[existingMessages.length - 1]?._chatId ||
+          existingMessages[0]?._chatId;
       }
 
-      // Send DELETE request to backend
-      await apiRequest(`/chats/${actualChatId}/messages/${messageId}`, {
-        method: "DELETE",
-        timeoutMs: CHAT_SYNC_TIMEOUT_MS,
-      });
+      if (actualChatId) {
+        await apiRequest(`/chats/${actualChatId}`, {
+          method: "DELETE",
+          timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+        });
+      }
 
-      // Update local conversations state by removing the message
       setConversations((prev) => {
-        const currentMessages = prev[chatKey] || [];
-        const updatedMessages = currentMessages.filter((m) => String(m.id) !== String(messageId));
-        if (updatedMessages.length === currentMessages.length) return prev; // no change
-        return {
-          ...prev,
-          [chatKey]: updatedMessages,
-        };
+        const next = { ...prev };
+        delete next[chatKey];
+        return next;
       });
-
-      // Update lastMessages if necessary (if the deleted message was the last)
       setLastMessages((prev) => {
-        const updatedMessages = conversations[chatKey]?.filter((m) => String(m.id) !== String(messageId)) || [];
-        const newLastTimestamp = updatedMessages.length > 0 ? updatedMessages[updatedMessages.length - 1]?.timestamp : null;
-        if (newLastTimestamp) {
-          return { ...prev, [chatKey]: newLastTimestamp };
-        } else {
-          const newPrev = { ...prev };
-          delete newPrev[chatKey];
-          return newPrev;
-        }
+        const next = { ...prev };
+        delete next[chatKey];
+        return next;
+      });
+      setUnreadCounts((prev) => {
+        const next = { ...prev };
+        delete next[chatKey];
+        return next;
+      });
+      setChatIdMap((prev) => {
+        const next = { ...prev };
+        delete next[chatKey];
+        return next;
       });
 
-      // Optionally refresh from server to be fully consistent
-      refreshChatState().catch((err) => console.log("Refresh after delete warning:", err));
-    } catch (error) {
-      console.error("Error deleting message:", error);
-      throw error;
-    }
-  };
+      return true;
+    },
+    [currentUserId, chatIdMap, conversations]
+  );
+
+  const removeMessageFromLocalState = useCallback((chatKey, messageId) => {
+    const id = String(messageId);
+    setConversations((prev) => {
+      const currentMessages = prev[chatKey] || [];
+      const updatedMessages = currentMessages.filter(
+        (m) => String(m.id) !== id
+      );
+      if (updatedMessages.length === currentMessages.length) return prev;
+
+      setLastMessages((prevLast) => {
+        if (updatedMessages.length > 0) {
+          return {
+            ...prevLast,
+            [chatKey]:
+              updatedMessages[updatedMessages.length - 1].timestamp,
+          };
+        }
+        const next = { ...prevLast };
+        delete next[chatKey];
+        return next;
+      });
+
+      return { ...prev, [chatKey]: updatedMessages };
+    });
+  }, []);
+
+  /** Permanently delete own message from DB (hidden for everyone). */
+  const deleteMessage = useCallback(
+    async (chatKey, messageId, message) => {
+      const id = String(messageId);
+      const actualChatId = resolveActualChatId(chatKey, message || { id });
+
+      if (!actualChatId) {
+        await hideMessageForMe(chatKey, id);
+        return { localOnly: true };
+      }
+
+      try {
+        await apiRequest(`/chats/${actualChatId}/messages/${id}`, {
+          method: "DELETE",
+          timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+        });
+      } catch (error) {
+        const status = error?.status;
+        if (status === 404 || status === 403) {
+          await hideMessageForMe(chatKey, id);
+          removeMessageFromLocalState(chatKey, id);
+          const err = new Error(
+            status === 403
+              ? "You can only delete messages you sent."
+              : "Message was removed from your chat."
+          );
+          err.localOnly = true;
+          throw err;
+        }
+        throw error;
+      }
+
+      removeMessageFromLocalState(chatKey, id);
+      await hideMessageForMe(chatKey, id);
+      refreshChatState().catch((err) =>
+        console.log("Refresh after delete warning:", err)
+      );
+      return { success: true };
+    },
+    [
+      resolveActualChatId,
+      hideMessageForMe,
+      removeMessageFromLocalState,
+      refreshChatState,
+    ]
+  );
 
   // Function to manually refresh chats
   const refreshChats = useCallback(async () => {
@@ -749,7 +1004,12 @@ export const ChatProvider = ({ children }) => {
         refreshChats,
         getTotalUnreadCount,
         forceRefreshUnreadCounts,
-        deleteMessage,          // <-- Added deleteMessage function
+        deleteMessage,
+        deleteChat,
+        hideMessageForMe,
+        filterMessagesForChat,
+        hiddenMessagesByChat,
+        chatSyncError,
       }}
     >
       {children}

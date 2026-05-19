@@ -14,6 +14,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
 } from "react-native";
+import { TouchableOpacity as GHChatTouchable } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useChat } from "../../../context/appstate/ChatContext";
 import { useAuth } from "../../../context/appstate/AuthContext";
@@ -82,6 +83,26 @@ const HeaderAvatar = ({ imageUrl, name, size = 40 }) => {
 
 const normalizeId = (value) =>
   value == null ? "" : String(value).trim().toLowerCase();
+
+const MESSAGE_ID_GUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isPersistedMessageId = (id) =>
+  id != null && MESSAGE_ID_GUID_RE.test(String(id));
+
+const MESSAGE_LONG_PRESS_MS = 400;
+
+/** Long-press on any message (sent or received). */
+const MessageLongPressWrap = ({ onLongPress, style, children }) => (
+  <GHChatTouchable
+    style={style}
+    onLongPress={onLongPress}
+    delayLongPress={MESSAGE_LONG_PRESS_MS}
+    activeOpacity={0.85}
+  >
+    {children}
+  </GHChatTouchable>
+);
 
 /** Normalize chat timestamps (Firestore-style, Date, or ISO string). */
 const getValidDate = (timestamp) => {
@@ -168,6 +189,8 @@ const ChatScreen = () => {
     refreshChats,
     forceRefreshUnreadCounts,
     deleteMessage = () => {},
+    hideMessageForMe = async () => {},
+    filterMessagesForChat = (_, msgs) => msgs || [],
   } = useChat();
   const { setUserInChat } = useNotifications();
   const currentUserUid = normalizeId(currentUser?.uid || currentUser?.id) || null;
@@ -186,12 +209,17 @@ const ChatScreen = () => {
     parseStoryPreviewParam(params.storyPreview)
   );
 
-  const contextMessages = chatId ? conversations[chatId] || [] : [];
-  const contextMessageIds = new Set(contextMessages.map((m) => String(m.id)));
+  const rawContextMessages = chatId ? conversations[chatId] || [] : [];
+  const contextMessageIds = new Set(
+    rawContextMessages.map((m) => String(m.id))
+  );
   const dedupedLocalMessages = localMessages.filter(
     (m) => !contextMessageIds.has(String(m.id))
   );
-  const messages = [...contextMessages, ...dedupedLocalMessages];
+  const messages = filterMessagesForChat(chatId, [
+    ...rawContextMessages,
+    ...dedupedLocalMessages,
+  ]);
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
@@ -209,8 +237,13 @@ const ChatScreen = () => {
     failedPickDocument: "Failed to pick document",
     failedSendDocument: "Failed to send document",
     deleteMessage: "Delete message",
-    deleteConfirmation: "Delete this message?",
-    deleteForMe: "Delete for me",
+    deleteChoose: "What would you like to do?",
+    removeForMe: "Remove for me",
+    deleteForEveryone:
+      "Delete for everyone",
+    deleteForEveryoneHint:
+      "Permanently removes this message for all participants.",
+    removeForMeHint: "Hides this message on your device only.",
     cancel: "Cancel",
   });
 
@@ -269,8 +302,13 @@ const ChatScreen = () => {
         failedPickDocument: await t("Failed to pick document"),
         failedSendDocument: await t("Failed to send document"),
         deleteMessage: await t("Delete message"),
-        deleteConfirmation: await t("Delete this message?"),
-        deleteForMe: await t("Delete for me"),
+        deleteChoose: await t("What would you like to do?"),
+        removeForMe: await t("Remove for me"),
+        deleteForEveryone: await t("Delete for everyone"),
+        deleteForEveryoneHint: await t(
+          "Permanently removes this message for all participants."
+        ),
+        removeForMeHint: await t("Hides this message on your device only."),
         cancel: await t("Cancel"),
       });
     };
@@ -318,29 +356,64 @@ const ChatScreen = () => {
     index,
   });
 
-  const handleDeleteMessage = (message) => {
-    if (message.sender !== currentUserUid) return;
-    Alert.alert(
-      translations.deleteMessage,
-      translations.deleteConfirmation,
-      [
-        { text: translations.cancel, style: "cancel" },
-        {
-          text: translations.deleteForMe,
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteMessage(chatId, message.id);
-              setLocalMessages((prev) => prev.filter((m) => m.id !== message.id));
-              if (refreshChats) await refreshChats();
-            } catch (error) {
-              console.error("Error deleting message:", error);
-              Alert.alert(translations.error, "Failed to delete message");
-            }
-          },
-        },
-      ]
+  const removeFromLocalUi = async (message) => {
+    await hideMessageForMe(chatId, message.id);
+    setLocalMessages((prev) =>
+      prev.filter((m) => String(m.id) !== String(message.id))
     );
+  };
+
+  const handleDeleteMessage = (message) => {
+    const mine = normalizeId(message.sender) === currentUserUid;
+    const canDeleteForEveryone = mine && isPersistedMessageId(message.id);
+
+    const buttons = [
+      {
+        text: translations.removeForMe,
+        onPress: () => {
+          removeFromLocalUi(message).catch((e) =>
+            console.error("Remove for me:", e)
+          );
+        },
+      },
+    ];
+
+    if (canDeleteForEveryone) {
+      buttons.push({
+        text: translations.deleteForEveryone,
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteMessage(chatId, message.id, message);
+            setLocalMessages((prev) =>
+              prev.filter((m) => String(m.id) !== String(message.id))
+            );
+          } catch (error) {
+            if (error?.localOnly) {
+              setLocalMessages((prev) =>
+                prev.filter((m) => String(m.id) !== String(message.id))
+              );
+              return;
+            }
+            console.error("Error deleting message:", error);
+            Alert.alert(
+              translations.error,
+              error?.message || "Failed to delete message"
+            );
+          }
+        },
+      });
+    }
+
+    buttons.push({ text: translations.cancel, style: "cancel" });
+
+    const hint = canDeleteForEveryone
+      ? `${translations.removeForMeHint}\n\n${translations.deleteForEveryoneHint}`
+      : translations.removeForMeHint;
+
+    Alert.alert(translations.deleteMessage, hint, buttons, {
+      cancelable: true,
+    });
   };
 
   const handleSendMessage = async () => {
@@ -541,15 +614,17 @@ const ChatScreen = () => {
   };
 
   const renderMessage = ({ item }) => {
+    const mine = normalizeId(item.sender) === currentUserUid;
+    const alignSelf = mine ? "flex-end" : "flex-start";
+    const onDelete = () => handleDeleteMessage(item);
+
     if (item.type === "story_reply") {
       return (
-        <View
+        <MessageLongPressWrap
+          onLongPress={onDelete}
           style={[
             styles.messageBubble,
-            {
-              alignSelf:
-                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
-            },
+            { alignSelf },
           ]}
         >
           {item.storyPreview?.imageURL && (
@@ -579,25 +654,21 @@ const ChatScreen = () => {
                 })
               : translations.sending}
           </Text>
-        </View>
+        </MessageLongPressWrap>
       );
     }
     if (item.type === "image") {
       return (
-        <View
+        <MessageLongPressWrap
+          onLongPress={onDelete}
           style={{
-            alignSelf:
-              normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
+            alignSelf,
             marginVertical: 5,
             marginHorizontal: 10,
           }}
         >
           <LinearGradient
-            colors={
-              normalizeId(item.sender) === currentUserUid
-                ? ["#4c669f", "#3b5998"]
-                : ["#e0e0e0", "#cfcfcf"]
-            }
+            colors={mine ? ["#4c669f", "#3b5998"] : ["#e0e0e0", "#cfcfcf"]}
             style={styles.messageBubble}
           >
             <TouchableOpacity
@@ -643,22 +714,20 @@ const ChatScreen = () => {
               )}
             </View>
           </LinearGradient>
-        </View>
+        </MessageLongPressWrap>
       );
     }
     if (item.type === "file") {
       return (
+        <MessageLongPressWrap
+          onLongPress={onDelete}
+          style={{ alignSelf }}
+        >
         <LinearGradient
-          colors={
-            normalizeId(item.sender) === currentUserUid
-              ? ["#4c669f", "#3b5998"]
-              : ["#e0e0e0", "#cfcfcf"]
-          }
+          colors={mine ? ["#4c669f", "#3b5998"] : ["#e0e0e0", "#cfcfcf"]}
           style={[
             styles.messageBubble,
             {
-              alignSelf:
-                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
               flexDirection: "row",
               alignItems: "center",
             },
@@ -697,21 +766,20 @@ const ChatScreen = () => {
             </Text>
           </View>
         </LinearGradient>
+        </MessageLongPressWrap>
       );
     }
     if (item.type === "audio") {
       return (
+        <MessageLongPressWrap
+          onLongPress={onDelete}
+          style={{ alignSelf }}
+        >
         <LinearGradient
-          colors={
-            normalizeId(item.sender) === currentUserUid
-              ? ["#4c669f", "#3b5998"]
-              : ["#e0e0e0", "#cfcfcf"]
-          }
+          colors={mine ? ["#4c669f", "#3b5998"] : ["#e0e0e0", "#cfcfcf"]}
           style={[
             styles.messageBubble,
             {
-              alignSelf:
-                normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
               flexDirection: "row",
               alignItems: "center",
             },
@@ -745,26 +813,21 @@ const ChatScreen = () => {
             </Text>
           </View>
         </LinearGradient>
+        </MessageLongPressWrap>
       );
     }
     return (
+      <MessageLongPressWrap
+        onLongPress={onDelete}
+        style={{ alignSelf }}
+      >
       <LinearGradient
-        colors={
-          normalizeId(item.sender) === currentUserUid
-            ? ["#4c669f", "#3b5998"]
-            : ["#e0e0e0", "#cfcfcf"]
-        }
-        style={[
-          styles.messageBubble,
-          {
-            alignSelf:
-              normalizeId(item.sender) === currentUserUid ? "flex-end" : "flex-start",
-          },
-        ]}
+        colors={mine ? ["#4c669f", "#3b5998"] : ["#e0e0e0", "#cfcfcf"]}
+        style={styles.messageBubble}
       >
         <Text
           style={{
-            color: normalizeId(item.sender) === currentUserUid ? "white" : "black",
+            color: mine ? "white" : "black",
           }}
         >
           {item.text}
@@ -776,6 +839,7 @@ const ChatScreen = () => {
           })()}
         </Text>
       </LinearGradient>
+      </MessageLongPressWrap>
     );
   };
 
@@ -849,6 +913,7 @@ const ChatScreen = () => {
           }
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesList}
+          removeClippedSubviews={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           onLayout={() => {

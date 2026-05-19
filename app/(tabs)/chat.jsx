@@ -9,7 +9,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
+import { TouchableOpacity as GHChatTouchable } from "react-native-gesture-handler";
 import { useTheme } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -21,8 +23,10 @@ import { useChat } from "../../context/appstate/ChatContext";
 import StoryViewer from "../../components/StoryViewer";
 import { useNavigation } from "@react-navigation/native";
 import { useLanguage } from "../../context/appstate/LanguageContext";
-import { apiRequest } from "../../utils/api";
 import { HOME_ROUTE } from "../../utils/routes";
+import { readDataCache, CACHE_KEYS } from "../../utils/dataCache";
+import { formatMessagePreview } from "../../utils/chatMessagePreview";
+import FetchState from "../../components/FetchState";
 
 const GLOBAL_GROUP_CHAT_KEY = "group_swazi_cooperators";
 
@@ -40,6 +44,27 @@ const buildDirectKey = (a, b) => {
 
   return aa > bb ? `${aa}_${bb}` : `${bb}_${aa}`;
 };
+
+const CHAT_ROW_LONG_PRESS_MS = 400;
+
+/** Row wrapper that reliably receives long-press inside FlatList + gesture-handler root. */
+const ChatRow = ({
+  style,
+  selected,
+  onPress,
+  onLongPress,
+  children,
+}) => (
+  <GHChatTouchable
+    style={[style, selected && styles.chatItemSelected]}
+    onPress={onPress}
+    onLongPress={onLongPress}
+    delayLongPress={CHAT_ROW_LONG_PRESS_MS}
+    activeOpacity={0.7}
+  >
+    {children}
+  </GHChatTouchable>
+);
 
 function viewerHasSeenStory(story, viewerUid) {
   if (!viewerUid || !story) return false;
@@ -329,6 +354,11 @@ const ChatList = () => {
     markMessagesAsRead,
     refreshChats,
     unreadCounts,
+    userMap,
+    deleteChat,
+    filterMessagesForChat,
+    hiddenMessagesByChat,
+    chatSyncError,
   } = useChat();
 
   const { currentLanguage, t } = useLanguage();
@@ -350,6 +380,8 @@ const ChatList = () => {
 
   const lastRefreshRef = useRef(0);
 
+  const [chatPendingDeleteKey, setChatPendingDeleteKey] = useState(null);
+
   const [translations, setTranslations] = useState({
     chat: "Chat",
     addStory: "Add Story",
@@ -358,6 +390,15 @@ const ChatList = () => {
     unknown: "Unknown",
     startConversation: "Start a conversation",
     fileSent: "📂 File sent",
+    deleteChatTitle: "Delete chat",
+    deleteChatMessage:
+      "Are you sure you want to delete this chat? All messages will be removed.",
+    ok: "OK",
+    cancel: "Cancel",
+    deleteFailed: "Could not delete chat. Please try again.",
+    loadingChatsText: "Loading chats...",
+    networkError: "Unable to load chats. Please check your internet connection.",
+    tryAgain: "Try again",
   });
 
   useEffect(() => {
@@ -370,6 +411,18 @@ const ChatList = () => {
         unknown: await t("Unknown"),
         startConversation: await t("Start a conversation"),
         fileSent: await t("📂 File sent"),
+        deleteChatTitle: await t("Delete chat"),
+        deleteChatMessage: await t(
+          "Are you sure you want to delete this chat? All messages will be removed."
+        ),
+        ok: await t("OK"),
+        cancel: await t("Cancel"),
+        deleteFailed: await t("Could not delete chat. Please try again."),
+        loadingChatsText: await t("Loading chats..."),
+        networkError: await t(
+          "Unable to load chats. Please check your internet connection."
+        ),
+        tryAgain: await t("Try again"),
       });
     };
 
@@ -392,7 +445,7 @@ const ChatList = () => {
   }, [loadingChats, hasLoadedOnce]);
 
   useEffect(() => {
-    const fetchAllUserInfo = async () => {
+    const buildUserMaps = async () => {
       if (!activeStories || activeStories.length === 0) {
         setLoadingNames(false);
         return;
@@ -401,46 +454,18 @@ const ChatList = () => {
       setLoadingNames(true);
 
       try {
-        const response = await apiRequest("/users");
-
-        const allUsers = response || [];
-
         const namesMap = {};
         const avatarsMap = {};
 
         namesMap[currentUserId] = translations.me;
+        avatarsMap[currentUserId] = currentUser?.profilePic || "";
 
-        avatarsMap[currentUserId] =
-          currentUser?.profilePic || "";
-
-        allUsers.forEach((user) => {
-          const userId =
-            user.Id ||
-            user.id ||
-            user.uid ||
-            user.userId;
-
-          const displayName =
-            user.displayName ||
-            user.name ||
-            user.fullName ||
-            user.username ||
-            user.userName ||
-            user.DisplayName ||
-            user.Name;
-
-          const avatar =
-            user.profilePic ||
-            user.avatar ||
-            user.profilePicture ||
-            user.imageUrl;
-
-          if (userId && displayName) {
-            namesMap[userId] = displayName;
-
-            if (avatar) {
-              avatarsMap[userId] = avatar;
-            }
+        Object.values(userMap || {}).forEach((user) => {
+          if (!user?.uid) return;
+          namesMap[user.uid] =
+            user.displayName || namesMap[user.uid] || "User";
+          if (user.profilePic) {
+            avatarsMap[user.uid] = user.profilePic;
           }
         });
 
@@ -451,45 +476,57 @@ const ChatList = () => {
               user.name ||
               namesMap[user.uid] ||
               "User";
-
             if (user.profilePic) {
               avatarsMap[user.uid] = user.profilePic;
             }
           }
         });
 
+        const cachedUsers = await readDataCache(CACHE_KEYS.USERS);
+        (cachedUsers || []).forEach((user) => {
+          const userId =
+            user.Id || user.id || user.uid || user.userId;
+          const displayName =
+            user.displayName ||
+            user.name ||
+            user.DisplayName ||
+            user.Name;
+          const avatar =
+            user.profilePic ||
+            user.ProfilePicUrl ||
+            user.avatar ||
+            user.profilePicture ||
+            user.imageUrl;
+          if (userId && displayName) {
+            namesMap[userId] = displayName;
+            if (avatar) avatarsMap[userId] = avatar;
+          }
+        });
+
         const uniqueStoryUserIds = [
-          ...new Set(
-            activeStories
-              .map((s) => s.userId)
-              .filter(Boolean)
-          ),
+          ...new Set(activeStories.map((s) => s.userId).filter(Boolean)),
         ];
 
         uniqueStoryUserIds.forEach((userId) => {
-          if (
-            !namesMap[userId] &&
-            userId !== currentUserId
-          ) {
-            const shortId = userId.substring(0, 6);
-
-            namesMap[userId] = `User ${shortId}`;
+          if (!namesMap[userId] && userId !== currentUserId) {
+            namesMap[userId] = `User ${userId.substring(0, 6)}`;
           }
         });
 
         setUserNamesMap(namesMap);
         setUserAvatarsMap(avatarsMap);
       } catch (error) {
-        console.error("Error fetching users:", error);
+        console.error("Error building user maps:", error);
       } finally {
         setLoadingNames(false);
       }
     };
 
-    fetchAllUserInfo();
+    buildUserMaps();
   }, [
     activeStories,
     baseUserList,
+    userMap,
     currentUserId,
     translations.me,
     currentUser,
@@ -497,7 +534,10 @@ const ChatList = () => {
 
   const getUnreadCount = useCallback(
     (chatId) => {
-      const chatMessages = conversations[chatId] || [];
+      const chatMessages = filterMessagesForChat(
+        chatId,
+        conversations[chatId] || []
+      );
 
       const unreadMessages = chatMessages.filter((msg) => {
         const isReceiver =
@@ -520,7 +560,7 @@ const ChatList = () => {
 
       return unreadMessages.length;
     },
-    [conversations, currentUserId]
+    [conversations, currentUserId, filterMessagesForChat]
   );
 
   const chatList = React.useMemo(() => {
@@ -534,28 +574,23 @@ const ChatList = () => {
         user.uid
       );
 
-      const chatData = conversations[chatId] || [];
+      const chatData = filterMessagesForChat(
+        chatId,
+        conversations[chatId] || []
+      );
 
-      const lastMessage =
-        chatData[chatData.length - 1];
+      const lastMsg = chatData[chatData.length - 1];
+      const previewLabels = {
+        startConversation: translations.startConversation,
+        fileSent: translations.fileSent,
+      };
 
       const unreadCount = getUnreadCount(chatId);
 
       return {
         ...user,
-        lastMessage:
-          lastMessage?.type === "story_reply"
-            ? `Replied to status: ${
-                lastMessage?.text || ""
-              }`.trim()
-            : lastMessage?.text ||
-              (lastMessage?.fileUrl
-                ? translations.fileSent
-                : translations.startConversation),
-
-        lastMessageTimestamp:
-          lastMessages[chatId],
-
+        lastMessage: formatMessagePreview(lastMsg, previewLabels),
+        lastMessageTimestamp: lastMsg?.timestamp ?? lastMessages[chatId],
         unreadCount,
       };
     });
@@ -573,10 +608,29 @@ const ChatList = () => {
     baseUserList,
     conversations,
     lastMessages,
+    hiddenMessagesByChat,
     currentUser,
     translations.fileSent,
     translations.startConversation,
     getUnreadCount,
+    filterMessagesForChat,
+  ]);
+
+  const groupChatPreview = React.useMemo(() => {
+    const groupMsgs = filterMessagesForChat(
+      GLOBAL_GROUP_CHAT_KEY,
+      conversations[GLOBAL_GROUP_CHAT_KEY] || []
+    );
+    const last = groupMsgs[groupMsgs.length - 1];
+    return formatMessagePreview(last, {
+      startConversation: translations.startConversation,
+      fileSent: translations.fileSent,
+    });
+  }, [
+    conversations,
+    filterMessagesForChat,
+    translations.startConversation,
+    translations.fileSent,
   ]);
 
   const groupedStories = React.useMemo(() => {
@@ -638,11 +692,58 @@ const ChatList = () => {
     }
   };
 
+  const promptDeleteChat = (chatKey, displayName) => {
+    Alert.alert(translations.deleteChatTitle, translations.deleteChatMessage, [
+      {
+        text: translations.cancel,
+        style: "cancel",
+        onPress: () => setChatPendingDeleteKey(null),
+      },
+      {
+        text: translations.ok,
+        style: "destructive",
+        onPress: async () => {
+          setChatPendingDeleteKey(null);
+          try {
+            await deleteChat(chatKey);
+          } catch (error) {
+            console.error("Delete chat failed:", error);
+            Alert.alert(translations.deleteChatTitle, translations.deleteFailed);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleChatLongPress = (item) => {
+    const chatKey = buildDirectKey(currentUserId, item.uid || item.id);
+    if (!chatKey) {
+      console.warn("Long press: missing chat key", {
+        currentUserId,
+        peerId: item?.uid || item?.id,
+      });
+      return;
+    }
+    setChatPendingDeleteKey(chatKey);
+  };
+
+  const handleGroupChatLongPress = () => {
+    setChatPendingDeleteKey(GLOBAL_GROUP_CHAT_KEY);
+  };
+
   const handleChatPress = async (item) => {
     const chatId = buildDirectKey(
       currentUserId,
       item.uid
     );
+
+    if (chatPendingDeleteKey) {
+      if (chatPendingDeleteKey === chatId) {
+        setChatPendingDeleteKey(null);
+        return;
+      }
+      setChatPendingDeleteKey(null);
+    }
 
     if (chatId && item.unreadCount > 0) {
       const chatMessages =
@@ -675,80 +776,35 @@ const ChatList = () => {
     }, [refreshStories])
   );
 
-  if (loadingChats && !hasLoadedOnce && !loadingTimeout) {
+  const showInitialLoad = loadingChats && !hasLoadedOnce && !loadingTimeout;
+  const showLoadError =
+    (loadingTimeout && !hasLoadedOnce) ||
+    (chatSyncError && !baseUserList.length && hasLoadedOnce);
+
+  if (showInitialLoad || showLoadError) {
     return (
       <View
         style={[
           styles.loadingContainer,
-          {
-            backgroundColor: colors.background,
-          },
+          { backgroundColor: colors.background },
         ]}
       >
-        <Image
-          source={images.loader}
-          style={styles.loader}
-        />
-
-        <Text
-          style={{
-            marginTop: 10,
-            color: colors.tertiary,
-          }}
-        >
-          Loading chats...
-        </Text>
-      </View>
-    );
-  }
-
-  if (loadingTimeout && !hasLoadedOnce) {
-    return (
-      <View
-        style={[
-          styles.loadingContainer,
-          {
-            backgroundColor: colors.background,
-          },
-        ]}
-      >
-        <Ionicons
-          name="chatbubbles-outline"
-          size={60}
-          color={colors.primary}
-        />
-
-        <Text
-          style={{
-            marginTop: 15,
-            color: colors.tertiary,
-            textAlign: "center",
-            paddingHorizontal: 30,
-          }}
-        >
-          Unable to load chats. Check your internet
-          connection.
-        </Text>
-
-        <TouchableOpacity
-          style={{
-            marginTop: 20,
-            backgroundColor: colors.primary,
-            paddingHorizontal: 30,
-            paddingVertical: 12,
-            borderRadius: 8,
-          }}
-          onPress={async () => {
+        <FetchState
+          loading={showInitialLoad}
+          error={
+            showLoadError
+              ? chatSyncError || translations.networkError
+              : null
+          }
+          onRetry={async () => {
             setLoadingTimeout(false);
             setHasLoadedOnce(false);
             setRefreshing(true);
-
             try {
               await Promise.all([
-                refreshChats && refreshChats(),
-                refreshStories && refreshStories(),
+                refreshChats?.(),
+                refreshStories?.(),
               ]);
-
               setHasLoadedOnce(true);
               setLoadingTimeout(false);
             } catch (error) {
@@ -758,16 +814,11 @@ const ChatList = () => {
               setRefreshing(false);
             }
           }}
-        >
-          <Text
-            style={{
-              color: "white",
-              fontWeight: "bold",
-            }}
-          >
-            Retry
-          </Text>
-        </TouchableOpacity>
+          loadingText={translations.loadingChatsText}
+          errorText={translations.networkError}
+          retryText={translations.tryAgain}
+          color={colors.primary}
+        />
       </View>
     );
   }
@@ -810,6 +861,16 @@ const ChatList = () => {
           {translations.chat}
         </Text>
       </View>
+
+      {chatSyncError && baseUserList.length > 0 ? (
+        <TouchableOpacity
+          style={styles.syncErrorBanner}
+          onPress={() => refreshChats?.()}
+        >
+          <Text style={styles.syncErrorText}>{chatSyncError}</Text>
+          <Text style={styles.syncErrorRetry}>{translations.tryAgain}</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.statusListContainer}>
         <ScrollView
@@ -943,29 +1004,37 @@ const ChatList = () => {
         }}
       />
 
-      <TouchableOpacity
+      <ChatRow
         style={[
           styles.chatItem,
           {
             backgroundColor: "#8ee4f59c",
           },
         ]}
-        onPress={() =>
+        selected={chatPendingDeleteKey === GLOBAL_GROUP_CHAT_KEY}
+        onLongPress={handleGroupChatLongPress}
+        onPress={() => {
+          if (chatPendingDeleteKey === GLOBAL_GROUP_CHAT_KEY) {
+            setChatPendingDeleteKey(null);
+            return;
+          }
+          if (chatPendingDeleteKey) {
+            setChatPendingDeleteKey(null);
+          }
           router.push({
             pathname: "/(screens)/group-chat",
             params: {
               id: "group_swazi_cooperators",
               group: JSON.stringify({
                 uid: "group_swazi_cooperators",
-                displayName:
-                  "Swazi Cooparators",
+                displayName: "Swazi Cooparators",
                 profilePicture:
                   "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
                 isGroup: true,
               }),
             },
-          })
-        }
+          });
+        }}
       >
         <AvatarWithInitials
           imageUrl="https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg"
@@ -985,35 +1054,41 @@ const ChatList = () => {
             Swazi Cooparators
           </Text>
 
-          <Text style={styles.lastMessage}>
-            Group chat
+          <Text style={styles.lastMessage} numberOfLines={1}>
+            {groupChatPreview}
           </Text>
         </View>
 
-        {Number(
-          unreadCounts?.[
-            GLOBAL_GROUP_CHAT_KEY
-          ] || 0
-        ) > 0 && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>
-              {unreadCounts[
-                GLOBAL_GROUP_CHAT_KEY
-              ] > 99
-                ? "99+"
-                : unreadCounts[
-                    GLOBAL_GROUP_CHAT_KEY
-                  ]}
-            </Text>
-          </View>
+        {chatPendingDeleteKey === GLOBAL_GROUP_CHAT_KEY ? (
+          <TouchableOpacity
+            style={styles.deleteChatButton}
+            onPress={() =>
+              promptDeleteChat(GLOBAL_GROUP_CHAT_KEY, "Swazi Cooparators")
+            }
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="trash-outline" size={24} color="#FF3B30" />
+          </TouchableOpacity>
+        ) : (
+          Number(unreadCounts?.[GLOBAL_GROUP_CHAT_KEY] || 0) > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>
+                {unreadCounts[GLOBAL_GROUP_CHAT_KEY] > 99
+                  ? "99+"
+                  : unreadCounts[GLOBAL_GROUP_CHAT_KEY]}
+              </Text>
+            </View>
+          )
         )}
-      </TouchableOpacity>
+      </ChatRow>
 
       <FlatList
         data={chatList}
         keyExtractor={(item) =>
           item.uid?.toString()
         }
+        keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1038,12 +1113,16 @@ const ChatList = () => {
             }}
           />
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
+        renderItem={({ item }) => {
+          const rowChatKey = buildDirectKey(currentUserId, item.uid);
+          const showDelete = chatPendingDeleteKey === rowChatKey;
+
+          return (
+          <ChatRow
             style={styles.chatItem}
-            onPress={() =>
-              handleChatPress(item)
-            }
+            selected={showDelete}
+            onLongPress={() => handleChatLongPress(item)}
+            onPress={() => handleChatPress(item)}
           >
             <AvatarWithInitials
               imageUrl={
@@ -1080,17 +1159,31 @@ const ChatList = () => {
               </Text>
             </View>
 
-            {item.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>
-                  {item.unreadCount > 99
-                    ? "99+"
-                    : item.unreadCount}
-                </Text>
-              </View>
+            {showDelete ? (
+              <TouchableOpacity
+                style={styles.deleteChatButton}
+                onPress={() =>
+                  promptDeleteChat(
+                    rowChatKey,
+                    item.displayName || item.name
+                  )
+                }
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="trash-outline" size={24} color="#FF3B30" />
+              </TouchableOpacity>
+            ) : (
+              item.unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>
+                    {item.unreadCount > 99 ? "99+" : item.unreadCount}
+                  </Text>
+                </View>
+              )
             )}
-          </TouchableOpacity>
-        )}
+          </ChatRow>
+          );
+        }}
         contentContainerStyle={styles.chatList}
       />
     </View>
@@ -1192,6 +1285,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
 
+  chatItemSelected: {
+    backgroundColor: "rgba(255, 59, 48, 0.08)",
+  },
+
+  deleteChatButton: {
+    padding: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   avatar: {
     borderRadius: 24,
     marginRight: 12,
@@ -1259,6 +1362,25 @@ const styles = StyleSheet.create({
   loader: {
     width: 50,
     height: 50,
+  },
+  syncErrorBanner: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: "#fff3cd",
+    borderWidth: 1,
+    borderColor: "#ffc107",
+  },
+  syncErrorText: {
+    fontSize: 13,
+    color: "#664d03",
+  },
+  syncErrorRetry: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#007AFF",
   },
 });
 

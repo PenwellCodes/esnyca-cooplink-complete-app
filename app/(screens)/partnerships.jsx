@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   FlatList,
   Linking,
-  ActivityIndicator,
   Alert,
 } from "react-native";
 import { useTheme, Portal, Modal } from "react-native-paper";
@@ -16,6 +15,13 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
+import {
+  CACHE_KEYS,
+  readDataCache,
+  writeDataCache,
+  subscribeNetUsable,
+} from "../../utils/dataCache";
+import FetchState from "../../components/FetchState";
 
 const Partnerships = () => {
   const { colors } = useTheme();
@@ -30,6 +36,10 @@ const Partnerships = () => {
   const [translations, setTranslations] = useState({
     moreInformation: "More Information",
     facebook: "Facebook",
+    networkError:
+      "We could not load partnerships right now. Please check your internet connection and try again.",
+    tryAgain: "Try again",
+    loadingPartners: "Loading partnerships...",
   });
 
   useEffect(() => {
@@ -38,52 +48,77 @@ const Partnerships = () => {
         setTranslations({
           moreInformation: await t("More Information"),
           facebook: await t("Facebook"),
+          networkError: await t(
+            "We could not load partnerships right now. Please check your internet connection and try again."
+          ),
+          tryAgain: await t("Try again"),
+          loadingPartners: await t("Loading partnerships..."),
         });
       } catch {
         setTranslations({
           moreInformation: "More Information",
           facebook: "Facebook",
+          networkError:
+            "We could not load partnerships right now. Please check your internet connection and try again.",
+          tryAgain: "Try again",
+          loadingPartners: "Loading partnerships...",
         });
       }
     };
     loadTranslations();
   }, [currentLanguage, t]);
 
-  const fetchPartners = async () => {
-    setLoading(true);
+  const localizePartners = async (partnersRaw) => {
+    const partnersData = (partnersRaw || []).map((item) => ({
+      id: item.Id || item.id,
+      title: item.Title || "",
+      description: item.Description || "",
+      imageUrl: item.ImageUrl || "",
+      facebookUrl: item.FacebookUrl || "",
+    }));
+    return Promise.all(
+      partnersData.map(async (partner) => ({
+        ...partner,
+        title: await t(partner.title || ""),
+        description: await t(partner.description || ""),
+      }))
+    );
+  };
+
+  const fetchPartners = useCallback(async () => {
     setErrorMessage("");
+    setLoading(true);
+    const cachedRaw = await readDataCache(CACHE_KEYS.PARTNERS);
+    if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
+      try {
+        setPartners(await localizePartners(cachedRaw));
+        setLoading(false);
+      } catch {
+        /* continue to network */
+      }
+    }
+
     try {
       const partnersRaw = await apiRequest("/partners");
-      const partnersData = (partnersRaw || []).map((item) => ({
-        id: item.Id || item.id,
-        title: item.Title || "",
-        description: item.Description || "",
-        imageUrl: item.ImageUrl || "",
-        facebookUrl: item.FacebookUrl || "",
-      }));
-      const localizedPartners = await Promise.all(
-        partnersData.map(async (partner) => ({
-          ...partner,
-          title: await t(partner.title || ""),
-          description: await t(partner.description || ""),
-        }))
-      );
-      setPartners(localizedPartners);
+      await writeDataCache(CACHE_KEYS.PARTNERS, partnersRaw);
+      setPartners(await localizePartners(partnersRaw));
+      setErrorMessage("");
     } catch (error) {
-      // Keep user-facing state friendly without showing raw React/Expo error details.
       console.log("Partners fetch failed.");
-      setErrorMessage(
-        "We could not load partnerships right now. Please check your internet connection and try again."
-      );
-      setPartners([]);
+      if (!Array.isArray(cachedRaw) || cachedRaw.length === 0) {
+        setErrorMessage(translations.networkError);
+        setPartners([]);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [t, translations.networkError]);
 
   useEffect(() => {
     fetchPartners();
-  }, [currentLanguage, t]);
+    const unsubNet = subscribeNetUsable(fetchPartners);
+    return unsubNet;
+  }, [fetchPartners]);
 
   const openDrawer = (partner) => {
     setSelectedPartner(partner);
@@ -114,29 +149,15 @@ const Partnerships = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {loading ? (
-        <View style={styles.stateContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.stateText, { color: colors.tertiary }]}>
-            Loading partnerships...
-          </Text>
-        </View>
-      ) : errorMessage ? (
-        <View style={styles.stateContainer}>
-          <Text style={[styles.stateText, { color: colors.tertiary }]}>
-            {errorMessage}
-          </Text>
-          <TouchableOpacity
-            onPress={fetchPartners}
-            style={[styles.retryButton, { backgroundColor: colors.primary }]}
-          >
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-
-          {/* Partner Cards */}
+      <FetchState
+        loading={loading && partners.length === 0}
+        error={errorMessage || null}
+        onRetry={fetchPartners}
+        loadingText={translations.loadingPartners}
+        errorText={errorMessage || translations.networkError}
+        retryText={translations.tryAgain}
+        color={colors.primary}
+      >
           <FlatList
             data={partners}
             numColumns={3}
@@ -212,8 +233,7 @@ const Partnerships = () => {
               )}
             </Modal>
           </Portal>
-        </>
-      )}
+      </FetchState>
     </View>
   );
 };

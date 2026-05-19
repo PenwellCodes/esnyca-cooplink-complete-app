@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -21,9 +21,39 @@ import haversine from 'haversine';
 import { StatusBar } from 'expo-status-bar';
 import { useLanguage } from '../../context/appstate/LanguageContext';
 import { apiRequest } from '../../utils/api';
+import {
+  CACHE_KEYS,
+  readDataCache,
+  writeDataCache,
+  subscribeNetUsable,
+} from '../../utils/dataCache';
 import LeafletMap from '../../components/LeafletMap';
+import FetchState from '../../components/FetchState';
 
 const { height } = Dimensions.get('window');
+
+async function mapUsersToMapLocations(usersRaw, t) {
+  const locations = (usersRaw || [])
+    .map((item) => ({
+      id: item.Id || item.id,
+      latitude: parseFloat(item.LocationLat),
+      longitude: parseFloat(item.LocationLng),
+      title: item.DisplayName || 'Unknown Company',
+      description: item.Content || 'No description available',
+      photoUrl: item.ProfilePicUrl,
+      companyAddress: item.CompanyAddress,
+    }))
+    .filter((location) => location.latitude && location.longitude);
+
+  return Promise.all(
+    locations.map(async (location) => ({
+      ...location,
+      title: await t(location.title || ''),
+      description: await t(location.description || ''),
+      companyAddress: await t(location.companyAddress || ''),
+    }))
+  );
+}
 
 const LocationsScreen = () => {
   const insets = useSafeAreaInsets();
@@ -37,6 +67,8 @@ const LocationsScreen = () => {
   const [mapType, setMapType] = useState('standard');
   const [userLocations, setUserLocations] = useState([]);
   const [routeCoords, setRouteCoords] = useState(null);
+  const [pinsLoading, setPinsLoading] = useState(true);
+  const [pinsLoadError, setPinsLoadError] = useState(null);
 
   const mapRef = useRef(null);
 
@@ -56,6 +88,10 @@ const LocationsScreen = () => {
     quickestRoute: 'Quickest Route',
     close: 'Close',
     address: 'Address',
+    loadingPins: 'Loading locations...',
+    networkError:
+      'Unable to load locations. Please check your internet connection.',
+    tryAgain: 'Try again',
   });
 
   useEffect(() => {
@@ -77,6 +113,11 @@ const LocationsScreen = () => {
         quickestRoute: await t('Quickest Route'),
         close: await t('Close'),
         address: await t('Address'),
+        loadingPins: await t('Loading locations...'),
+        networkError: await t(
+          'Unable to load locations. Please check your internet connection.'
+        ),
+        tryAgain: await t('Try again'),
       });
     };
     loadTranslations();
@@ -105,45 +146,48 @@ const LocationsScreen = () => {
     })();
   }, []);
 
-  useEffect(() => {
-    const fetchUserLocations = async () => {
-      setLoading(true);
+  const fetchUserLocations = useCallback(async () => {
+    setPinsLoadError(null);
+    setPinsLoading(true);
+    const cachedRaw = await readDataCache(CACHE_KEYS.USERS);
+
+    if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
       try {
-        const usersRaw = await apiRequest('/users');
-
-        const locations = (usersRaw || [])
-          .map((item) => ({
-            id: item.Id || item.id,
-            latitude: parseFloat(item.LocationLat),
-            longitude: parseFloat(item.LocationLng),
-            title: item.DisplayName || 'Unknown Company',
-            description: item.Content || 'No description available',
-            photoUrl: item.ProfilePicUrl,
-            companyAddress: item.CompanyAddress,
-          }))
-          .filter((location) => location.latitude && location.longitude);
-
-        const localizedLocations = await Promise.all(
-          locations.map(async (location) => ({
-            ...location,
-            title: await t(location.title || ''),
-            description: await t(location.description || ''),
-            companyAddress: await t(location.companyAddress || ''),
-          }))
-        );
-
-        setUserLocations(localizedLocations);
-        setSearchResults(localizedLocations);
-      } catch (error) {
-        console.error('Error fetching user locations:', error);
-        setErrorMessage(await t('Error loading user locations'));
-      } finally {
-        setLoading(false);
+        const localized = await mapUsersToMapLocations(cachedRaw, t);
+        setUserLocations(localized);
+        setSearchResults(localized);
+        setPinsLoading(false);
+      } catch {
+        /* fall through to network */
       }
-    };
+    }
 
+    try {
+      const usersRaw = await apiRequest('/users');
+      await writeDataCache(CACHE_KEYS.USERS, usersRaw);
+      const localized = await mapUsersToMapLocations(usersRaw, t);
+      setUserLocations(localized);
+      setSearchResults(localized);
+      setErrorMessage('');
+      setPinsLoadError(null);
+    } catch (error) {
+      console.error('Error fetching user locations:', error);
+      if (!Array.isArray(cachedRaw) || cachedRaw.length === 0) {
+        setPinsLoadError(translations.networkError);
+        setErrorMessage(await t('Error loading user locations'));
+      }
+    } finally {
+      setPinsLoading(false);
+    }
+  }, [t, translations.networkError]);
+
+  useEffect(() => {
     fetchUserLocations();
-  }, [t]);
+    const unsubNet = subscribeNetUsable(() => {
+      fetchUserLocations();
+    });
+    return unsubNet;
+  }, [fetchUserLocations]);
 
   const handleSearch = () => {
     if (!searchQuery.trim()) {
@@ -236,15 +280,27 @@ const LocationsScreen = () => {
           onChangeText={(text) => setSearchQuery(text)}
           onSubmitEditing={handleSearch}
         />
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {errorMessage && !pinsLoadError ? (
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        ) : null}
 
-        {loading && (
-          <ActivityIndicator
-            size="large"
-            color="#007AFF"
-            style={styles.loadingIndicator}
+        {pinsLoadError && !userLocations.length ? (
+          <FetchState
+            loading={false}
+            error={pinsLoadError}
+            onRetry={fetchUserLocations}
+            errorText={translations.networkError}
+            retryText={translations.tryAgain}
           />
-        )}
+        ) : null}
+
+        {(loading || pinsLoading) && !userLocations.length && !pinsLoadError ? (
+          <FetchState
+            loading
+            loadingText={translations.loadingPins}
+            color="#007AFF"
+          />
+        ) : null}
 
         <View style={styles.controlContainer}>
           <Text style={styles.controlLabel}>

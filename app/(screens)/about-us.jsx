@@ -13,6 +13,13 @@ import { typography } from "../../constants";
 import { FontAwesome } from "@expo/vector-icons";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
+import {
+  CACHE_KEYS,
+  readDataCache,
+  writeDataCache,
+  subscribeNetUsable,
+} from "../../utils/dataCache";
+import FetchState from "../../components/FetchState";
 
 const aboutus = () => {
   const { colors } = useTheme();
@@ -25,6 +32,8 @@ const aboutus = () => {
     "ESNYCA was established to support and unify youth cooperatives by providing guidance, market access, and opportunities for collaboration. Through this platform, cooperatives can showcase their work, connect with partners, and grow their impact in communities.";
 
   const [team, setTeam] = useState([]);
+  const [teamLoading, setTeamLoading] = useState(true);
+  const [teamLoadError, setTeamLoadError] = useState(null);
   const [mission, setMission] = useState("");
   const [vision, setVision] = useState("");
   const [ourStory, setOurStory] = useState("");
@@ -37,6 +46,10 @@ const aboutus = () => {
     meetTeam: "Meet the Team",
     moreInformation: "More Information",
     socialLink: "Social Link",
+    loadingTeam: "Loading team...",
+    networkError:
+      "Unable to load team. Please check your internet connection.",
+    tryAgain: "Try again",
   });
 
   useEffect(() => {
@@ -47,42 +60,81 @@ const aboutus = () => {
         meetTeam: await t("Meet the Team"),
         moreInformation: await t("More Information"),
         socialLink: await t("Social Link"),
+        loadingTeam: await t("Loading team..."),
+        networkError: await t(
+          "Unable to load team. Please check your internet connection."
+        ),
+        tryAgain: await t("Try again"),
       });
     };
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Fetch team from backend.
+  const localizeTeam = async (teamRaw) => {
+    const teamData = (teamRaw || []).map((item) => ({
+      id: item.Id || item.id,
+      name: item.Name || "",
+      title: item.Title || "",
+      description: item.Description || "",
+      bio: item.Bio || "",
+      image: item.ImageUrl || "",
+      socialmedia: [],
+    }));
+    return Promise.all(
+      teamData.map(async (member) => ({
+        ...member,
+        name: await t(member.name || ""),
+        title: await t(member.title || ""),
+        description: await t(member.description || ""),
+        bio: await t(member.bio || ""),
+      }))
+    );
+  };
+
   useEffect(() => {
+    let cancelled = false;
+
     const fetchData = async () => {
+      setTeamLoadError(null);
+      const cachedRaw = await readDataCache(CACHE_KEYS.TEAM);
+      if (Array.isArray(cachedRaw) && cachedRaw.length > 0 && !cancelled) {
+        try {
+          setTeam(await localizeTeam(cachedRaw));
+          setTeamLoading(false);
+        } catch {
+          if (!cancelled) setTeamLoading(true);
+        }
+      } else if (!cancelled) {
+        setTeamLoading(true);
+      }
+
       try {
         const teamRaw = await apiRequest("/team-members");
-
-        const teamData = (teamRaw || []).map((item) => ({
-          id: item.Id || item.id,
-          name: item.Name || "",
-          title: item.Title || "",
-          description: item.Description || "",
-          bio: item.Bio || "",
-          image: item.ImageUrl || "",
-          socialmedia: [],
-        }));
-        const localizedTeam = await Promise.all(
-          teamData.map(async (member) => ({
-            ...member,
-            name: await t(member.name || ""),
-            title: await t(member.title || ""),
-            description: await t(member.description || ""),
-            bio: await t(member.bio || ""),
-          }))
-        );
-        setTeam(localizedTeam);
+        if (cancelled) return;
+        await writeDataCache(CACHE_KEYS.TEAM, teamRaw);
+        setTeam(await localizeTeam(teamRaw));
+        setTeamLoadError(null);
       } catch (error) {
         console.error("Error fetching meetourteam: ", error);
+        if (
+          !cancelled &&
+          (!Array.isArray(cachedRaw) || cachedRaw.length === 0)
+        ) {
+          setTeamLoadError(translations.networkError);
+        }
+      } finally {
+        if (!cancelled) setTeamLoading(false);
       }
     };
 
     fetchData();
+    const unsubNet = subscribeNetUsable(() => {
+      if (!cancelled) fetchData();
+    });
+    return () => {
+      cancelled = true;
+      unsubNet();
+    };
   }, [currentLanguage, t]);
 
   useEffect(() => {
@@ -148,6 +200,29 @@ const aboutus = () => {
       >
         {translations.meetTeam}
       </Text>
+      <FetchState
+        loading={teamLoading && team.length === 0}
+        error={teamLoadError}
+        onRetry={() => {
+          const run = async () => {
+            setTeamLoading(true);
+            setTeamLoadError(null);
+            try {
+              const teamRaw = await apiRequest("/team-members");
+              await writeDataCache(CACHE_KEYS.TEAM, teamRaw);
+              setTeam(await localizeTeam(teamRaw));
+            } catch {
+              setTeamLoadError(translations.networkError);
+            } finally {
+              setTeamLoading(false);
+            }
+          };
+          run();
+        }}
+        loadingText={translations.loadingTeam}
+        errorText={translations.networkError}
+        retryText={translations.tryAgain}
+      >
       <FlatList
         data={team}
         numColumns={3}
@@ -178,6 +253,7 @@ const aboutus = () => {
           </TouchableOpacity>
         )}
       />
+      </FetchState>
 
       {/* Bottom Drawer for More Information */}
       <Portal>

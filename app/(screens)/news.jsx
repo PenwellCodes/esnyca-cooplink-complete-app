@@ -13,6 +13,13 @@ import { useRouter } from "expo-router";
 import { images, typography } from "../../constants";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
+import {
+  CACHE_KEYS,
+  readDataCache,
+  writeDataCache,
+  subscribeNetUsable,
+} from "../../utils/dataCache";
+import FetchState from "../../components/FetchState";
 
 // Helper function to convert Firestore Timestamp to Date
 const getDateFromTimestamp = (date) => {
@@ -28,6 +35,35 @@ const getDateFromTimestamp = (date) => {
 
   return new Date();
 };
+
+async function buildLocalizedNewsFromRaw(newsListRaw, t) {
+  const newsList = (newsListRaw || []).map((item) => ({
+    id: item.Id || item.id,
+    title: item.Title || "",
+    content: item.Content || "",
+    summary: item.Summary || "",
+    imageUrl: item.ImageUrl || "",
+    author: item.Author || "",
+    createdAt: item.CreatedAt || null,
+    published: item.Published || false,
+  }));
+
+  const sortedNews = newsList.sort((a, b) => {
+    const dateA = getDateFromTimestamp(a.createdAt);
+    const dateB = getDateFromTimestamp(b.createdAt);
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  return Promise.all(
+    sortedNews.map(async (item) => ({
+      ...item,
+      title: await t(item.title || ""),
+      content: await t(item.content || ""),
+      summary: await t(item.summary || ""),
+      author: await t(item.author || ""),
+    }))
+  );
+}
 
 // NewsItem component to handle individual card rendering and state
 const NewsItem = ({ item, translations }) => {
@@ -107,10 +143,15 @@ const News = () => {
   const { currentLanguage, t } = useLanguage();
   const [newsData, setNewsData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [translations, setTranslations] = useState({
     readMore: "Read More",
     showLess: "Show Less",
     byPrefix: "By",
+    loadingNews: "Loading news...",
+    networkError:
+      "Unable to load news. Please check your internet connection.",
+    tryAgain: "Try again",
   });
 
   useEffect(() => {
@@ -119,76 +160,69 @@ const News = () => {
         readMore: await t("Read More"),
         showLess: await t("Show Less"),
         byPrefix: await t("By"),
+        loadingNews: await t("Loading news..."),
+        networkError: await t(
+          "Unable to load news. Please check your internet connection."
+        ),
+        tryAgain: await t("Try again"),
       });
     };
     loadTranslations();
   }, [currentLanguage, t]);
 
-  useEffect(() => {
-    const fetchNews = async () => {
+  const fetchNews = React.useCallback(async () => {
+    setLoadError(null);
+    const cachedRaw = await readDataCache(CACHE_KEYS.NEWS);
+    if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
       try {
-        let newsListRaw = await apiRequest("/news?published=true");
-        // Fallback: if no published news yet, display available news entries.
-        if (!Array.isArray(newsListRaw) || newsListRaw.length === 0) {
-          newsListRaw = await apiRequest("/news");
-        }
-        const newsList = (newsListRaw || []).map((item) => ({
-          id: item.Id || item.id,
-          title: item.Title || "",
-          content: item.Content || "",
-          summary: item.Summary || "",
-          imageUrl: item.ImageUrl || "",
-          author: item.Author || "",
-          createdAt: item.CreatedAt || null,
-          published: item.Published || false,
-        }));
-        
-        // Additional sort as fallback (in case orderBy didn't work)
-        const sortedNews = newsList.sort((a, b) => {
-          const dateA = getDateFromTimestamp(a.createdAt);
-          const dateB = getDateFromTimestamp(b.createdAt);
-          return dateB.getTime() - dateA.getTime();
-        });
-        
-        // Translate dynamic news body fields so cards fully follow language changes.
-        const localizedNews = await Promise.all(
-          sortedNews.map(async (item) => ({
-            ...item,
-            title: await t(item.title || ""),
-            content: await t(item.content || ""),
-            summary: await t(item.summary || ""),
-            author: await t(item.author || ""),
-          }))
-        );
-
-        setNewsData(localizedNews);
-      } catch (error) {
-        console.error("Error fetching news:", error);
-        setNewsData([]);
-      } finally {
+        setNewsData(await buildLocalizedNewsFromRaw(cachedRaw, t));
         setLoading(false);
+      } catch {
+        setLoading(true);
       }
-    };
+    } else {
+      setLoading(true);
+    }
 
+    try {
+      let newsListRaw = await apiRequest("/news?published=true");
+      if (!Array.isArray(newsListRaw) || newsListRaw.length === 0) {
+        newsListRaw = await apiRequest("/news");
+      }
+      await writeDataCache(CACHE_KEYS.NEWS, newsListRaw);
+      setNewsData(await buildLocalizedNewsFromRaw(newsListRaw, t));
+      setLoadError(null);
+    } catch (error) {
+      console.error("Error fetching news:", error);
+      if (!Array.isArray(cachedRaw) || cachedRaw.length === 0) {
+        setNewsData([]);
+        setLoadError(translations.networkError);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [currentLanguage, t, translations.networkError]);
+
+  useEffect(() => {
     fetchNews();
-  }, [currentLanguage, t]);
-
-  if (loading) {
-    return (
-      <View
-        style={[
-          styles.loadingContainer,
-          { backgroundColor: colors.background },
-        ]}
-      >
-        <Image source={images.loader} style={styles.loader} />
-      </View>
-    );
-  }
+    const unsubNet = subscribeNetUsable(() => {
+      fetchNews();
+    });
+    return unsubNet;
+  }, [fetchNews]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      
+      <FetchState
+        loading={loading && newsData.length === 0}
+        error={loadError}
+        onRetry={fetchNews}
+        loadingText={translations.loadingNews}
+        errorText={translations.networkError}
+        retryText={translations.tryAgain}
+        color={colors.primary}
+        showLoadingOverlay={loading && newsData.length > 0}
+      >
       <FlatList
         data={newsData}
         renderItem={({ item }) => (
@@ -197,6 +231,7 @@ const News = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
       />
+      </FetchState>
     </View>
   );
 };

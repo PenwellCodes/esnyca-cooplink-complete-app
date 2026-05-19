@@ -20,6 +20,13 @@ import { typography, images } from "../../constants";
 import { useLanguage } from "../../context/appstate/LanguageContext";
 import { apiRequest } from "../../utils/api";
 import { useChat } from "../../context/appstate/ChatContext";
+import {
+  CACHE_KEYS,
+  readDataCache,
+  writeDataCache,
+  subscribeNetUsable,
+} from "../../utils/dataCache";
+import FetchState from "../../components/FetchState";
 import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const regions = ["All", "Hhohho", "Manzini", "Shiselweni", "Lubombo"];
@@ -81,6 +88,7 @@ const CooperativeUsersScreen = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [allUsers, setAllUsers] = useState([]);
 
@@ -94,6 +102,10 @@ const CooperativeUsersScreen = () => {
     contact: "Contact",
     location: "Location",
     noProductService: "No product/service information available",
+    loadingCoops: "Loading cooperatives...",
+    networkError:
+      "Unable to load cooperatives. Please check your internet connection.",
+    tryAgain: "Try again",
   });
 
   useEffect(() => {
@@ -110,52 +122,92 @@ const CooperativeUsersScreen = () => {
         noProductService: await t(
           "No product/service information available"
         ),
+        loadingCoops: await t("Loading cooperatives..."),
+        networkError: await t(
+          "Unable to load cooperatives. Please check your internet connection."
+        ),
+        tryAgain: await t("Try again"),
       });
     };
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Fetch users based on selected region filter
+  const localizeCooperatives = async (usersRaw) => {
+    const data = (usersRaw || [])
+      .map((item) => ({
+        id: item.Id || item.id,
+        uid: item.Id || item.id,
+        role: item.Role || item.role,
+        displayName: item.DisplayName || "",
+        email: item.Email || "",
+        physicalAddress: item.PhysicalAddress || "",
+        content: item.Content || "",
+        phoneNumber: item.PhoneNumber || "",
+        region: item.Region || "",
+        registrationNumber: item.RegistrationNumber || "",
+        profilePic: item.ProfilePicUrl || "",
+      }))
+      .filter((u) => u.role === "cooperative")
+      .filter((u) => selectedRegion === "All" || u.region === selectedRegion);
+
+    return Promise.all(
+      data.map(async (user) => ({
+        ...user,
+        displayName: await t(user.displayName || ""),
+        physicalAddress: await t(user.physicalAddress || ""),
+        content: await t(user.content || ""),
+        region: await t(user.region || ""),
+      }))
+    );
+  };
+
   const fetchUsers = async () => {
-    setLoading(true);
+    setLoadError(null);
+    const cachedRaw = await readDataCache(CACHE_KEYS.USERS);
+    if (Array.isArray(cachedRaw) && cachedRaw.length > 0) {
+      try {
+        const localized = await localizeCooperatives(cachedRaw);
+        setAllUsers(localized);
+        setUsers(localized);
+        setLoading(false);
+      } catch {
+        setLoading(true);
+      }
+    } else {
+      setLoading(true);
+    }
+
     try {
       const usersRaw = await apiRequest("/users");
-      const data = (usersRaw || [])
-        .map((item) => ({
-          id: item.Id || item.id,
-          uid: item.Id || item.id,
-          role: item.Role || item.role,
-          displayName: item.DisplayName || "",
-          email: item.Email || "",
-          physicalAddress: item.PhysicalAddress || "",
-          content: item.Content || "",
-          phoneNumber: item.PhoneNumber || "",
-          region: item.Region || "",
-          registrationNumber: item.RegistrationNumber || "",
-          profilePic: item.ProfilePicUrl || "",
-        }))
-        .filter((u) => u.role === "cooperative")
-        .filter((u) => selectedRegion === "All" || u.region === selectedRegion);
-      const localizedData = await Promise.all(
-        data.map(async (user) => ({
-          ...user,
-          displayName: await t(user.displayName || ""),
-          physicalAddress: await t(user.physicalAddress || ""),
-          content: await t(user.content || ""),
-          region: await t(user.region || ""),
-        }))
-      );
-      setAllUsers(localizedData);
-      setUsers(localizedData);
+      await writeDataCache(CACHE_KEYS.USERS, usersRaw);
+      const localized = await localizeCooperatives(usersRaw);
+      setAllUsers(localized);
+      setUsers(localized);
+      setLoadError(null);
     } catch (error) {
       console.error("Error fetching users:", error);
+      if (!Array.isArray(cachedRaw) || cachedRaw.length === 0) {
+        setLoadError(translations.networkError);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, [selectedRegion, currentLanguage]);
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) await fetchUsers();
+    };
+    run();
+    const unsubNet = subscribeNetUsable(() => {
+      if (!cancelled) fetchUsers();
+    });
+    return () => {
+      cancelled = true;
+      unsubNet();
+    };
+  }, [selectedRegion, currentLanguage, t]);
 
   useEffect(() => {
     if (highlightId && users.length > 0) {
@@ -369,15 +421,26 @@ const CooperativeUsersScreen = () => {
         </Menu>
       </View>
 
-      <FlatList
-        data={users}
-        renderItem={renderUserCard}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      />
+      <FetchState
+        loading={loading && users.length === 0}
+        error={loadError}
+        onRetry={fetchUsers}
+        loadingText={translations.loadingCoops}
+        errorText={translations.networkError}
+        retryText={translations.tryAgain}
+        color={colors.primary}
+        showLoadingOverlay={loading && users.length > 0}
+      >
+        <FlatList
+          data={users}
+          renderItem={renderUserCard}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        />
+      </FetchState>
 
       <Portal>
         <Modal
