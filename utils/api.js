@@ -35,6 +35,22 @@ async function buildHeaders(customHeaders = {}, includeAuth = true) {
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
+
+    try {
+      const userRaw = await AsyncStorage.getItem("user");
+      if (userRaw) {
+        const user = JSON.parse(userRaw);
+        const uid = user?.id || user?.Id || user?.uid;
+        if (uid) {
+          headers["x-user-id"] = String(uid);
+        }
+        if (user?.role) {
+          headers["x-user-role"] = String(user.role);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   return headers;

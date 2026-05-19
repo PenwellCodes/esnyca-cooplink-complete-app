@@ -14,11 +14,34 @@ async function getUserById(id) {
   return result.recordset?.[0] || null;
 }
 
+function userIdFromBearerToken(req) {
+  const auth = String(req.headers.authorization || '');
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  try {
+    const parts = match[1].split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+    return (
+      payload.user_id ||
+      payload.sub ||
+      payload.uid ||
+      payload.localId ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function requireAuth(req, res, next) {
   // PUBLIC MODE:
   // This middleware no longer enforces JWT/authentication. It only provides
   // backward-compatible `req.user` context for any routes that reference it.
-  const userId = String(req.headers['x-user-id'] || '').trim();
+  const fromHeader = String(req.headers['x-user-id'] || '').trim();
+  const fromBearer = userIdFromBearerToken(req);
+  const userId = fromHeader || (fromBearer ? String(fromBearer).trim() : '');
   const requestedRole = String(req.headers['x-user-role'] || '').trim();
 
   req.user = {

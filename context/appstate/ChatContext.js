@@ -740,7 +740,31 @@ export const ChatProvider = ({ children }) => {
     });
   }, []);
 
-  /** Permanently delete own message from DB (hidden for everyone). */
+  const clearChatFromLocalState = useCallback((chatKey) => {
+    if (!chatKey) return;
+    setConversations((prev) => {
+      const next = { ...prev };
+      delete next[chatKey];
+      return next;
+    });
+    setLastMessages((prev) => {
+      const next = { ...prev };
+      delete next[chatKey];
+      return next;
+    });
+    setUnreadCounts((prev) => {
+      const next = { ...prev };
+      delete next[chatKey];
+      return next;
+    });
+    setChatIdMap((prev) => {
+      const next = { ...prev };
+      delete next[chatKey];
+      return next;
+    });
+  }, []);
+
+  /** Permanently delete own message from DB (removed for everyone). */
   const deleteMessage = useCallback(
     async (chatKey, messageId, message) => {
       const id = String(messageId);
@@ -751,38 +775,49 @@ export const ChatProvider = ({ children }) => {
         return { localOnly: true };
       }
 
+      if (!currentUserId) {
+        throw new Error("You must be signed in to delete messages.");
+      }
+
+      const senderQ = encodeURIComponent(String(currentUserId));
+      const deleteOpts = {
+        method: "DELETE",
+        body: { senderUserId: currentUserId },
+        timeoutMs: CHAT_SYNC_TIMEOUT_MS,
+      };
+
+      let result;
       try {
-        await apiRequest(`/chats/${actualChatId}/messages/${id}`, {
-          method: "DELETE",
-          timeoutMs: CHAT_SYNC_TIMEOUT_MS,
-        });
-      } catch (error) {
-        const status = error?.status;
-        if (status === 404 || status === 403) {
-          await hideMessageForMe(chatKey, id);
-          removeMessageFromLocalState(chatKey, id);
-          const err = new Error(
-            status === 403
-              ? "You can only delete messages you sent."
-              : "Message was removed from your chat."
-          );
-          err.localOnly = true;
-          throw err;
-        }
-        throw error;
+        result = await apiRequest(
+          `/chats/messages/${id}?senderUserId=${senderQ}`,
+          deleteOpts
+        );
+      } catch (firstError) {
+        if (firstError?.status !== 404) throw firstError;
+        result = await apiRequest(
+          `/chats/${actualChatId}/messages/${id}?senderUserId=${senderQ}`,
+          deleteOpts
+        );
       }
 
       removeMessageFromLocalState(chatKey, id);
       await hideMessageForMe(chatKey, id);
+
+      if (result?.chatDeleted) {
+        clearChatFromLocalState(chatKey);
+      }
+
       refreshChatState().catch((err) =>
         console.log("Refresh after delete warning:", err)
       );
-      return { success: true };
+      return { success: true, chatDeleted: !!result?.chatDeleted };
     },
     [
+      currentUserId,
       resolveActualChatId,
       hideMessageForMe,
       removeMessageFromLocalState,
+      clearChatFromLocalState,
       refreshChatState,
     ]
   );
