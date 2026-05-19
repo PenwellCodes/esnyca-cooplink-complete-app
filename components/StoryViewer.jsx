@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,140 +21,218 @@ import { useStories } from '../context/appstate/StoriesContext';
 
 const { width } = Dimensions.get('window');
 const STORY_DURATION = 5000;
+const TAP_ZONE_WIDTH = width * 0.32;
 
-const StoryViewer = ({ stories, isVisible, onClose, onReply }) => {
+const StoryViewer = ({
+  stories: storiesProp = [],
+  storyGroups: storyGroupsProp,
+  initialGroupIndex = 0,
+  initialStoryIndex = 0,
+  isVisible,
+  onClose,
+  onReply,
+  getOwnerName,
+  getOwnerAvatar,
+}) => {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
   const { currentUser } = useAuth();
   const { deleteStory, recordView } = useStories();
-  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const groups =
+    storyGroupsProp?.length > 0
+      ? storyGroupsProp
+      : storiesProp?.length > 0
+      ? [{ userId: storiesProp[0]?.userId, stories: storiesProp }]
+      : [];
+
+  const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
+  const [storyIndex, setStoryIndex] = useState(initialStoryIndex);
   const [replyText, setReplyText] = useState('');
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const animationRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
   const [showDeleteOption, setShowDeleteOption] = useState(false);
   const [storyOwnerName, setStoryOwnerName] = useState('');
   const [loadingName, setLoadingName] = useState(false);
   const [ownerAvatar, setOwnerAvatar] = useState('');
 
-  const currentStory = stories[currentIndex];
+  const groupIndexRef = useRef(groupIndex);
+  const storyIndexRef = useRef(storyIndex);
+  const groupsRef = useRef(groups);
 
-  // Fetch story owner name and avatar when story changes
-  useEffect(() => {
-    const fetchOwnerInfo = async () => {
-      if (!currentStory) return;
-      
-      if (currentStory.userId === currentUser?.uid) {
-        setStoryOwnerName('You');
-        setOwnerAvatar(currentUser?.profilePic || '');
-        return;
-      }
-      
-      setLoadingName(true);
-      try {
-        // Fetch all users to find the name and avatar
-        const response = await fetch('http://207.180.254.163:4000/api/users');
-        if (response.ok) {
-          const allUsers = await response.json();
-          const foundUser = allUsers.find(u => 
-            u.Id === currentStory.userId || 
-            u.id === currentStory.userId || 
-            u.uid === currentStory.userId ||
-            u.userId === currentStory.userId
-          );
-          
-          if (foundUser) {
-            const userName = foundUser.displayName || foundUser.name || foundUser.fullName || foundUser.username || foundUser.userName || foundUser.DisplayName;
-            const userAvatar = foundUser.profilePic || foundUser.avatar || foundUser.profilePicture || foundUser.imageUrl;
-            setStoryOwnerName(userName || 'User');
-            setOwnerAvatar(userAvatar || '');
-          } else {
-            const shortId = currentStory.userId.substring(0, 6);
-            setStoryOwnerName(`User ${shortId}`);
-            setOwnerAvatar('');
-          }
-        } else {
-          const shortId = currentStory.userId.substring(0, 6);
-          setStoryOwnerName(`User ${shortId}`);
-          setOwnerAvatar('');
-        }
-      } catch (error) {
-        console.error('Error fetching user info:', error);
-        const shortId = currentStory.userId.substring(0, 6);
-        setStoryOwnerName(`User ${shortId}`);
-        setOwnerAvatar('');
-      } finally {
-        setLoadingName(false);
-      }
-    };
-    
-    fetchOwnerInfo();
-  }, [currentStory, currentUser]);
+  groupIndexRef.current = groupIndex;
+  storyIndexRef.current = storyIndex;
+  groupsRef.current = groups;
+
+  const currentGroup = groups[groupIndex];
+  const currentStories = currentGroup?.stories || [];
+  const currentStory = currentStories[storyIndex];
+  const currentUserId = currentStory?.userId;
+
+  const canGoPrevious =
+    storyIndex > 0 || groupIndex > 0;
+  const canGoNext =
+    storyIndex < currentStories.length - 1 || groupIndex < groups.length - 1;
 
   useEffect(() => {
     if (isVisible) {
-      startProgress();
+      setGroupIndex(initialGroupIndex);
+      setStoryIndex(initialStoryIndex);
+      setIsPaused(false);
+      setShowDeleteOption(false);
+      setReplyText('');
     }
-    return () => {
-      progressAnim.setValue(0);
-    };
-  }, [currentIndex, isVisible]);
+  }, [isVisible, initialGroupIndex, initialStoryIndex]);
 
   useEffect(() => {
-    if (!isVisible || !stories?.length || !currentUser?.uid) return;
-    const s = stories[currentIndex];
-    if (s?.id && s.userId && s.userId !== currentUser.uid) {
-      recordView(s.id, currentUser.uid);
+    if (!currentUserId || !getOwnerName) {
+      setStoryOwnerName('User');
+      setOwnerAvatar('');
+      setLoadingName(false);
+      return;
     }
-  }, [isVisible, currentIndex, stories, currentUser?.uid, recordView]);
 
-  const startProgress = () => {
+    if (String(currentUserId) === String(currentUser?.uid || currentUser?.id)) {
+      setStoryOwnerName('You');
+      setOwnerAvatar(currentUser?.profilePic || '');
+      setLoadingName(false);
+      return;
+    }
+
+    setLoadingName(true);
+    const name = getOwnerName(currentUserId);
+    const avatar = getOwnerAvatar ? getOwnerAvatar(currentUserId) : '';
+    setStoryOwnerName(name || 'User');
+    setOwnerAvatar(avatar || '');
+    setLoadingName(false);
+  }, [currentUserId, currentUser, getOwnerName, getOwnerAvatar]);
+
+  const stopProgress = useCallback(() => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+      animationRef.current = null;
+    }
+    progressAnim.stopAnimation();
+  }, [progressAnim]);
+
+  const startProgress = useCallback(() => {
+    if (!isVisible || isPaused || showDeleteOption) return;
+
+    stopProgress();
     progressAnim.setValue(0);
-    Animated.timing(progressAnim, {
+
+    animationRef.current = Animated.timing(progressAnim, {
       toValue: width,
       duration: STORY_DURATION,
       useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished) {
-        if (currentIndex < stories.length - 1) {
-          setCurrentIndex(currentIndex + 1);
-        } else {
-          onClose();
-          setCurrentIndex(0);
-        }
+    });
+
+    animationRef.current.start(({ finished }) => {
+      if (!finished) return;
+      const gi = groupIndexRef.current;
+      const si = storyIndexRef.current;
+      const grps = groupsRef.current;
+      const list = grps[gi]?.stories || [];
+
+      if (si < list.length - 1) {
+        setStoryIndex(si + 1);
+      } else if (gi < grps.length - 1) {
+        setGroupIndex(gi + 1);
+        setStoryIndex(0);
+      } else {
+        onClose();
+        setGroupIndex(0);
+        setStoryIndex(0);
       }
     });
-  };
+  }, [isVisible, isPaused, showDeleteOption, progressAnim, onClose, stopProgress]);
+
+  useEffect(() => {
+    if (isVisible && currentStory) {
+      startProgress();
+    }
+    return () => stopProgress();
+  }, [groupIndex, storyIndex, isVisible, currentStory?.id, startProgress, stopProgress]);
+
+  useEffect(() => {
+    if (!isVisible || !currentStory?.id || !currentUser?.uid) return;
+    if (currentStory.userId && currentStory.userId !== currentUser.uid) {
+      recordView(currentStory.id, currentUser.uid);
+    }
+  }, [isVisible, currentStory?.id, currentUser?.uid, recordView]);
+
+  const goToPrevious = useCallback(() => {
+    stopProgress();
+    setShowDeleteOption(false);
+    const gi = groupIndexRef.current;
+    const si = storyIndexRef.current;
+    const grps = groupsRef.current;
+
+    if (si > 0) {
+      setStoryIndex(si - 1);
+      return;
+    }
+    if (gi > 0) {
+      const prevStories = grps[gi - 1]?.stories || [];
+      setGroupIndex(gi - 1);
+      setStoryIndex(Math.max(0, prevStories.length - 1));
+    }
+  }, [stopProgress]);
+
+  const goToNext = useCallback(() => {
+    stopProgress();
+    setShowDeleteOption(false);
+    const gi = groupIndexRef.current;
+    const si = storyIndexRef.current;
+    const grps = groupsRef.current;
+    const list = grps[gi]?.stories || [];
+
+    if (si < list.length - 1) {
+      setStoryIndex(si + 1);
+      return;
+    }
+    if (gi < grps.length - 1) {
+      setGroupIndex(gi + 1);
+      setStoryIndex(0);
+      return;
+    }
+    onClose();
+    setGroupIndex(0);
+    setStoryIndex(0);
+  }, [stopProgress, onClose]);
 
   const handleReply = () => {
-    if (replyText.trim()) {
+    if (replyText.trim() && currentStory) {
       const replyData = {
         text: replyText.trim(),
         storyPreview: {
           imageURL: currentStory?.imageURL,
           caption: currentStory?.caption,
-          storyId: currentStory?.id
-        }
+          storyId: currentStory?.id,
+        },
       };
-      
+
       onReply(currentStory, replyData);
       setReplyText('');
+      setIsPaused(false);
       startProgress();
     }
   };
 
   const handleInputFocus = () => {
     setIsPaused(true);
-    progressAnim.stopAnimation();
+    stopProgress();
   };
 
-  const handleInputBlur = () => {};
-
   const togglePause = () => {
-    setIsPaused(!isPaused);
-    if (!isPaused) {
-      progressAnim.stopAnimation();
-    } else {
+    if (showDeleteOption) return;
+    if (isPaused) {
+      setIsPaused(false);
       startProgress();
+    } else {
+      setIsPaused(true);
+      stopProgress();
     }
   };
 
@@ -161,18 +240,32 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply }) => {
     if (currentStory?.userId === currentUser?.uid) {
       setShowDeleteOption(true);
       setIsPaused(true);
-      progressAnim.stopAnimation();
+      stopProgress();
     }
   };
 
   const handleDeleteStory = async () => {
     try {
       await deleteStory(currentStory.id);
-      Alert.alert("Success", "Story deleted successfully");
-      onClose();
+      Alert.alert('Success', 'Story deleted successfully');
+      const remaining = currentStories.filter((s) => s.id !== currentStory.id);
+      if (remaining.length === 0) {
+        if (groupIndex < groups.length - 1) {
+          setGroupIndex(groupIndex + 1);
+          setStoryIndex(0);
+        } else if (groupIndex > 0) {
+          setGroupIndex(groupIndex - 1);
+          setStoryIndex(0);
+        } else {
+          onClose();
+        }
+      } else if (storyIndex >= remaining.length) {
+        setStoryIndex(remaining.length - 1);
+      }
+      setShowDeleteOption(false);
     } catch (error) {
-      console.error("Error deleting story:", error);
-      Alert.alert("Error", "Failed to delete story");
+      console.error('Error deleting story:', error);
+      Alert.alert('Error', 'Failed to delete story');
     }
   };
 
@@ -186,30 +279,33 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply }) => {
     return storyOwnerName.substring(0, 2).toUpperCase();
   };
 
+  if (!isVisible || !currentStory) {
+    return null;
+  }
+
   return (
     <Modal visible={isVisible} animationType="fade" transparent={false}>
       <View style={styles.container}>
-        {/* Progress bars at the very top */}
         <View style={[styles.progressContainer, { top: insets.top + 10 }]}>
-          {stories.map((_, index) => (
+          {currentStories.map((_, index) => (
             <View key={index} style={styles.progressBar}>
               <Animated.View
                 style={[
                   styles.progressFill,
                   {
-                    width: index === currentIndex 
-                      ? progressAnim 
-                      : index < currentIndex 
-                        ? '100%' 
-                        : 0
-                  }
+                    width:
+                      index === storyIndex
+                        ? progressAnim
+                        : index < storyIndex
+                        ? '100%'
+                        : 0,
+                  },
                 ]}
               />
             </View>
           ))}
         </View>
 
-        {/* Header with user info and close button */}
         <View style={[styles.headerContainer, { top: insets.top + 45 }]}>
           <View style={styles.userInfoContainer}>
             {loadingName ? (
@@ -224,21 +320,36 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply }) => {
                   </View>
                 )}
                 <Text style={styles.userName}>{storyOwnerName}</Text>
+                {groups.length > 1 ? (
+                  <Text style={styles.userCounter}>
+                    {groupIndex + 1}/{groups.length}
+                  </Text>
+                ) : null}
               </>
             )}
           </View>
-          
+
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={28} color="white" />
           </TouchableOpacity>
         </View>
 
-        {/* Story Content */}
         <View style={styles.contentWrapper}>
-          <TouchableOpacity 
+          <Pressable
+            style={styles.tapZoneLeft}
+            onPress={goToPrevious}
+            disabled={!canGoPrevious}
+          />
+          <Pressable
+            style={styles.tapZoneRight}
+            onPress={goToNext}
+          />
+
+          <TouchableOpacity
             activeOpacity={1}
             onPress={togglePause}
             onLongPress={handleLongPress}
+            delayLongPress={500}
             style={styles.contentContainer}
           >
             {currentStory?.imageURL ? (
@@ -248,30 +359,56 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply }) => {
                 resizeMode="contain"
               />
             ) : null}
-            
-            {currentStory?.caption && (
+
+            {currentStory?.caption ? (
               <View style={styles.captionContainer}>
-                <Text style={styles.captionText}>
-                  {currentStory.caption}
-                </Text>
+                <Text style={styles.captionText}>{currentStory.caption}</Text>
               </View>
-            )}
+            ) : null}
+          </TouchableOpacity>
+
+          {canGoPrevious ? (
+            <TouchableOpacity
+              style={[styles.navButton, styles.navButtonLeft]}
+              onPress={goToPrevious}
+              accessibilityLabel="Previous story"
+            >
+              <Ionicons name="chevron-back" size={32} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={[styles.navButton, styles.navButtonRight]}
+            onPress={goToNext}
+            accessibilityLabel={canGoNext ? 'Next story' : 'Close'}
+          >
+            <Ionicons
+              name={canGoNext ? 'chevron-forward' : 'close'}
+              size={32}
+              color="#fff"
+            />
           </TouchableOpacity>
         </View>
 
-        {showDeleteOption && (
+        {showDeleteOption ? (
           <View style={styles.deleteOptionContainer}>
             <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteStory}>
               <Text style={styles.deleteButtonText}>Delete Story</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowDeleteOption(false)}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowDeleteOption(false);
+                setIsPaused(false);
+                startProgress();
+              }}
+            >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
 
-        {/* Reply Container - Only show if user is not the story owner */}
-        {currentStory?.userId !== currentUser?.uid && (
+        {currentStory?.userId !== currentUser?.uid ? (
           <View
             style={[
               styles.replyContainer,
@@ -282,21 +419,19 @@ const StoryViewer = ({ stories, isVisible, onClose, onReply }) => {
           >
             <TextInput
               style={styles.replyInput}
-              placeholder={`Reply to ${storyOwnerName === 'You' ? 'this story' : storyOwnerName}...`}
+              placeholder={`Reply to ${
+                storyOwnerName === 'You' ? 'this story' : storyOwnerName
+              }...`}
               placeholderTextColor="#999"
               value={replyText}
               onChangeText={setReplyText}
               onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
             />
-            <TouchableOpacity 
-              style={styles.sendButton}
-              onPress={handleReply}
-            >
+            <TouchableOpacity style={styles.sendButton} onPress={handleReply}>
               <Ionicons name="send" size={24} color="#007AFF" />
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
       </View>
     </Modal>
   );
@@ -341,6 +476,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 25,
+    maxWidth: '75%',
   },
   userAvatar: {
     width: 32,
@@ -366,6 +502,12 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+    flexShrink: 1,
+  },
+  userCounter: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12,
+    marginLeft: 6,
   },
   closeButton: {
     padding: 8,
@@ -376,6 +518,40 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     justifyContent: 'center',
+  },
+  tapZoneLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: TAP_ZONE_WIDTH,
+    zIndex: 5,
+  },
+  tapZoneRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: TAP_ZONE_WIDTH,
+    zIndex: 5,
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 15,
+  },
+  navButtonLeft: {
+    left: 12,
+  },
+  navButtonRight: {
+    right: 12,
   },
   storyImage: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,21 +12,34 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useStories } from "../../context/appstate/StoriesContext";
 import { useAuth } from "../../context/appstate/AuthContext";
 import { useChat } from "../../context/appstate/ChatContext";
 import { useLanguage } from "../../context/appstate/LanguageContext";
-import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
 
 const { width } = Dimensions.get("window");
-const TOTAL_DURATION = 10000; // total duration in ms (10 seconds)
+const TOTAL_DURATION = 10000;
+const TAP_ZONE_WIDTH = width * 0.32;
+
+function getStoryCreatedAtMs(story) {
+  if (!story?.createdAt) return 0;
+  const ms = new Date(story.createdAt).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function sortStoriesNewestFirst(list) {
+  return [...(list || [])].sort(
+    (a, b) => getStoryCreatedAtMs(b) - getStoryCreatedAtMs(a)
+  );
+}
 
 const ViewStoryScreen = () => {
   const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardHeight();
   const { storyId, userId } = useLocalSearchParams();
   const router = useRouter();
   const { stories, recordView, deleteStory } = useStories();
@@ -34,14 +47,61 @@ const ViewStoryScreen = () => {
   const { setActiveChatId, chatList, sendMessage } = useChat();
   const { currentLanguage, t } = useLanguage();
 
-  // Find the story
-  const story = stories.find((s) => s.id === storyId);
+  const storyGroups = useMemo(() => {
+    const groups = {};
+    (stories || []).forEach((s) => {
+      if (!s?.userId) return;
+      if (!groups[s.userId]) groups[s.userId] = [];
+      groups[s.userId].push(s);
+    });
+    return Object.entries(groups).map(([uid, list]) => ({
+      userId: uid,
+      stories: sortStoriesNewestFirst(list),
+    }));
+  }, [stories]);
+
+  const initialGroupIndex = useMemo(() => {
+    const idx = storyGroups.findIndex(
+      (g) => String(g.userId) === String(userId)
+    );
+    return idx >= 0 ? idx : 0;
+  }, [storyGroups, userId]);
+
+  const initialStoryIndex = useMemo(() => {
+    const group = storyGroups[initialGroupIndex];
+    if (!group) return 0;
+    const idx = group.stories.findIndex(
+      (s) => String(s.id) === String(storyId)
+    );
+    return idx >= 0 ? idx : 0;
+  }, [storyGroups, initialGroupIndex, storyId]);
+
+  const [groupIndex, setGroupIndex] = useState(0);
+  const [storyIndex, setStoryIndex] = useState(0);
   const [replyText, setReplyText] = useState("");
   const [isPaused, setIsPaused] = useState(false);
   const [remainingDuration, setRemainingDuration] = useState(TOTAL_DURATION);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const animationStartRef = useRef(Date.now());
+  const animationRef = useRef(null);
+  const groupIndexRef = useRef(0);
+  const storyIndexRef = useRef(0);
+  const storyGroupsRef = useRef(storyGroups);
+
+  groupIndexRef.current = groupIndex;
+  storyIndexRef.current = storyIndex;
+  storyGroupsRef.current = storyGroups;
+
+  const currentGroup = storyGroups[groupIndex];
+  const currentStories = currentGroup?.stories || [];
+  const story = currentStories[storyIndex];
+  const storyOwnerId = currentGroup?.userId || userId;
+
+  const canGoPrevious = storyIndex > 0 || groupIndex > 0;
+  const canGoNext =
+    storyIndex < currentStories.length - 1 ||
+    groupIndex < storyGroups.length - 1;
 
   const [translations, setTranslations] = useState({
     storyNotFound: "Story not found",
@@ -60,6 +120,8 @@ const ViewStoryScreen = () => {
     storyDeletedSuccessfully: "Story deleted successfully",
     failedToDeleteStory: "Failed to delete story",
     views: "Views",
+    previousStory: "Previous story",
+    nextStory: "Next story",
   });
 
   useEffect(() => {
@@ -87,12 +149,19 @@ const ViewStoryScreen = () => {
         storyDeletedSuccessfully: await t("Story deleted successfully"),
         failedToDeleteStory: await t("Failed to delete story"),
         views: await t("Views"),
+        previousStory: await t("Previous story"),
+        nextStory: await t("Next story"),
       });
     };
     loadTranslations();
   }, [currentLanguage, t]);
 
-  // Keyboard listeners for better handling
+  useEffect(() => {
+    setGroupIndex(initialGroupIndex);
+    setStoryIndex(initialStoryIndex);
+    setRemainingDuration(TOTAL_DURATION);
+  }, [initialGroupIndex, initialStoryIndex, storyId]);
+
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       "keyboardDidShow",
@@ -115,51 +184,76 @@ const ViewStoryScreen = () => {
   }, [isPaused, remainingDuration]);
 
   useEffect(() => {
-    if (!story) {
+    if (!story && storyGroups.length === 0) {
       Alert.alert(
         translations.storyNotFound,
         translations.storyMayExpired
       );
       router.back();
     }
-  }, [story, router]);
+  }, [story, storyGroups.length, router, translations]);
+
+  const stopAnimation = useCallback(() => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+      animationRef.current = null;
+    }
+    progressAnim.stopAnimation();
+  }, [progressAnim]);
+
+  const startAnimation = useCallback(
+    (duration) => {
+      if (!story || isPaused) return;
+      stopAnimation();
+      animationStartRef.current = Date.now();
+      progressAnim.setValue(0);
+
+      animationRef.current = Animated.timing(progressAnim, {
+        toValue: width,
+        duration,
+        useNativeDriver: false,
+      });
+
+      animationRef.current.start(({ finished }) => {
+        if (!finished || isPaused) return;
+        const gi = groupIndexRef.current;
+        const si = storyIndexRef.current;
+        const grps = storyGroupsRef.current;
+        const list = grps[gi]?.stories || [];
+
+        if (si < list.length - 1) {
+          setStoryIndex(si + 1);
+          setRemainingDuration(TOTAL_DURATION);
+        } else if (gi < grps.length - 1) {
+          setGroupIndex(gi + 1);
+          setStoryIndex(0);
+          setRemainingDuration(TOTAL_DURATION);
+        } else {
+          router.back();
+        }
+      });
+    },
+    [story, isPaused, progressAnim, router, stopAnimation]
+  );
 
   useEffect(() => {
-    if (!story) {
-      Alert.alert(translations.storyNotFound);
-      router.back();
-      return;
-    }
-    // Record view
+    if (!story) return;
     if (recordView && currentUser) {
-      recordView(storyId, currentUser.uid);
+      recordView(story.id, currentUser.uid);
     }
     setActiveChatId(null);
-
-    // Start progress animation
-    startAnimation(remainingDuration);
-  }, [story]);
-
-  const startAnimation = (duration) => {
-    animationStartRef.current = Date.now();
-    Animated.timing(progressAnim, {
-      toValue: width,
-      duration,
-      useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished && !isPaused) {
-        router.back();
-      }
-    });
-  };
+    setRemainingDuration(TOTAL_DURATION);
+    startAnimation(TOTAL_DURATION);
+    return () => stopAnimation();
+  }, [story?.id, groupIndex]);
 
   const pauseAnimation = () => {
     if (isPaused) return;
     setIsPaused(true);
-    progressAnim.stopAnimation((currentValue) => {
+    stopAnimation();
+    progressAnim.stopAnimation(() => {
       const elapsed = Date.now() - animationStartRef.current;
-      const newRemaining = Math.max(remainingDuration - elapsed, 0);
-      setRemainingDuration(newRemaining);
+      setRemainingDuration(Math.max(remainingDuration - elapsed, 0));
     });
   };
 
@@ -169,19 +263,57 @@ const ViewStoryScreen = () => {
     startAnimation(remainingDuration);
   };
 
-  // Toggle pause/resume on image tap
-  const togglePause = () => {
-    if (isPaused) {
-      resumeAnimation();
-    } else {
-      pauseAnimation();
+  const goToPrevious = useCallback(() => {
+    stopAnimation();
+    const gi = groupIndexRef.current;
+    const si = storyIndexRef.current;
+    const grps = storyGroupsRef.current;
+
+    if (si > 0) {
+      setStoryIndex(si - 1);
+      setRemainingDuration(TOTAL_DURATION);
+      return;
     }
+    if (gi > 0) {
+      const prev = grps[gi - 1]?.stories || [];
+      setGroupIndex(gi - 1);
+      setStoryIndex(Math.max(0, prev.length - 1));
+      setRemainingDuration(TOTAL_DURATION);
+    }
+  }, [stopAnimation]);
+
+  const goToNext = useCallback(() => {
+    stopAnimation();
+    const gi = groupIndexRef.current;
+    const si = storyIndexRef.current;
+    const grps = storyGroupsRef.current;
+    const list = grps[gi]?.stories || [];
+
+    if (si < list.length - 1) {
+      setStoryIndex(si + 1);
+      setRemainingDuration(TOTAL_DURATION);
+      return;
+    }
+    if (gi < grps.length - 1) {
+      setGroupIndex(gi + 1);
+      setStoryIndex(0);
+      setRemainingDuration(TOTAL_DURATION);
+      return;
+    }
+    router.back();
+  }, [stopAnimation, router]);
+
+  const togglePause = () => {
+    if (isPaused) resumeAnimation();
+    else pauseAnimation();
   };
 
   const handleReply = async () => {
-    if (!replyText.trim()) return;
+    if (!replyText.trim() || !story) return;
     try {
-      const storyUser = chatList.find((u) => String(u.uid) === String(userId));
+      const storyUser = chatList.find(
+        (u) => String(u.uid) === String(storyOwnerId)
+      );
       const replyData = {
         text: replyText.trim(),
         storyPreview: {
@@ -193,7 +325,7 @@ const ViewStoryScreen = () => {
 
       if (storyUser) {
         router.push({
-          pathname: `/(screens)/chatConversations/${userId}`,
+          pathname: `/(screens)/chatConversations/${storyOwnerId}`,
           params: {
             user: JSON.stringify(storyUser),
             predefinedMessage: replyData.text,
@@ -202,12 +334,12 @@ const ViewStoryScreen = () => {
         });
       } else {
         const chatId =
-          currentUser.uid > userId
-            ? `${currentUser.uid}_${userId}`
-            : `${userId}_${currentUser.uid}`;
+          currentUser.uid > storyOwnerId
+            ? `${currentUser.uid}_${storyOwnerId}`
+            : `${storyOwnerId}_${currentUser.uid}`;
         await sendMessage({
           chatKey: chatId,
-          receiverUserId: userId,
+          receiverUserId: storyOwnerId,
           type: "story_reply",
           text: replyData.text,
           storyPreview: replyData.storyPreview,
@@ -222,30 +354,33 @@ const ViewStoryScreen = () => {
   };
 
   const handleLongPress = () => {
-    if (currentUser.uid !== story.userId) return;
-    
+    if (currentUser.uid !== story?.userId) return;
+
     Alert.alert(
-        translations.deleteStoryTitle,
-        translations.deleteStoryBody,
-        [
-            {
-                text: translations.cancel,
-                style: "cancel"
-            },
-            {
-                text: translations.delete,
-                style: "destructive",
-                onPress: async () => {
-                    try {
-                        await deleteStory(storyId, story.imageURL);
-                        Alert.alert(translations.success, translations.storyDeletedSuccessfully);
-                        router.push("/(tabs)/chat");
-                    } catch (error) {
-                        Alert.alert(translations.error, translations.failedToDeleteStory);
-                    }
-                }
+      translations.deleteStoryTitle,
+      translations.deleteStoryBody,
+      [
+        { text: translations.cancel, style: "cancel" },
+        {
+          text: translations.delete,
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteStory(story.id, story.imageURL);
+              Alert.alert(
+                translations.success,
+                translations.storyDeletedSuccessfully
+              );
+              goToNext();
+            } catch {
+              Alert.alert(
+                translations.error,
+                translations.failedToDeleteStory
+              );
             }
-        ]
+          },
+        },
+      ]
     );
   };
 
@@ -257,12 +392,26 @@ const ViewStoryScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Progress Bar */}
-      <View style={[styles.progressBarContainer, { top: insets.top || 0 }]}>
-        <Animated.View style={[styles.progressBar, { width: progressAnim }]} />
+      <View style={[styles.progressRow, { top: insets.top || 0 }]}>
+        {currentStories.map((_, index) => (
+          <View key={index} style={styles.progressBarTrack}>
+            <Animated.View
+              style={[
+                styles.progressBar,
+                {
+                  width:
+                    index === storyIndex
+                      ? progressAnim
+                      : index < storyIndex
+                      ? "100%"
+                      : 0,
+                },
+              ]}
+            />
+          </View>
+        ))}
       </View>
 
-      {/* Close Button */}
       <TouchableOpacity
         style={[styles.closeButton, { top: insets.top + 10, right: 16 }]}
         onPress={() => router.back()}
@@ -270,49 +419,78 @@ const ViewStoryScreen = () => {
         <Text style={styles.closeButtonText}>✕</Text>
       </TouchableOpacity>
 
-      {/* Story Image */}
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={togglePause}
-        onLongPress={handleLongPress}
-        delayLongPress={500}
-        style={styles.imageContainer}
-      >
-        <Image
-          source={{ uri: story?.imageURL }}
-          style={styles.storyImage}
-          resizeMode="contain"
+      <View style={styles.imageContainer}>
+        <Pressable
+          style={styles.tapZoneLeft}
+          onPress={goToPrevious}
+          disabled={!canGoPrevious}
+          accessibilityLabel={translations.previousStory}
         />
-        {/* Caption overlay */}
-        {story.caption ? (
-          <View style={styles.captionContainer}>
-            <Text style={styles.captionText}>{story.caption}</Text>
-          </View>
-        ) : null}
-      </TouchableOpacity>
+        <Pressable
+          style={styles.tapZoneRight}
+          onPress={goToNext}
+          accessibilityLabel={translations.nextStory}
+        />
 
-      {/* For story owner: show view count */}
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={togglePause}
+          onLongPress={handleLongPress}
+          delayLongPress={500}
+          style={styles.imageTouchable}
+        >
+          <Image
+            source={{ uri: story?.imageURL }}
+            style={styles.storyImage}
+            resizeMode="contain"
+          />
+          {story.caption ? (
+            <View style={styles.captionContainer}>
+              <Text style={styles.captionText}>{story.caption}</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+
+        {canGoPrevious ? (
+          <TouchableOpacity
+            style={[styles.navButton, styles.navButtonLeft]}
+            onPress={goToPrevious}
+            accessibilityLabel={translations.previousStory}
+          >
+            <Ionicons name="chevron-back" size={32} color="#fff" />
+          </TouchableOpacity>
+        ) : null}
+
+        <TouchableOpacity
+          style={[styles.navButton, styles.navButtonRight]}
+          onPress={goToNext}
+          accessibilityLabel={translations.nextStory}
+        >
+          <Ionicons
+            name={canGoNext ? "chevron-forward" : "close"}
+            size={32}
+            color="#fff"
+          />
+        </TouchableOpacity>
+      </View>
+
       {isOwner ? (
         <View
-          style={[
-            styles.viewCountContainer,
-            { bottom: insets.bottom + 20 },
-          ]}
+          style={[styles.viewCountContainer, { bottom: insets.bottom + 20 }]}
         >
           <Text style={styles.viewCountText}>
-            {(story.views?.length || 0)} {translations.views}
+            {story.views?.length || 0} {translations.views}
           </Text>
         </View>
       ) : (
-        // For viewers: show reply input at bottom (WhatsApp style)
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+          keyboardVerticalOffset={0}
         >
           <View
             style={[
               styles.replyContainer,
-              { paddingBottom: isKeyboardVisible ? 10 : insets.bottom + 10 }
+              { paddingBottom: isKeyboardVisible ? 10 : insets.bottom + 10 },
             ]}
           >
             <TextInput
@@ -342,13 +520,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  progressBarContainer: {
+  progressRow: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    left: 8,
+    right: 8,
+    flexDirection: "row",
+    height: 3,
+    zIndex: 10,
+    gap: 4,
+  },
+  progressBarTrack: {
+    flex: 1,
     height: 3,
     backgroundColor: "rgba(255,255,255,0.3)",
-    zIndex: 10,
+    overflow: "hidden",
   },
   progressBar: {
     height: "100%",
@@ -371,6 +556,43 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     flex: 1,
+  },
+  imageTouchable: {
+    flex: 1,
+  },
+  tapZoneLeft: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: TAP_ZONE_WIDTH,
+    zIndex: 5,
+  },
+  tapZoneRight: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: TAP_ZONE_WIDTH,
+    zIndex: 5,
+  },
+  navButton: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 15,
+  },
+  navButtonLeft: {
+    left: 12,
+  },
+  navButtonRight: {
+    right: 12,
   },
   storyImage: {
     flex: 1,

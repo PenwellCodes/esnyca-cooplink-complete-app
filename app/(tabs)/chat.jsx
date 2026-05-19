@@ -368,11 +368,7 @@ const ChatList = () => {
   const [loadingNames, setLoadingNames] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [selectedUserStories, setSelectedUserStories] = useState({
-    stories: [],
-    userName: "",
-  });
-
+  const [selectedStoryGroupIndex, setSelectedStoryGroupIndex] = useState(0);
   const [isStoryViewerVisible, setIsStoryViewerVisible] = useState(false);
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -655,6 +651,15 @@ const ChatList = () => {
     return groups;
   }, [activeStories]);
 
+  const storyGroupsOrdered = React.useMemo(
+    () =>
+      Object.entries(groupedStories).map(([userId, userStories]) => ({
+        userId,
+        stories: userStories,
+      })),
+    [groupedStories]
+  );
+
   const getStoryOwnerName = (userId) => {
     if (String(userId) === String(currentUserId)) {
       return translations.me;
@@ -680,16 +685,12 @@ const ChatList = () => {
   };
 
   const handleStoryPress = (userId) => {
-    if (groupedStories[userId]) {
-      const ownerName = getStoryOwnerName(userId);
-
-      setSelectedUserStories({
-        stories: groupedStories[userId],
-        userName: ownerName,
-      });
-
-      setIsStoryViewerVisible(true);
-    }
+    if (!groupedStories[userId]) return;
+    const idx = storyGroupsOrdered.findIndex(
+      (g) => String(g.userId) === String(userId)
+    );
+    setSelectedStoryGroupIndex(idx >= 0 ? idx : 0);
+    setIsStoryViewerVisible(true);
   };
 
   const promptDeleteChat = (chatKey, displayName) => {
@@ -967,15 +968,14 @@ const ChatList = () => {
       </View>
 
       <StoryViewer
-        stories={selectedUserStories.stories}
+        storyGroups={storyGroupsOrdered}
+        initialGroupIndex={selectedStoryGroupIndex}
         isVisible={isStoryViewerVisible}
+        getOwnerName={getStoryOwnerName}
+        getOwnerAvatar={getStoryOwnerAvatar}
         onClose={() => {
           setIsStoryViewerVisible(false);
-
-          setSelectedUserStories({
-            stories: [],
-            userName: "",
-          });
+          setSelectedStoryGroupIndex(0);
         }}
         onReply={(story, replyData) => {
           const storyOwnerName =
