@@ -378,6 +378,10 @@ const ChatList = () => {
 
   const [chatPendingDeleteKey, setChatPendingDeleteKey] = useState(null);
 
+  // Prevent multiple rapid clicks from navigating multiple times
+  const navigatingChatIdRef = useRef(null);
+  const navigationTimeoutRef = useRef(null);
+
   const [translations, setTranslations] = useState({
     chat: "Chat",
     addStory: "Add Story",
@@ -424,6 +428,15 @@ const ChatList = () => {
 
     loadTranslations();
   }, [currentLanguage, t]);
+
+  // Cleanup navigation timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (loadingChats && !hasLoadedOnce) {
@@ -732,11 +745,58 @@ const ChatList = () => {
     setChatPendingDeleteKey(GLOBAL_GROUP_CHAT_KEY);
   };
 
+  const handleGroupChatPress = () => {
+    // Prevent multiple rapid clicks from navigating multiple times
+    if (navigatingChatIdRef.current === GLOBAL_GROUP_CHAT_KEY) {
+      return; // Already navigating to group chat
+    }
+
+    if (chatPendingDeleteKey === GLOBAL_GROUP_CHAT_KEY) {
+      setChatPendingDeleteKey(null);
+      return;
+    }
+    if (chatPendingDeleteKey) {
+      setChatPendingDeleteKey(null);
+    }
+
+    // Set navigation flag
+    navigatingChatIdRef.current = GLOBAL_GROUP_CHAT_KEY;
+
+    // Clear previous timeout if any
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current);
+    }
+
+    router.push({
+      pathname: "/(screens)/group-chat",
+      params: {
+        id: GLOBAL_GROUP_CHAT_KEY,
+        group: JSON.stringify({
+          uid: GLOBAL_GROUP_CHAT_KEY,
+          displayName: "Swazi Cooparators",
+          profilePicture:
+            "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
+          isGroup: true,
+        }),
+      },
+    });
+
+    // Reset navigation flag after a delay
+    navigationTimeoutRef.current = setTimeout(() => {
+      navigatingChatIdRef.current = null;
+    }, 500);
+  };
+
   const handleChatPress = async (item) => {
     const chatId = buildDirectKey(
       currentUserId,
       item.uid
     );
+
+    // Prevent multiple rapid clicks from navigating multiple times
+    if (navigatingChatIdRef.current === chatId) {
+      return; // Already navigating to this chat
+    }
 
     if (chatPendingDeleteKey) {
       if (chatPendingDeleteKey === chatId) {
@@ -746,23 +806,38 @@ const ChatList = () => {
       setChatPendingDeleteKey(null);
     }
 
-    if (chatId && item.unreadCount > 0) {
-      const chatMessages =
-        conversations[chatId] || [];
+    // Set navigation flag
+    navigatingChatIdRef.current = chatId;
 
-      await markMessagesAsRead(
-        chatId,
-        chatMessages
-      );
+    // Clear previous timeout if any
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current);
     }
 
-    router.push({
-      pathname: `/(screens)/chatConversations/${item.uid}`,
-      params: {
-        userId: item.uid,
-        predefinedMessage: " ",
-      },
-    });
+    try {
+      if (chatId && item.unreadCount > 0) {
+        const chatMessages =
+          conversations[chatId] || [];
+
+        await markMessagesAsRead(
+          chatId,
+          chatMessages
+        );
+      }
+
+      router.push({
+        pathname: `/(screens)/chatConversations/${item.uid}`,
+        params: {
+          userId: item.uid,
+          predefinedMessage: " ",
+        },
+      });
+    } finally {
+      // Reset navigation flag after a delay to allow for navigation to complete
+      navigationTimeoutRef.current = setTimeout(() => {
+        navigatingChatIdRef.current = null;
+      }, 500);
+    }
   };
 
   useFocusEffect(
@@ -1013,28 +1088,7 @@ const ChatList = () => {
         ]}
         selected={chatPendingDeleteKey === GLOBAL_GROUP_CHAT_KEY}
         onLongPress={handleGroupChatLongPress}
-        onPress={() => {
-          if (chatPendingDeleteKey === GLOBAL_GROUP_CHAT_KEY) {
-            setChatPendingDeleteKey(null);
-            return;
-          }
-          if (chatPendingDeleteKey) {
-            setChatPendingDeleteKey(null);
-          }
-          router.push({
-            pathname: "/(screens)/group-chat",
-            params: {
-              id: "group_swazi_cooperators",
-              group: JSON.stringify({
-                uid: "group_swazi_cooperators",
-                displayName: "Swazi Cooparators",
-                profilePicture:
-                  "https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg",
-                isGroup: true,
-              }),
-            },
-          });
-        }}
+        onPress={handleGroupChatPress}
       >
         <AvatarWithInitials
           imageUrl="https://thumbs.dreamstime.com/b/d-simple-group-user-icon-isolated-render-profile-photo-symbol-ui-avatar-sign-human-management-hr-business-team-person-people-268135505.jpg"

@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "youth-corner-6e280",
+  "private_key_id": "cae2b634e79d0f04b89fdd063976c37a7b636b10",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDBFqF6mwtjrqMT\nU1JgvJfP6EXOu4BKAlYAVPMNIdTFiOfJvHa34W0J96Mire3PciqnwKgi5J+kD/YH\nUjHIMcR04gAmPi4Hdo9bk/d00fm8TJWYXq6HSALYwSoO3pgwp5ZR+7dDOs0Uxf2s\n0OX+7MARvHSRCeWzR7afRtE5lLGVh0WzMqaqocgJaMlh1lZwf5NqZ0qRUAbPgYYw\nYgUd0OOdHSi/1aESjhGAwqIMF5B4AktjcweK89QF1TiqXwJM4SVDCUt+3vq10E9s\nTXxZl6HZN5WCFPwwKtC+9R0ow0927Kl3gmQKI0bz8BfG2cQtGgCL1r3AS3KR+G53\nHBAx1HuPAgMBAAECggEASuIkeQC1T5D0dLO9QIATnlGV9SGZlNpIETPg2Qh0VLGO\nNxpMrm6SE6oDDhmHH4tGyK06Z+HjmcSI5Xj2jo3ig3P8m9hEkKdl3J3Le/ZNFL5c\ny+14YUXHuNldHswsGL592Ui2X6/nxjUs9v9DG3Uk3hwI1xEQENHwnN/hl6O3pWXW\nx+3Nwy3dVbyF6q1jqitgOYkdHTcW0VTYaPeZ06ZpefUd4a0PJDpmC3cMv92GwxKM\nh+pbiCVWzLp9cWqYEKaCnZehHRqZea767SRUBG1jT/x3jcA4Daf/aRuupYc6o7Dv\nlGRCny6PCYsl5vPgFDjR5ku/DCb4QDqsEnxub3D/cQKBgQDnS5CaeQXSIsx0xmhi\neQGT74IgYhgRn7Vrtv1wnTMArtIzozyBMsgJ8bvyWuGAetJGp1K+w69EKRXyc1am\nzFWxXSGqER7Ot3vLW2+rYcNYfmLo1muTZgOiwVcOcktP8/l9fzwZVtH3joVHLPwF\nUUM7onsxh2zVYXi8fZKdiwlCHwKBgQDVtls/jAvTx72l1RWv18ZAfzpUKDI7PA78\nQ7fRnOmEbgR0Jj4spdZ+rILzKq8jmTzvX0GslXEkXbf+0bNwXT2tdar3/KCvc/Qm\nJsfwF/h371j3pVLXPNMSM0+1VHj5MShpIUPWziiAG/vpEgedh2O+VAVNFJ/mhKCr\nJjUCJXj4kQKBgGmI2hcRp21FQYL60MA1tFmazAYYnCDWfYIDgcpzf8UM/45eKgpN\ncGbRLM+dVg04fV+NkzzFrt/r2z7AD8aVr3f5JZYir6rkn5CfTOmm9uoW6OySgY1E\n293UV/OYhPKbQLhZaMOrEKzjE77xMKEAfivkrE9iGm+WRO/EYDSQLw5DAoGAD0fg\nsmSDG/t2NftMd6xIAqiWNRpCrTWYJLV62UQM9mkfbGann22kLp6LJnPw3ezBDKSU\n/5AX7O++jjvURr6EAHkfZmfr3V+/H1M6jJJKM9krVVm+2KECvpRoqKCHndnD9/Bm\n9176Sl613m5pmPvrR9qeHmrRHBxzmIk81RB02+ECgYB3Q9yvsY0mPCZPJAx/D7y3\nIStP6gKeWobLQLGnkZIqRLxvitnYLMHxgYX0UyimnYahZCnXOLRPkunwECDIKelI\n/800FBUaneSMKZBHWD2RH/+Tj4W++EFQdBNgL21opq5XYzI0kjjUmJDFZvbTjQ3t\nU9RLiHUsYinQ1WjwZELa5Q==\n-----END PRIVATE KEY-----\n",
+  "client_email": "eas-submit@youth-corner-6e280.iam.gserviceaccount.com",
+  "client_id": "112745573308261148278",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/eas-submit%40youth-corner-6e280.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
